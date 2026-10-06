@@ -202,6 +202,7 @@ liveIt(
         estimatedInputTokens,
         maxOutputTokens,
       },
+      maxAttempts: 1,
       verifyPatch: (patch) => {
         const accessible = accessibleNameFromPatch(patch);
         if (accessible === null) {
@@ -239,8 +240,15 @@ liveIt(
       },
     });
 
-    expect(result.status).toBe("accepted");
     if (result.status !== "accepted") {
+      process.stderr.write(
+        `ACCESSWRIGHT_LIVE_FAILURE=${JSON.stringify({
+          reason: result.reason,
+          lastFailure: result.lastFailure,
+          attempts: result.attempts,
+          usage: budget.snapshot(),
+        })}\n`,
+      );
       throw new Error(
         `Live semantic repair did not pass: ${result.reason}: ${result.lastFailure}`,
       );

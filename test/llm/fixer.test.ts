@@ -242,4 +242,35 @@ describe("runSemanticRepair", () => {
       attempts: 3,
     });
   });
+
+  it("honors a lower explicit attempt limit for bounded live probes", async () => {
+    const provider = new FakeLlmProvider([
+      {
+        object: { nope: true },
+        usage: { inputTokens: 100, outputTokens: 20, costUsd: 0.001 },
+      },
+      {
+        object: patch(),
+        usage: { inputTokens: 100, outputTokens: 20, costUsd: 0.001 },
+      },
+    ]);
+
+    const result = await runSemanticRepair({
+      client: new LlmClient(provider),
+      budget: budget(),
+      task: task(),
+      context: context(),
+      model,
+      estimate,
+      maxAttempts: 1,
+      verifyPatch: () => Promise.resolve({ accepted: true }),
+    });
+
+    expect(result).toMatchObject({
+      status: "needs-human",
+      reason: "retry-exhausted",
+      attempts: 1,
+    });
+    expect(provider.requests).toHaveLength(1);
+  });
 });

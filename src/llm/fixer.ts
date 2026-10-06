@@ -29,6 +29,7 @@ export interface SemanticRepairOptions {
   context: RepairContext;
   model: LlmModelConfig;
   estimate: CallEstimate;
+  maxAttempts?: number;
   verifyPatch: (patch: Patch) => Promise<PatchVerification>;
 }
 
@@ -113,10 +114,14 @@ export async function runSemanticRepair(
 
   const schema = patchSchemaForTask(options.task, options.context);
   const prompt = basePrompt(options.task, options.context);
+  const maxAttempts = options.maxAttempts ?? 3;
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 3) {
+    throw new Error("maxAttempts must be an integer between 1 and 3");
+  }
   let feedback: string | null = null;
   let lastFailure = "No attempt made";
 
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const authorization = options.budget.authorize(options.estimate);
     if (!authorization.allowed) {
       return {
@@ -169,7 +174,7 @@ export async function runSemanticRepair(
   return {
     status: "needs-human",
     reason: "retry-exhausted",
-    attempts: 3,
+    attempts: maxAttempts,
     lastFailure,
   };
 }
