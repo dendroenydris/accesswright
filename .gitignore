@@ -1,0 +1,18 @@
+node_modules
+coverage/
+dist/
+run.jsonl
+*.log
+
+# macOS metadata
+.DS_Store
+._*
+
+# Local agent / execution material
+AGENTS.md
+docs/EXECUTION.md
+docs/SETUP-NEEDS.md
+docs/progress.md
+docs/decisions.md
+docs/plans/
+docs/superpowers/
