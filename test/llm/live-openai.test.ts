@@ -202,7 +202,7 @@ liveIt(
         estimatedInputTokens,
         maxOutputTokens,
       },
-      maxAttempts: 1,
+      maxAttempts: 2,
       verifyPatch: (patch) => {
         const accessible = accessibleNameFromPatch(patch);
         if (accessible === null) {
