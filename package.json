@@ -1,0 +1,38 @@
+{
+  "name": "accesswright",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12.0 <27"
+  },
+  "scripts": {
+    "check": "tsc --noEmit && eslint src test --max-warnings=0",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "4.0.72",
+    "@ai-sdk/deepseek": "3.0.59",
+    "@ai-sdk/openai": "4.0.84",
+    "@ai-sdk/openai-compatible": "3.0.63",
+    "@axe-core/playwright": "4.13.0",
+    "ai": "7.0.128",
+    "code-inspector-plugin": "2.0.9",
+    "culori": "4.0.2",
+    "execa": "10.0.1",
+    "playwright": "1.63.0",
+    "prettier": "3.9.9",
+    "ts-morph": "28.0.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/culori": "4.0.1",
+    "@types/node": "26.6.4",
+    "eslint": "10.12.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.0",
+    "vitest": "5.0.3"
+  }
+}

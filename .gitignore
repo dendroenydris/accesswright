@@ -1,0 +1,9 @@
+node_modules
+coverage/
+dist/
+run.jsonl
+*.log
+
+# macOS metadata
+.DS_Store
+._*
