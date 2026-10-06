@@ -7,6 +7,7 @@ import type {
   LlmProvider,
   LlmUsage,
 } from "./types.js";
+import { LlmStructuredOutputError } from "./errors.js";
 
 export type StructuredCallResult<T> =
   | {
@@ -48,7 +49,8 @@ export class LlmClient {
 
   async callStructured<T>(
     request: LlmCallRequest,
-    schema: z.ZodType<T>,
+    validationSchema: z.ZodType<T>,
+    providerSchema: z.ZodType<unknown> = validationSchema,
   ): Promise<StructuredCallResult<T>> {
     const promptHash = createHash("sha256")
       .update(request.prompt)
@@ -67,8 +69,21 @@ export class LlmClient {
 
     let response;
     try {
-      response = await this.provider.generateObject(request, schema);
+      response = await this.provider.generateObject(request, providerSchema);
     } catch (error: unknown) {
+      if (error instanceof LlmStructuredOutputError) {
+        await this.observer?.({
+          ...eventBase,
+          status: "rejected",
+          ...(error.usage === undefined ? {} : { usage: error.usage }),
+        });
+        return {
+          status: "rejected",
+          reason: "schema",
+          message: error.message,
+          ...(error.usage === undefined ? {} : { usage: error.usage }),
+        };
+      }
       await this.observer?.({
         ...eventBase,
         status: "error",
@@ -80,7 +95,7 @@ export class LlmClient {
       };
     }
 
-    const parsed = schema.safeParse(response.object);
+    const parsed = validationSchema.safeParse(response.object);
     if (!parsed.success) {
       await this.observer?.({
         ...eventBase,

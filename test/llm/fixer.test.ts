@@ -114,6 +114,7 @@ describe("runSemanticRepair", () => {
       attempts: 1,
       patch: patch(),
     });
+    expect(provider.requests[0]?.prompt).toContain(`Task ID: ${task().id}`);
     expect(ledger.snapshot().spentUsd).toBe(0.004);
   });
 

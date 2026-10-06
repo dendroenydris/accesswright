@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
 import { LlmClient } from "../../src/llm/client.js";
+import { LlmStructuredOutputError } from "../../src/llm/errors.js";
 import { createJsonlLlmObserver } from "../../src/llm/run-record.js";
 import { FakeLlmProvider } from "../helpers/fake-provider.js";
 
@@ -92,6 +93,40 @@ describe("LLM run recording", () => {
     expect(JSON.parse(raw.trim())).toMatchObject({
       status: "rejected",
       usage: { costUsd: 0.001 },
+    });
+  });
+
+  it("records provider-side structured-output failure as billed rejection", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "accesswright-llm-record-"));
+    const path = join(directory, "run.jsonl");
+    const provider = new FakeLlmProvider([
+      {
+        error: new LlmStructuredOutputError(
+          "shape mismatch",
+          { inputTokens: 40, outputTokens: 12, costUsd: 0.0004 },
+        ),
+      },
+    ]);
+    const client = new LlmClient(provider, createJsonlLlmObserver(path));
+
+    await client.callStructured(
+      {
+        taskType: "semantic-repair",
+        model: { provider: "openai", id: "gpt-test" },
+        prompt: "prompt",
+        maxOutputTokens: 512,
+      },
+      z.object({ value: z.string() }),
+    );
+
+    const raw = await readFile(path, "utf8");
+    expect(JSON.parse(raw.trim())).toMatchObject({
+      status: "rejected",
+      usage: {
+        inputTokens: 40,
+        outputTokens: 12,
+        costUsd: 0.0004,
+      },
     });
   });
 });

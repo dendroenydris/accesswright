@@ -78,6 +78,8 @@ function basePrompt(task: FixTask, context: RepairContext): string {
   return [
     "Repair exactly the accessibility task below.",
     "Return only a source patch that matches the required structured schema.",
+    `Set taskId exactly to: ${task.id}`,
+    `Task ID: ${task.id}`,
     "Do not edit manifests, lockfiles, build configuration, CI, or files outside the supplied deterministic context.",
     `Rule: ${task.ruleId}`,
     `WCAG criterion: ${task.criterion}`,
@@ -140,6 +142,7 @@ export async function runSemanticRepair(
         maxOutputTokens: options.estimate.maxOutputTokens,
       },
       schema,
+      PatchSchema,
     );
 
     if (result.usage !== undefined) {
