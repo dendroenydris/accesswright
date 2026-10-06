@@ -1,0 +1,53 @@
+name: Verify OpenAI model
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_KEY }}
+    steps:
+      - name: Verify OpenAI key and gpt-6-luna
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${OPENAI_API_KEY:-}" ]]; then
+            echo "secret_present=false"
+            exit 2
+          fi
+          echo "secret_present=true"
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.request
+
+          key = os.environ["OPENAI_API_KEY"]
+          request = urllib.request.Request(
+              "https://api.openai.com/v1/models",
+              headers={"Authorization": f"Bearer {key}"},
+          )
+
+          try:
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  status = response.status
+                  payload = json.load(response)
+          except urllib.error.HTTPError as error:
+              print(f"http_status={error.code}")
+              print("model_present=false")
+              sys.exit(3)
+
+          ids = {item.get("id") for item in payload.get("data", [])}
+          present = "gpt-6-luna" in ids
+          print(f"http_status={status}")
+          print(f"model_present={'true' if present else 'false'}")
+          if not present:
+              sys.exit(4)
+          PY
