@@ -7,6 +7,7 @@ import type { OpenAILanguageModelResponsesOptions } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import {
   generateText,
+  NoObjectGeneratedError,
   Output,
 } from "ai";
 import type { LanguageModel } from "ai";
@@ -18,6 +19,7 @@ import type {
   LlmProvider,
   LlmProviderResponse,
 } from "./types.js";
+import { LlmStructuredOutputError } from "./errors.js";
 
 export interface ModelPricing {
   inputUsdPerMillion: number;
@@ -173,36 +175,62 @@ export class AiSdkLlmProvider implements LlmProvider {
         ? openAIReasoningEffort(request.model.reasoningEffort)
         : undefined;
 
-    const result = await generateText({
-      model: languageModel(request.model, this.environment),
-      output: Output.object({ schema }),
-      prompt: request.prompt,
-      maxOutputTokens: request.maxOutputTokens,
-      ...(request.system === undefined ? {} : { system: request.system }),
-      ...(effort === undefined
-        ? {}
-        : {
-            providerOptions: {
-              openai: {
-                reasoningEffort: effort,
-                reasoningSummary: null,
-              } satisfies OpenAILanguageModelResponsesOptions,
-            },
-          }),
-    });
+    try {
+      const result = await generateText({
+        model: languageModel(request.model, this.environment),
+        output: Output.object({ schema }),
+        prompt: request.prompt,
+        maxOutputTokens: request.maxOutputTokens,
+        ...(request.system === undefined ? {} : { system: request.system }),
+        ...(effort === undefined
+          ? {}
+          : {
+              providerOptions: {
+                openai: {
+                  reasoningEffort: effort,
+                  reasoningSummary: null,
+                } satisfies OpenAILanguageModelResponsesOptions,
+              },
+            }),
+      });
 
-    const inputTokens = result.usage.inputTokens ?? 0;
-    const outputTokens = result.usage.outputTokens ?? 0;
-    return {
-      object: result.output,
-      usage: {
-        inputTokens,
-        outputTokens,
-        costUsd: calculateUsageCost(
-          { inputTokens, outputTokens },
-          pricing,
-        ),
-      },
-    };
+      const inputTokens = result.usage.inputTokens ?? 0;
+      const outputTokens = result.usage.outputTokens ?? 0;
+      return {
+        object: result.output,
+        usage: {
+          inputTokens,
+          outputTokens,
+          costUsd: calculateUsageCost(
+            { inputTokens, outputTokens },
+            pricing,
+          ),
+        },
+      };
+    } catch (error: unknown) {
+      if (!NoObjectGeneratedError.isInstance(error)) {
+        throw error;
+      }
+
+      const usage =
+        error.usage === undefined
+          ? undefined
+          : (() => {
+              const inputTokens = error.usage.inputTokens ?? 0;
+              const outputTokens = error.usage.outputTokens ?? 0;
+              return {
+                inputTokens,
+                outputTokens,
+                costUsd: calculateUsageCost(
+                  { inputTokens, outputTokens },
+                  pricing,
+                ),
+              };
+            })();
+      throw new LlmStructuredOutputError(
+        "structured output did not match provider schema",
+        usage,
+      );
+    }
   }
 }
