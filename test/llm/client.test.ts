@@ -19,6 +19,7 @@ function request(): LlmCallRequest {
       reasoningEffort: "high",
     },
     prompt: "Fix the missing accessible name.",
+    maxOutputTokens: 512,
   };
 }
 

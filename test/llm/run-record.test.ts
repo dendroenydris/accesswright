@@ -31,6 +31,7 @@ describe("LLM run recording", () => {
           apiKeyEnv: "OPENAI_API_KEY",
         },
         prompt: "PRIVATE SOURCE PROMPT",
+        maxOutputTokens: 512,
       },
       z.object({ value: z.string() }),
     );
@@ -82,6 +83,7 @@ describe("LLM run recording", () => {
         taskType: "semantic-repair",
         model: { provider: "openai", id: "gpt-test" },
         prompt: "prompt",
+        maxOutputTokens: 512,
       },
       z.object({ value: z.string() }),
     );

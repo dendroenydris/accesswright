@@ -132,6 +132,7 @@ export async function runSemanticRepair(
         taskType: "semantic-repair",
         model: options.model,
         prompt: feedbackPrompt(prompt, feedback),
+        maxOutputTokens: options.estimate.maxOutputTokens,
       },
       schema,
     );

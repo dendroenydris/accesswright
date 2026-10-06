@@ -15,6 +15,7 @@ export interface LlmCallRequest {
   model: LlmModelConfig;
   prompt: string;
   system?: string;
+  maxOutputTokens: number;
 }
 
 export interface LlmProviderResponse {
