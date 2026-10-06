@@ -1,0 +1,8 @@
+export function ProfileEditor() {
+  return (
+    <section aria-label="Profile editor">
+      <p>Save changes</p>
+      <button data-action="save-changes"></button>
+    </section>
+  );
+}

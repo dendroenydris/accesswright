@@ -142,6 +142,9 @@ describe("runSemanticRepair", () => {
     expect(result).toMatchObject({ status: "accepted", attempts: 2 });
     expect(provider.requests[1]?.prompt).toMatch(/previous attempt/i);
     expect(provider.requests[1]?.prompt).toMatch(/schema/i);
+    expect(provider.requests[1]?.maxOutputTokens).toBe(
+      estimate.maxOutputTokens,
+    );
   });
 
   it("retries after verifier rejection with rule/source/check feedback", async () => {

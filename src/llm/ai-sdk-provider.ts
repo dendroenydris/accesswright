@@ -177,6 +177,7 @@ export class AiSdkLlmProvider implements LlmProvider {
       model: languageModel(request.model, this.environment),
       output: Output.object({ schema }),
       prompt: request.prompt,
+      maxOutputTokens: request.maxOutputTokens,
       ...(request.system === undefined ? {} : { system: request.system }),
       ...(effort === undefined
         ? {}
