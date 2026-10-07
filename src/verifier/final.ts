@@ -41,8 +41,14 @@ function difference(
   current: readonly string[],
   baseline: readonly string[],
 ): string[] {
-  const baselineSet = new Set(baseline);
-  return current.filter((item) => !baselineSet.has(item));
+  const counts = new Map<string, number>();
+  for (const item of baseline) counts.set(item, (counts.get(item) ?? 0) + 1);
+  return current.filter(item => {
+    const remaining = counts.get(item) ?? 0;
+    if (remaining === 0) return true;
+    counts.set(item, remaining - 1);
+    return false;
+  });
 }
 
 async function checkFixSet(
@@ -62,9 +68,8 @@ async function checkFixSet(
   const newTestFailures = difference(snapshot.tests, options.baseline.tests);
   if (newTestFailures.length > 0) {
     const persistent = await options.rerunTests(fixIds, newTestFailures);
-    const expected = new Set(newTestFailures);
-    for (const id of persistent) {
-      if (expected.has(id)) failures.push({ check: "tests", id });
+    for (const id of difference(persistent, options.baseline.tests)) {
+      failures.push({ check: "tests", id });
     }
   }
 

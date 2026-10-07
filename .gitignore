@@ -16,3 +16,14 @@ docs/progress.md
 docs/decisions.md
 docs/plans/
 docs/superpowers/
+
+# All current internal documents and private run records stay local.
+docs/
+eval/spend.json
+.accesswright/
+.env
+.env.*
+*.pem
+*.key
+live-run.jsonl
+artifacts/private/

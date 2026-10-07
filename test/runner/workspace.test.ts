@@ -27,6 +27,8 @@ describe("createDisposableWorkspace", () => {
     await writeFile(join(source, "app", "page.tsx"), "export default function Page() {}\n");
     await writeFile(join(source, "._package.json"), "apple-double\n");
     await writeFile(join(source, ".DS_Store"), "finder\n");
+    await writeFile(join(source, ".env.local"), "PRIVATE_VALUE=fixture-only\n");
+    await writeFile(join(source, ".npmrc"), "//registry.example:_authToken=fixture-only\n");
     await writeFile(join(source, "node_modules", "ignored", "file"), "ignored\n");
     await writeFile(join(source, ".next", "cache", "file"), "ignored\n");
 
@@ -38,6 +40,8 @@ describe("createDisposableWorkspace", () => {
     expect(await exists(join(workspace, ".next"))).toBe(false);
     expect(await exists(join(workspace, "._package.json"))).toBe(false);
     expect(await exists(join(workspace, ".DS_Store"))).toBe(false);
+    expect(await exists(join(workspace, ".env.local"))).toBe(false);
+    expect(await exists(join(workspace, ".npmrc"))).toBe(false);
     expect(await readFile(join(workspace, "next.config.mjs"), "utf8")).toContain(
       "file:///plugin.mjs",
     );

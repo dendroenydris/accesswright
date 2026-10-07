@@ -1,19 +1,8 @@
-import { cp, mkdir, mkdtemp } from "node:fs/promises";
-import { join, relative, sep } from "node:path";
+import { mkdir, mkdtemp } from "node:fs/promises";
+import { join } from "node:path";
+import { copyTargetSnapshot } from "../sandbox/source-boundary.js";
 
 import { instrumentNextWorkspace } from "./instrumentation.js";
-
-function isExcluded(relativePath: string): boolean {
-  if (relativePath.length === 0) return false;
-  const segments = relativePath.split(sep);
-  const firstSegment = segments[0];
-  return (
-    firstSegment === "node_modules" ||
-    firstSegment === ".next" ||
-    firstSegment === ".git" ||
-    segments.some((segment) => segment.startsWith("._") || segment === ".DS_Store")
-  );
-}
 
 export async function createDisposableWorkspace(
   sourceRoot: string,
@@ -23,10 +12,7 @@ export async function createDisposableWorkspace(
   await mkdir(tempRoot, { recursive: true });
   const destination = await mkdtemp(join(tempRoot, "workspace-"));
 
-  await cp(sourceRoot, destination, {
-    recursive: true,
-    filter: (source) => !isExcluded(relative(sourceRoot, source)),
-  });
+  await copyTargetSnapshot(sourceRoot, destination);
 
   await instrumentNextWorkspace(destination, pluginModuleUrl);
   return destination;
