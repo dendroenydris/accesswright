@@ -17,6 +17,9 @@ describe("review reports", () => {
     expect(report).toMatchObject({ fixed: 1, rejected: 1, needsHuman: 2, providerVerification: "fake-provider", checks: [{ status: "unavailable" }] });
     const text = renderPullRequestReport(report);
     expect(text).toContain("4.1.2");
+    expect(text).toContain("9.4.1.2");
+    expect(text).toContain("EN 301 549 V3.2.1");
+    expect(text).not.toContain("presumption of conformity");
     expect(text).toContain("unavailable");
     expect(text).toContain("Not a legal compliance certification");
     expect(text).toContain("Human review");

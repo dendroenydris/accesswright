@@ -172,7 +172,7 @@ async function renderedPalette(page: Page): Promise<{ palette: Array<{ className
     function visit(rules: CSSRuleList): void {
       for (const rule of rules) {
         if (rule.cssText.includes("prefers-color-scheme") && rule.cssText.includes("dark")) darkMediaDetected = true;
-        if (rule instanceof CSSStyleRule && /^\.text-[a-zA-Z0-9_-]+$/.test(rule.selectorText)) classes.add(rule.selectorText.slice(1));
+        if (rule instanceof CSSStyleRule && rule.style.color && /^\.text-[a-zA-Z0-9_-]+$/.test(rule.selectorText)) classes.add(rule.selectorText.slice(1));
         if ("cssRules" in rule) visit((rule as CSSGroupingRule).cssRules);
       }
     }
@@ -195,7 +195,8 @@ export async function scanBrowserPage(page: Page, options: BrowserScanOptions): 
   let builder = new AxeBuilder({ page }).exclude("nextjs-portal").exclude("code-inspector-component");
   if (options.condition === "mobile-light") builder = builder.withRules(["target-size"]);
   if (options.condition === "desktop-dark") builder = builder.withRules(["color-contrast"]);
-  const analyzed = normalizeAxeResults(options.route, await builder.analyze());
+  const rawAnalysis = await builder.analyze();
+  const analyzed = normalizeAxeResults(options.route, rawAnalysis);
   const violations = analyzed.violations.map(item => ({ ...item, condition: options.condition }));
   const incomplete = analyzed.incomplete.map(item => ({ ...item, condition: options.condition }));
   const facts = await collectAccessibleFacts(page, `${options.route}|${options.condition}`, options.interactionProbes ?? true);
@@ -257,6 +258,6 @@ export async function scanBrowserPage(page: Page, options: BrowserScanOptions): 
     const html = `<div data-insp-path="${escaped(attributes.path ?? "")}" data-insp-row="${escaped(attributes.row ?? "")}" data-insp-col="${escaped(attributes.column ?? "")}">`;
     return extractSourceLocationFromHtml(html)?.file;
   }).filter((file): file is string => file !== undefined && isSourcePath(file)))].sort();
-  return BrowserObservationSchema.parse({ route: options.route, condition: options.condition, violations, incomplete,
+  return BrowserObservationSchema.parse({ route: options.route, condition: options.condition, checkerVersion: rawAnalysis.testEngine.version, violations, incomplete,
     ...facts, sourceFiles, ariaTree: await page.locator("body").ariaSnapshot(), contexts, screenshot, darkMediaDetected: palette.darkMediaDetected });
 }

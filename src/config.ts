@@ -20,6 +20,8 @@ export const defaults = Object.freeze({
   maxContextFiles: 12,
   maxContextBytes: 64000,
   providerTimeoutMs: 60000,
+  dockerControlTimeoutMs: 120000,
+  dockerCopyTimeoutMs: 600000,
   readyTimeoutMs: 120000,
   productionCheckTimeoutMs: 300000,
   installTimeoutMs: 600000,

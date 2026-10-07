@@ -91,7 +91,7 @@ export class LlmClient {
       return {
         status: "rejected",
         reason: "provider",
-        message: error instanceof Error ? error.message : String(error),
+        message: `Provider call failed; diagnostic ${createHash("sha256").update(error instanceof Error ? error.message : String(error)).digest("hex").slice(0, 16)}`,
       };
     }
 

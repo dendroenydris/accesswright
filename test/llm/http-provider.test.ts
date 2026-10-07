@@ -49,6 +49,7 @@ describe("real SDK transport against an unpaid loopback provider", () => {
     expect(serialized).toContain('"effort":"high"');
     expect(serialized).toContain('"strict":true');
     expect(serialized).toContain('"store":false');
+    expect(serialized).toContain('"service_tier":"default"');
     expect(serialized).not.toContain("forceReasoning");
     expect(JSON.stringify(events)).not.toContain("Private fixture context");
     expect(JSON.stringify(events)).not.toContain("fixture-only-not-a-real-key");

@@ -52,16 +52,21 @@ async function runRepositoryFromCli(options: CliArgs): Promise<RunReport> {
   return result.report;
 }
 
-export async function runCli<T = RunReport>(
-  args: readonly string[],
-  coordinator: CliCoordinator<T> = runRepositoryFromCli as CliCoordinator<T>,
-): Promise<T> {
-  return coordinator(parseCliArgs(args));
+export function runCli(args: readonly string[]): Promise<RunReport>;
+export function runCli<T>(args: readonly string[], coordinator: CliCoordinator<T>): Promise<T>;
+export async function runCli<T>(args: readonly string[], coordinator?: CliCoordinator<T>): Promise<RunReport | T> {
+  const parsed = parseCliArgs(args);
+  return coordinator === undefined ? runRepositoryFromCli(parsed) : coordinator(parsed);
+}
+
+export function cliExitCode(report: Pick<RunReport, "status">): number {
+  return report.status === "blocked" ? 1 : 0;
 }
 
 async function main(): Promise<void> {
   const result = await runCli(process.argv.slice(2));
   process.stdout.write(`${JSON.stringify(result)}\n`);
+  process.exitCode = cliExitCode(result);
 }
 
 const invokedPath = process.argv[1];

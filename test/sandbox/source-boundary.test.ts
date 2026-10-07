@@ -33,6 +33,13 @@ describe("source and credential boundary", () => {
     await expect(applySourcePatch(dir,{taskId:"x",changes:[{path:"Button.tsx",before:"same",after:"different"}]})).rejects.toThrow(/unique|ambiguous/i);
     expect(await readFile(join(dir,"Button.tsx"),"utf8")).toBe("same same");
   });
+  it("can restore a rejected candidate that temporarily emptied a file without permitting empty substring insertions", async () => {
+    const dir = await root(); await writeFile(join(dir, "View.tsx"), "original source");
+    const normalized = await applySourcePatch(dir, { taskId: "empty-candidate", changes: [{ path: "View.tsx", before: "original source", after: "" }] });
+    await applySourcePatch(dir, { taskId: normalized.taskId, changes: normalized.changes.map(change => ({ ...change, before: change.after, after: change.before })) });
+    expect(await readFile(join(dir, "View.tsx"), "utf8")).toBe("original source");
+    await expect(applySourcePatch(dir, { taskId: "bad", changes: [{ path: "View.tsx", before: "", after: "overwrite" }] })).rejects.toThrow(/unique/);
+  });
   it("preflights all files before writing and rejects symlink edits", async () => {
     const dir=await root(), outside=await root(); await writeFile(join(dir,"A.tsx"),"a"); await writeFile(join(outside,"B.tsx"),"b"); await symlink(join(outside,"B.tsx"),join(dir,"B.tsx"));
     await expect(applySourcePatch(dir,{taskId:"x",changes:[{path:"A.tsx",before:"a",after:"changed"},{path:"B.tsx",before:"b",after:"changed"}]})).rejects.toThrow();

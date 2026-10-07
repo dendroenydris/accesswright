@@ -5,12 +5,15 @@ import { defaults, loadConfig } from "../config.js";
 import { SourceBaseline } from "../sandbox/apply-verified.js";
 import { DockerRepairSession } from "../runner/repair-session.js";
 import { makeRunReport } from "../reporter/report.js";
+import { summarizeScans } from "../reporter/scan-summary.js";
 import type { RunReport } from "../reporter/report.js";
 import type { PublishInput } from "../reporter/github-publisher.js";
 import { appendRunRecord } from "../tracer/run-record.js";
 import { BudgetLedger } from "../llm/budget.js";
 import { LlmClient } from "../llm/client.js";
 import { AiSdkLlmProvider } from "../llm/ai-sdk-provider.js";
+import { DurableBudgetProvider } from "../llm/durable-provider.js";
+import type { DurableProviderOptions } from "../llm/durable-provider.js";
 import type { ModelPricing } from "../llm/ai-sdk-provider.js";
 import type { LlmProvider } from "../llm/types.js";
 import { resolveExecutionModel } from "../llm/execution-policy.js";
@@ -31,6 +34,8 @@ export interface RepositoryRepairOptions {
   maxCostUsd?: number;
   pricing?: ModelPricing;
   trustProviderConfig?: boolean;
+  /** Trusted coordinator-only cumulative allowance; never read from target configuration. */
+  durableBudget?: Pick<DurableProviderOptions, "ledger" | "maxInputTokens" | "expiresAt">;
   /** Explicit injection is labeled fake-provider; normal product code constructs the real transport. */
   provider?: LlmProvider;
 }
@@ -56,7 +61,9 @@ export async function repairRepository(options: RepositoryRepairOptions): Promis
     if (!options.noLlm && config.model !== undefined && limit > 0 && options.pricing !== undefined) {
       const pricing = z.object({ inputUsdPerMillion: z.number().finite().nonnegative(), outputUsdPerMillion: z.number().finite().nonnegative() }).strict().parse(options.pricing);
       const model = resolveExecutionModel(config.model, options.trustProviderConfig === true);
-      const client = new LlmClient(options.provider ?? new AiSdkLlmProvider({ pricing: requested => requested.provider === model.provider && requested.id === model.id ? pricing : null }), async event => {
+      const provider = options.provider ?? new AiSdkLlmProvider({ pricing: requested => requested.provider === model.provider && requested.id === model.id ? pricing : null });
+      const metered = options.durableBudget === undefined ? provider : new DurableBudgetProvider(provider, { ...options.durableBudget, model, pricing });
+      const client = new LlmClient(metered, async event => {
         providerCalls += 1;
         await appendRunRecord(join(session.evidenceDir, "run.jsonl"), {
           timestamp: new Date().toISOString(),
@@ -84,6 +91,7 @@ export async function repairRepository(options: RepositoryRepairOptions): Promis
     }
     const report = makeRunReport({ result, startedAt, finishedAt: new Date().toISOString(), applied, checks: session.finalChecks,
       usage: budget.snapshot(), unknownUsage: budget.hasUnknownUsage(),
+      scanSummary: summarizeScans(session.productionBaseline, session.finalObservations, session.baselineObservations),
       providerVerification: providerCalls === 0 ? "not-run" : options.provider ? "fake-provider" : "provider-api" });
     await writeFile(join(session.evidenceDir, "report.json"), JSON.stringify(report, null, 2));
     return { report, evidenceDir: session.evidenceDir, groups };

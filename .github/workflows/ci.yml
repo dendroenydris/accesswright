@@ -51,3 +51,26 @@ jobs:
         run: npm run check
       - name: Run deterministic unit and integration-boundary tests
         run: npm test -- --maxWorkers=2
+
+  browser:
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      ACCESSWRIGHT_LIVE_LLM: '0'
+      ACCESSWRIGHT_LIVE_BROWSER: '0'
+      CI: '1'
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '26.5.1'
+          cache: npm
+      - name: Install coordinator dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run actual isolated Chromium harmful and legitimate-change sets
+        run: npm run test:integration -- test/e2e/browser-soundness.test.ts

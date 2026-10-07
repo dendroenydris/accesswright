@@ -5,7 +5,8 @@ import { z } from "zod";
 import { defaults, loadConfig } from "../config.js";
 import { AccesswrightConfigSchema, PatchSchema } from "../types/schemas.js";
 import type { AccesswrightConfig, FixTask, Patch } from "../types/schemas.js";
-import { copyTargetSnapshot, applySourcePatch, resolveSafeSource } from "../sandbox/source-boundary.js";
+import { copyTargetSnapshot, resolveSafeSource } from "../sandbox/source-boundary.js";
+import { applyTransferredPatch } from "../sandbox/source-transfer.js";
 import { IsolatedDockerSession } from "../sandbox/session.js";
 import { dockerCopy, dockerExec, dockerExecResult } from "../sandbox/docker.js";
 import { discoverFileRoutes, materializeRoutes } from "../routes/discovery.js";
@@ -13,6 +14,7 @@ import { observationsToState } from "../scanner/observations.js";
 import type { BrowserObservation } from "../scanner/observations.js";
 import { violationKey } from "../scanner/browser-facts.js";
 import { verifyPerPatch } from "../verifier/per-patch.js";
+import { unresolvedProductionTargets } from "../verifier/production-targets.js";
 import type { PerPatchVerificationResult } from "../verifier/per-patch.js";
 import { verifyFinal as verifyFixSet } from "../verifier/final.js";
 import type { FinalCheckSnapshot, FinalVerificationResult } from "../verifier/final.js";
@@ -20,7 +22,7 @@ import { appendRunRecord } from "../tracer/run-record.js";
 import { detectPackageManager } from "./detect.js";
 import { PatchJournal, listSnapshotFiles } from "./patch-journal.js";
 import { instrumentConfigSource } from "./config-merge.js";
-import { clearPrivateEvidence } from "./evidence-retention.js";
+import { clearPrivateEvidence, recordPrivateScan } from "./evidence-retention.js";
 import { PackageManifestSchema, snapshotFromChecks } from "./production-checks.js";
 import type { ProductionCheck, ProductionCheckResult } from "./production-checks.js";
 import { BrowserCommandSchema, BrowserScanOutputSchema, CheckOutputSchema, CrawlOutputSchema, TargetCommandSchema, TargetInspectionSchema, sourceRoutesForChanges } from "./session-protocol.js";
@@ -177,17 +179,10 @@ export class DockerRepairSession {
   async readSource(path: string): Promise<string> { return readFile(await resolveSafeSource(this.sourceRoot, path), "utf8"); }
 
   async applyPatch(patch: Patch): Promise<Patch> {
-    const normalized = await applySourcePatch(this.sourceRoot, patch);
-    try {
-      for (const change of normalized.changes) {
-        await dockerCopy(join(this.sourceRoot, change.path), this.sandbox.application, `/workspace/${change.path}`);
-        await dockerExec(this.sandbox.application, ["chown", "pwuser:pwuser", `/workspace/${change.path}`]);
-      }
-    } catch (error) {
-      await applySourcePatch(this.sourceRoot, { taskId: patch.taskId, changes: normalized.changes.map(change => ({ ...change, before: change.after, after: change.before })) });
-      throw error;
-    }
-    return normalized;
+    return applyTransferredPatch(this.sourceRoot, patch, async path => {
+      await dockerCopy(join(this.sourceRoot, path), this.sandbox.application, `/workspace/${path}`);
+      await dockerExec(this.sandbox.application, ["chown", "pwuser:pwuser", `/workspace/${path}`]);
+    });
   }
 
   async revertPatch(patch: Patch): Promise<void> { await this.applyPatch({ taskId: patch.taskId, changes: patch.changes.map(change => ({ ...change, before: change.after, after: change.before })) }); }
@@ -199,6 +194,8 @@ export class DockerRepairSession {
       if (!output.observations.some(page => page.route === route && page.condition === "desktop-light")) throw new Error("The browser omitted a requested route");
       if (this.config.scan.mobile && !output.observations.some(page => page.route === route && page.condition === "mobile-light")) throw new Error("The browser omitted a requested mobile scan");
     }
+    await this.sandbox.syncEvidence(output.observations.flatMap(page => [page.screenshot, ...page.contexts.map(context => context.screenshot)].filter((name): name is string => name !== null)));
+    await recordPrivateScan(this.evidenceDir, generation, output.observations, this.retainEvidence);
     await this.recordStep("scan", "ok", started, { routeCount: routes.length, observationCount: output.observations.length, generation });
     return output.observations;
   }
@@ -247,6 +244,12 @@ export class DockerRepairSession {
         await this.ready(this.routes[0] ?? "/");
         this.finalObservations = await this.scan(this.routes, `production-final-${this.finalSequence}`);
         snapshot.violations = observationsToState(this.finalObservations).violations.map(violationKey);
+        const selectedTasks = fixIds.map(id => {
+          const task = this.tasks.get(id);
+          if (!task) throw new Error("Selected production fix lost its task provenance");
+          return task;
+        });
+        snapshot.violations.push(...unresolvedProductionTargets(selectedTasks, observationsToState(this.finalObservations)));
         const aggregate: FixTask = { id: "production-preservation", ruleId: "unknown", criterion: "unknown", kind: "human", route: "human", source: null, routes: this.routes, violations: [] };
         const preservation = verifyPerPatch({ task: aggregate, before: observationsToState(this.productionBaseline), after: observationsToState(this.finalObservations) });
         if (!preservation.accepted && preservation.check !== "new-violation") snapshot.violations.push(`production-preservation:${preservation.check}:${createHash("sha256").update(preservation.reason ?? "").digest("hex").slice(0, 16)}`);

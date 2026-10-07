@@ -65,11 +65,18 @@ describe("LlmClient structured output", () => {
     ]);
     const client = new LlmClient(provider);
 
-    await expect(client.callStructured(request(), AnswerSchema)).resolves.toMatchObject({
-      status: "rejected",
-      reason: "provider",
-      message: "rate limited",
-    });
+    const result = await client.callStructured(request(), AnswerSchema);
+    expect(result).toMatchObject({ status: "rejected", reason: "provider" });
+    if (result.status !== "rejected") throw new Error("A provider failure must be rejected");
+    expect(result.message).toMatch(/^Provider call failed; diagnostic [a-f0-9]{16}$/);
+  });
+
+  it("does not echo credential fragments or request bodies from SDK exceptions", async () => {
+    const provider = new FakeLlmProvider([{ error: new Error("Authorization: Bearer private-fixture-credential; body=private-source") }]);
+    const result = await new LlmClient(provider).callStructured(request(), AnswerSchema);
+    expect(result).toMatchObject({ status: "rejected", reason: "provider" });
+    expect(JSON.stringify(result)).not.toContain("private-fixture-credential");
+    expect(JSON.stringify(result)).not.toContain("private-source");
   });
 
   it("preserves billed usage for provider-side structured-output failures", async () => {

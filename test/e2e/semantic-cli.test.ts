@@ -7,6 +7,8 @@ import { createNextIntegrationFixture } from "../fixtures/next-integration.js";
 import { repairRepository } from "../../src/core/repository.js";
 import type { LlmProvider } from "../../src/llm/types.js";
 import { RunReportSchema } from "../../src/reporter/report.js";
+import { DurableSpendLedger } from "../../src/llm/durable-spend.js";
+import { assertSaveButtonEvidence } from "../helpers/semantic-evidence.js";
 
 it("repairs a real Next.js semantic target through the coordinator, rejects hiding, and reruns the compiled CLI idempotently", async () => {
   const tempRoot = process.env.ACCESSWRIGHT_TMP_ROOT ?? join(tmpdir(), "accesswright-integration");
@@ -14,6 +16,8 @@ it("repairs a real Next.js semantic target through the coordinator, rejects hidi
   const fixture = await mkdtemp(join(tempRoot,"semantic-fixture-"));
   await createNextIntegrationFixture(fixture);
   await writeFile(join(fixture,".accesswright.yml"), "model:\n  provider: openai\n  id: fixture-provider\n  reasoningEffort: high\nscan:\n  mobile: true\n");
+  const allowanceRoot = await mkdtemp(join(tempRoot, "semantic-allowance-"));
+  const ledger = await DurableSpendLedger.initialize(join(allowanceRoot, "spend.json"), { maxUsd: 1, history: [] });
   let calls = 0;
   const provider: LlmProvider = {
     generateObject: request => {
@@ -30,7 +34,8 @@ it("repairs a real Next.js semantic target through the coordinator, rejects hidi
     },
   };
   const result = await repairRepository({ repoPath: fixture, tempRoot, runtimeRoot: process.cwd(), offline: true, retainEvidence: true,
-    maxCostUsd: 0.1, pricing: { inputUsdPerMillion: 1, outputUsdPerMillion: 2 }, provider });
+    maxCostUsd: 0.1, pricing: { inputUsdPerMillion: 1, outputUsdPerMillion: 2 }, provider,
+    durableBudget: { ledger, maxInputTokens: 64000 } });
   expect(calls).toBe(2);
   expect(result.report).toMatchObject({ status: "verified", fixed: 3, applied: true, providerVerification: "fake-provider", unknownUsage: false });
   expect(result.report.checks.map(check => check.status)).toEqual(["passed","passed","passed","passed"]);
@@ -39,6 +44,8 @@ it("repairs a real Next.js semantic target through the coordinator, rejects hidi
   expect(source).not.toContain("aria-bogus"); expect(source).not.toContain(" hidden");
   expect(result.groups).toHaveLength(3);
   expect(result.groups.every(group => group.perPatchAccepted)).toBe(true);
+  await assertSaveButtonEvidence(result.evidenceDir);
+  expect(await ledger.snapshot()).toMatchObject({ settledAttempts: 2, pendingAttempts: 0, unknownAttempts: 0 });
   const rerun = await execa("node", [join(process.cwd(),"dist/src/cli.js"), "fix", fixture, "--no-llm", "--offline", "--dry-run"], {
     env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: process.env.HOME ?? "/tmp", ACCESSWRIGHT_TMP_ROOT: tempRoot }, extendEnv: false, timeout: 600000,
   });

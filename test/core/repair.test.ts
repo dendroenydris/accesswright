@@ -6,6 +6,7 @@ import type { BrowserObservation } from "../../src/scanner/observations.js";
 import type { PerPatchVerificationResult } from "../../src/verifier/per-patch.js";
 import type { FinalVerificationResult } from "../../src/verifier/final.js";
 import { runRepair } from "../../src/core/repair.js";
+import { SourcePatchRejectedError } from "../../src/sandbox/source-boundary.js";
 import type { RepairRuntime } from "../../src/core/repair.js";
 
 const source = 'export const Button = () => <button id="save" aria-bogus="bad">Save</button>;\n';
@@ -88,6 +89,21 @@ describe("real repair orchestrator gates", () => {
     expect(runtime.events).not.toContain("candidate");
     expect(result.fixed).toBe(0);
     expect(result.ignored).toBe(1);
+  });
+  it("defers an unapplied source mismatch and still runs the final gate", async () => {
+    const runtime = new FakeRuntime();
+    runtime.applyPatch = () => Promise.reject(new SourcePatchRejectedError("Unique exact source match required"));
+    const result = await runRepair(runtime, { noLlm: true });
+    expect(result).toMatchObject({ fixed: 0, rejected: 1, patch: null });
+    expect(runtime.finalSeen).toBe(true);
+    expect(runtime.recorded).toEqual([]);
+  });
+  it("aborts instead of continuing from an uncertain partially applied source", async () => {
+    const runtime = new FakeRuntime();
+    runtime.applyPatch = () => Promise.reject(new Error("rollback failed"));
+    await expect(runRepair(runtime, { noLlm: true })).rejects.toThrow("rollback failed");
+    expect(runtime.recorded).toEqual([]);
+    expect(runtime.finalSeen).toBe(false);
   });
   it("keeps semantic tasks unresolved when --no-llm is explicit", async () => {
     const runtime = new FakeRuntime(); runtime.observations = [observation([{ ...violation, ruleId: "button-name" }])];
