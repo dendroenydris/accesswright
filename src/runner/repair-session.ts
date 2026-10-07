@@ -20,6 +20,7 @@ import { appendRunRecord } from "../tracer/run-record.js";
 import { detectPackageManager } from "./detect.js";
 import { PatchJournal, listSnapshotFiles } from "./patch-journal.js";
 import { instrumentConfigSource } from "./config-merge.js";
+import { clearPrivateEvidence } from "./evidence-retention.js";
 import { PackageManifestSchema, snapshotFromChecks } from "./production-checks.js";
 import type { ProductionCheck, ProductionCheckResult } from "./production-checks.js";
 import { BrowserCommandSchema, BrowserScanOutputSchema, CheckOutputSchema, CrawlOutputSchema, TargetCommandSchema, TargetInspectionSchema, sourceRoutesForChanges } from "./session-protocol.js";
@@ -36,6 +37,7 @@ export interface RepairSessionOptions {
   config?: z.input<typeof AccesswrightConfigSchema>;
   /** Opt-in local diagnostics for owned fixtures; never enabled by hosted or normal CLI defaults. */
   privateDiagnostics?: boolean;
+  retainEvidence?: boolean;
 }
 
 export class UnsupportedRepositoryError extends Error {
@@ -64,12 +66,14 @@ export class DockerRepairSession {
   private currentFixSet = "";
   private finalResult: FinalVerificationResult | null = null;
   private readonly privateDiagnostics: boolean;
+  private readonly retainEvidence: boolean;
 
   private constructor(options: RepairSessionOptions, config: AccesswrightConfig, runRoot: string, journal: PatchJournal, sandbox: IsolatedDockerSession) {
     this.repoPath = options.repoPath; this.config = config; this.runRoot = runRoot;
     this.sourceRoot = join(runRoot, "source"); this.evidenceDir = join(runRoot, "evidence");
     this.journal = journal; this.sandbox = sandbox;
     this.privateDiagnostics = options.privateDiagnostics === true;
+    this.retainEvidence = options.retainEvidence === true || this.privateDiagnostics;
   }
 
   get applicationContainer(): string { return this.sandbox.application; }
@@ -292,5 +296,6 @@ export class DockerRepairSession {
     await this.sandbox.close();
     await rm(this.sourceRoot, { recursive: true, force: true });
     for (const name of configNames) await rm(join(this.runRoot, `instrumented-${name}`), { force: true });
+    await clearPrivateEvidence(this.evidenceDir, this.retainEvidence);
   }
 }

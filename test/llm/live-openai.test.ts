@@ -11,6 +11,7 @@ import { LlmClient } from "../../src/llm/client.js";
 import type { RepairContext } from "../../src/llm/context.js";
 import { runSemanticRepair } from "../../src/llm/fixer.js";
 import { createJsonlLlmObserver } from "../../src/llm/run-record.js";
+import { isSourcePath } from "../../src/types/schemas.js";
 import type {
   FixTask,
   Patch,
@@ -24,6 +25,12 @@ import type {
 
 const liveIt =
   process.env.ACCESSWRIGHT_LIVE_LLM === "1" ? it : it.skip;
+
+const fixturePath = "test/fixtures/llm-semantic/SaveButton.fixture.html";
+
+it("uses a patch-eligible controlled live fixture", () => {
+  expect(isSourcePath(fixturePath)).toBe(true);
+});
 
 function requiredEnv(name: string): string {
   const value = process.env[name];
@@ -41,26 +48,52 @@ function requiredNumber(name: string): number {
   return value;
 }
 
-function accessibleNameFromPatch(patch: Patch): {
+function accessibleNameFromPatch(sourceText: string, patch: Patch): {
   name: string;
   text: string;
 } | null {
   const change = patch.changes[0];
-  if (change === undefined) return null;
-
-  if (!change.after.includes("<p>Save changes</p>")) {
+  if (
+    change === undefined ||
+    patch.changes.length !== 1 ||
+    change.path !== fixturePath ||
+    change.before.length === 0
+  ) {
     return null;
   }
-  if (!change.after.includes('data-action="save-changes"')) {
+
+  const start = sourceText.indexOf(change.before);
+  if (
+    start < 0 ||
+    sourceText.indexOf(change.before, start + change.before.length) !== -1
+  ) {
+    return null;
+  }
+  const finalSource =
+    sourceText.slice(0, start) +
+    change.after +
+    sourceText.slice(start + change.before.length);
+
+  if (
+    !finalSource.includes('<section aria-label="Profile editor">') ||
+    !finalSource.includes("<p>Save changes</p>") ||
+    !finalSource.includes('data-action="save-changes"')
+  ) {
     return null;
   }
 
-  const button = change.after.match(
+  const button = finalSource.match(
     /<button\b([^>]*)>([\s\S]*?)<\/button>/i,
   );
   if (button === null) return null;
 
   const attributes = button[1] ?? "";
+  if (
+    /(?:^|\s)hidden(?:\s|=|$)/i.test(attributes) ||
+    /\baria-hidden\s*=\s*["']true["']/i.test(attributes)
+  ) {
+    return null;
+  }
   const inner = (button[2] ?? "")
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
@@ -74,11 +107,40 @@ function accessibleNameFromPatch(patch: Patch): {
   return { name, text: inner };
 }
 
+it("verifies the applied source rather than requiring a whole-file replacement", async () => {
+  const sourceText = await readFile(fixturePath, "utf8");
+  const patch: Patch = {
+    taskId: "fixture",
+    changes: [
+      {
+        path: fixturePath,
+        before: '<button data-action="save-changes"></button>',
+        after:
+          '<button data-action="save-changes" aria-label="Save changes"></button>',
+      },
+    ],
+  };
+  expect(accessibleNameFromPatch(sourceText, patch)).toEqual({
+    name: "Save changes",
+    text: "",
+  });
+  expect(
+    accessibleNameFromPatch(sourceText, {
+      ...patch,
+      changes: [
+        {
+          ...patch.changes[0],
+          after:
+            '<button data-action="save-changes" aria-label="Save changes" hidden></button>',
+        },
+      ],
+    }),
+  ).toBeNull();
+});
+
 liveIt(
   "repairs a controlled button-name fixture with the verified OpenAI model",
   async () => {
-    const fixturePath =
-      "test/fixtures/llm-semantic/SaveButton.fixture.txt";
     const sourceText = await readFile(fixturePath, "utf8");
     const source = { file: fixturePath, line: 5, column: 7 };
     const violation: Violation = {
@@ -152,7 +214,7 @@ liveIt(
 
     const budget = new BudgetLedger({
       maxRunCostUsd,
-      maxTaskTokens: estimatedInputTokens + maxOutputTokens,
+      maxTaskTokens: (estimatedInputTokens + maxOutputTokens) * 2,
     });
     const provider = new AiSdkLlmProvider({
       pricing: (model) =>
@@ -203,7 +265,7 @@ liveIt(
       },
       maxAttempts: 2,
       verifyPatch: (patch) => {
-        const accessible = accessibleNameFromPatch(patch);
+        const accessible = accessibleNameFromPatch(sourceText, patch);
         if (accessible === null) {
           return Promise.resolve({
             accepted: false,
