@@ -1,0 +1,1 @@
+export default function Controls() { return <section aria-label="Actions"><p id="hint">Save changes</p><button id="save" type="button" aria-bogus="invalid" style={{ padding: 16 }}>Save</button><button id="unlabeled" type="button" style={{ width: 44, height: 44 }}><svg aria-hidden="true" width="12" height="12"><path d="M0 0h12v12H0z" /></svg></button></section>; }

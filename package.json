@@ -1,0 +1,26 @@
+{
+  "name": "accesswright-next-integration-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint app components --max-warnings=0",
+    "test": "node --test test/invariant.test.mjs"
+  },
+  "dependencies": {
+    "next": "16.3.8",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "@types/node": "26.6.4",
+    "@types/react": "19.3.0",
+    "eslint": "10.12.0",
+    "typescript-eslint": "8.71.0"
+  }
+}
