@@ -1,4 +1,4 @@
-import { readdir, writeFile } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { chromium } from "playwright";
 import { scanBrowserPage } from "../../src/scanner/browser-scan.js";
 import { observationsToState } from "../../src/scanner/observations.js";
@@ -57,6 +57,7 @@ const report = {
   failures: results.filter(item => item.expected !== item.accepted).map(item => item.name),
   screenshots: (await readdir("/evidence")).filter(name => name.endsWith(".png")).length,
 };
-await writeFile("/evidence/report.json", JSON.stringify(report, null, 2));
+// The coordinator validates and persists this report once with host ownership.
+// Do not also create a root-owned bind-mounted file that Linux CI cannot overwrite.
 console.log(JSON.stringify(report));
 if (report.failures.length > 0) process.exitCode = 1;
