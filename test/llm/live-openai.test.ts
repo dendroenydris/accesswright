@@ -195,7 +195,6 @@ liveIt(
         provider: "openai",
         id: modelId,
         reasoningEffort: "high",
-        apiKeyEnv: "OPENAI_KEY",
       },
       estimate: {
         estimatedCostUsd,
