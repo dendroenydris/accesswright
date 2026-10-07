@@ -203,6 +203,7 @@ export class AiSdkLlmProvider implements LlmProvider {
         ...(request.model.provider === "openai" ? {
           providerOptions: { openai: {
             store: false,
+            serviceTier: "default",
             ...(effort === undefined ? {} : { reasoningEffort: effort, reasoningSummary: null, forceReasoning: true }),
           } satisfies OpenAILanguageModelResponsesOptions },
         } : {}),

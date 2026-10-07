@@ -49,6 +49,23 @@ export async function resolveSafeSource(root: string, path: string): Promise<str
   return resolved;
 }
 
+/** This error certifies that no source mutation remains. An uncertain rollback must not use this type. */
+export class SourcePatchRejectedError extends Error {
+  constructor(message: string) { super(message); this.name = "SourcePatchRejectedError"; }
+}
+
+async function writeCompleteSource(handle: Awaited<ReturnType<typeof open>>, text: string): Promise<void> {
+  const bytes = Buffer.from(text);
+  let offset = 0;
+  while (offset < bytes.length) {
+    const { bytesWritten } = await handle.write(bytes, offset, bytes.length - offset, offset);
+    if (bytesWritten <= 0) throw new Error("Source write made no progress");
+    offset += bytesWritten;
+  }
+  await handle.truncate(bytes.length);
+  await handle.sync();
+}
+
 /** Unique exact excerpts support bounded LLM context; ambiguous or stale edits fail closed. */
 export async function applySourcePatch(root: string, input: Patch): Promise<Patch> {
   const patch = PatchSchema.parse(input);
@@ -61,7 +78,7 @@ export async function applySourcePatch(root: string, input: Patch): Promise<Patc
       try {
         const before = await handle.readFile("utf8");
         const offset = before.indexOf(change.before);
-        if (change.before.length === 0 || offset < 0 || before.indexOf(change.before, offset + 1) >= 0) {
+        if (before !== change.before && (change.before.length === 0 || offset < 0 || before.indexOf(change.before, offset + 1) >= 0)) {
           throw new Error(`Patch requires a unique exact source match: ${change.path}`);
         }
         const after = before.slice(0, offset) + change.after + before.slice(offset + change.before.length);
@@ -76,17 +93,14 @@ export async function applySourcePatch(root: string, input: Patch): Promise<Patc
     }
     writing = true;
     for (const item of handles) {
-      await item.handle.write(Buffer.from(item.after), 0, Buffer.byteLength(item.after), 0);
-      await item.handle.truncate(Buffer.byteLength(item.after));
+      await writeCompleteSource(item.handle, item.after);
     }
     return { taskId: patch.taskId, changes: handles.map(({ path, before, after }) => ({ path, before, after })) };
   } catch (error) {
     if (writing) {
-      for (const item of handles) {
-        await item.handle.write(Buffer.from(item.before), 0, Buffer.byteLength(item.before), 0);
-        await item.handle.truncate(Buffer.byteLength(item.before));
-      }
+      try { for (const item of handles) await writeCompleteSource(item.handle, item.before); }
+      catch (rollbackError) { throw new AggregateError([error, rollbackError], "Source rollback failed; verification must abort", { cause: rollbackError }); }
     }
-    throw error;
+    throw new SourcePatchRejectedError(error instanceof Error ? error.message : "Source patch was rejected before application");
   } finally { await Promise.all(handles.map(item => item.handle.close())); }
 }

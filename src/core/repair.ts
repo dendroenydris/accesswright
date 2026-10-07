@@ -1,8 +1,9 @@
 import { defaults, isIgnoredPath } from "../config.js";
 import { applyCodemod } from "../fixers/codemods/index.js";
-import { applyInlineContrastFix } from "../fixers/contrast-patch.js";
+import { applyRenderedContrastFix } from "../fixers/runtime-contrast.js";
 import { planFixTasks } from "../planner/planner.js";
 import { PatchSchema } from "../types/schemas.js";
+import { SourcePatchRejectedError } from "../sandbox/source-boundary.js";
 import type { AccesswrightConfig, FixTask, Patch } from "../types/schemas.js";
 import { observationsToState } from "../scanner/observations.js";
 import type { BrowserObservation } from "../scanner/observations.js";
@@ -91,7 +92,14 @@ export async function runRepair(runtime: RepairRuntime, options: RepairOptions =
       attempts += 1;
       const routes = [...new Set([...task.routes, ...runtime.affectedRoutes(patch.changes.map(change => change.path))])];
       const before = runtime.observations.filter(page => routes.includes(page.route));
-      const applied = await runtime.applyPatch(patch);
+      let applied: Patch;
+      try { applied = await runtime.applyPatch(patch); }
+      catch (error) {
+        if (!(error instanceof SourcePatchRejectedError)) throw error;
+        runtime.updateObservations(await runtime.scan(routes, `source-recovered-${attempts}`));
+        lastVerification = { accepted: false, check: "target", reason: error.message };
+        return lastVerification;
+      }
       let after: BrowserObservation[];
       let verification: PerPatchVerificationResult;
       try {
@@ -125,8 +133,9 @@ export async function runRepair(runtime: RepairRuntime, options: RepairOptions =
       if (result.status !== "accepted") outcome.reason = result.reason ?? "semantic-repair-unresolved";
     } else {
       const source = await runtime.readSource(task.source.file);
-      const patch = task.route === "codemod" ? applyCodemod(source, task) : applyInlineContrastFix(source, task);
-      if (patch === null) outcome.reason = "deterministic-source-shape-not-supported";
+      const decision = task.route === "codemod" ? { patch: applyCodemod(source, task), reason: "deterministic-source-shape-not-supported" } : applyRenderedContrastFix(source, task, runtime.observations);
+      const patch = decision.patch;
+      if (patch === null) outcome.reason = decision.reason;
       else await verify(patch);
     }
     // TypeScript cannot infer assignments performed through the awaited verifier callback.

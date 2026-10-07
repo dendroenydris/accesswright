@@ -1,0 +1,85 @@
+name: Accesswright verified accessibility repair
+description: Verify source accessibility repairs in isolated Docker before opening a backlog pull request.
+inputs:
+  github-token:
+    description: Repository token with contents and pull-requests write permission; never passed to target containers.
+    required: true
+    default: ${{ github.token }}
+  base-branch:
+    description: Branch to verify; only the current repository is supported.
+    default: ${{ github.ref_name }}
+  no-llm:
+    description: Use deterministic repairs only. No provider key is required.
+    default: 'true'
+  max-cost-usd:
+    description: Explicit per-run model spending authorization. Zero disables paid repairs.
+    default: '0'
+  max-tasks:
+    description: Maximum repair tasks per run.
+    default: '20'
+  input-usd-per-million:
+    description: Verified model input price; required for paid runs.
+    default: ''
+  output-usd-per-million:
+    description: Verified model output price; required for paid runs.
+    default: ''
+  offline:
+    description: Disable target network after dependency installation.
+    default: 'false'
+  retain-evidence:
+    description: Explicit opt-in to retaining private screenshots in the runner temporary directory.
+    default: 'false'
+outputs:
+  status:
+    description: created, updated, unchanged, preserved-human, or blocked.
+    value: ${{ steps.repair.outputs.status }}
+  pull-request-url:
+    description: Verified repair pull request URL, when available.
+    value: ${{ steps.repair.outputs.pull-request-url }}
+  fixed:
+    description: Number of finally verified fix groups.
+    value: ${{ steps.repair.outputs.fixed }}
+  evidence-directory:
+    description: Runner-local metadata/evidence directory; no automatic screenshot upload.
+    value: ${{ steps.repair.outputs.evidence-directory }}
+runs:
+  using: composite
+  steps:
+    - name: Check out target branch separately from action code
+      id: target
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      with:
+        repository: ${{ github.repository }}
+        ref: ${{ inputs.base-branch }}
+        path: .accesswright-target
+        persist-credentials: false
+        token: ${{ inputs.github-token }}
+    - name: Set up pinned coordinator Node
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: '26.5.1'
+    - name: Build trusted action package without lifecycle scripts
+      shell: bash
+      env:
+        GITHUB_ACTION_PATH: ${{ github.action_path }}
+      run: |
+        npm --prefix "$GITHUB_ACTION_PATH" ci --ignore-scripts --no-audit --no-fund
+        npm --prefix "$GITHUB_ACTION_PATH" run build
+        docker info >/dev/null
+    - name: Verify and publish accepted source groups
+      id: repair
+      shell: bash
+      env:
+        GITHUB_ACTION_PATH: ${{ github.action_path }}
+        ACCESSWRIGHT_ACTION_REPO_PATH: ${{ github.workspace }}/.accesswright-target
+        ACCESSWRIGHT_ACTION_BASE_BRANCH: ${{ inputs.base-branch }}
+        ACCESSWRIGHT_ACTION_BASE_SHA: ${{ steps.target.outputs.commit }}
+        ACCESSWRIGHT_ACTION_GITHUB_TOKEN: ${{ inputs.github-token }}
+        ACCESSWRIGHT_ACTION_NO_LLM: ${{ inputs.no-llm }}
+        ACCESSWRIGHT_ACTION_MAX_COST_USD: ${{ inputs.max-cost-usd }}
+        ACCESSWRIGHT_ACTION_MAX_TASKS: ${{ inputs.max-tasks }}
+        ACCESSWRIGHT_ACTION_INPUT_USD_PER_MILLION: ${{ inputs.input-usd-per-million }}
+        ACCESSWRIGHT_ACTION_OUTPUT_USD_PER_MILLION: ${{ inputs.output-usd-per-million }}
+        ACCESSWRIGHT_ACTION_OFFLINE: ${{ inputs.offline }}
+        ACCESSWRIGHT_ACTION_RETAIN_EVIDENCE: ${{ inputs.retain-evidence }}
+      run: node "$GITHUB_ACTION_PATH/dist/src/action.js"

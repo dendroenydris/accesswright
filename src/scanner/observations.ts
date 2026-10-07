@@ -22,6 +22,7 @@ export type RenderedContext = z.infer<typeof RenderedContextSchema>;
 
 export const BrowserObservationSchema = z.object({
   route: z.string().startsWith("/"), condition: ScanConditionSchema,
+  checkerVersion: z.string().min(1).optional(),
   violations: z.array(ViolationSchema), incomplete: z.array(ViolationSchema),
   aria: z.array(AccessibleFactSchema), ariaTree: z.string(),
   probeFailures: z.array(z.string()), probeUnavailable: z.array(z.string()),

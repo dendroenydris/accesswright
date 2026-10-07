@@ -1,4 +1,5 @@
 import type { FixKind, FixRoute } from "../types/schemas.js";
+import { criterionReference } from "./references.js";
 
 export interface RuleDefinition {
   ruleId: string;
@@ -85,6 +86,9 @@ const rules: Readonly<Record<string, RuleDefinition>> = {
     route: "llm",
     ariaPermissions: strictAriaPermissions,
   },
+  "target-size": {
+    ruleId: "target-size", criterion: "2.5.8", kind: "layout", route: "human", ariaPermissions: strictAriaPermissions,
+  },
   "landmark-unique": {
     ruleId: "landmark-unique",
     criterion: "1.3.1",
@@ -115,6 +119,8 @@ const unknownRule: RuleDefinition = {
   ariaPermissions: strictAriaPermissions,
 };
 
-export function getRuleDefinition(ruleId: string): RuleDefinition {
-  return rules[ruleId] ?? { ...unknownRule, ruleId };
+export function getRuleDefinition(ruleId: string): RuleDefinition & { en301549: string | null; referenceEdition: string } {
+  const definition = rules[ruleId] ?? { ...unknownRule, ruleId };
+  const reference = criterionReference(definition.criterion);
+  return { ...definition, en301549: reference.en301549, referenceEdition: reference.edition };
 }
