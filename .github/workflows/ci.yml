@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'work/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      ACCESSWRIGHT_LIVE_LLM: '0'
+      CI: '1'
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '26.5.1'
+          cache: npm
+      - name: Check tracked-file boundaries
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          const paths = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean);
+          const forbidden = paths.filter(path =>
+            /(^|\/)AGENTS\.md$/.test(path) || path.startsWith('docs/') ||
+            path === 'eval/spend.json' || /(^|\/)\.env(?:\.|$)/.test(path) ||
+            /\.(?:pem|key|p12|pfx)$/.test(path) || path.startsWith('.accesswright/') ||
+            path.startsWith('artifacts/private/') || path === 'live-run.jsonl'
+          );
+          if (forbidden.length) throw new Error(`Internal or credential-like tracked paths: ${forbidden.join(', ')}`);
+          console.log(`Checked ${paths.length} tracked paths; no internal-document or credential-path entries.`);
+          NODE
+      - name: Install locked dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Check types and lint
+        run: npm run check
+      - name: Run deterministic unit and integration-boundary tests
+        run: npm test -- --maxWorkers=2
