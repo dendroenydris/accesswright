@@ -35,9 +35,9 @@ export class PatchJournal {
 
   private constructor(root: string, baseline: string) { this.root = root; this.baseline = baseline; }
 
-  private static async git(root: string, args: readonly string[]): Promise<string> {
-    const result = await execa("git", [...gitOptions, ...args], { cwd: root, env: gitEnvironment(), extendEnv: false });
-    return result.stdout.trim();
+  private static async git(root: string, args: readonly string[], raw = false): Promise<string> {
+    const result = await execa("git", [...gitOptions, ...args], { cwd: root, env: gitEnvironment(), extendEnv: false, stripFinalNewline: !raw });
+    return raw ? result.stdout : result.stdout.trim();
   }
 
   static async create(root: string): Promise<PatchJournal> {
@@ -70,6 +70,29 @@ export class PatchJournal {
     const fix = { id: patch.taskId, patch, commit: await PatchJournal.git(this.root, ["rev-parse", "HEAD"]) };
     this.fixes.push(fix);
     return fix;
+  }
+
+  async exportPatches(fixIds: readonly string[]): Promise<Patch[]> {
+    const selected = await this.materialize(fixIds);
+    try {
+      if (selected.replayFailures.length > 0) throw new Error("Final verified groups do not replay cleanly");
+      const ordered = this.fixes.filter(fix => fixIds.includes(fix.id));
+      const commits = (await PatchJournal.git(selected.path, ["rev-list", "--reverse", `${this.baseline}..HEAD`])).split("\n").filter(Boolean);
+      if (ordered.length !== commits.length) throw new Error("Final group history is inconsistent");
+      const exported: Patch[] = [];
+      for (const [index, commit] of commits.entries()) {
+        const fix = ordered[index];
+        if (!fix) throw new Error("Missing verified group identity");
+        const changes: Patch["changes"] = [];
+        for (const change of fix.patch.changes) {
+          const before = await PatchJournal.git(selected.path, ["show", `${commit}^:${change.path}`], true);
+          const after = await PatchJournal.git(selected.path, ["show", `${commit}:${change.path}`], true);
+          if (before !== after) changes.push({ path: change.path, before, after });
+        }
+        exported.push(PatchSchema.parse({ taskId: fix.id, changes }));
+      }
+      return exported;
+    } finally { await selected.close(); }
   }
 
   async materialize(fixIds: readonly string[]): Promise<MaterializedFixes> {
