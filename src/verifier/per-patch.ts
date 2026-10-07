@@ -1,4 +1,5 @@
 import { getRuleDefinition } from "../planner/rules.js";
+import { violationKey } from "../scanner/browser-facts.js";
 import type { FixTask, Violation } from "../types/schemas.js";
 
 export interface AccessibleNodeFact {
@@ -8,12 +9,14 @@ export interface AccessibleNodeFact {
   text: string;
   interactive: boolean;
   headingLevel?: number;
+  protectedContent?: boolean;
 }
 
 export interface PageVerificationState {
   violations: Violation[];
   aria: AccessibleNodeFact[];
   probeFailures: string[];
+  incomplete?: Violation[];
 }
 
 export type PerPatchCheck =
@@ -36,11 +39,7 @@ export interface PerPatchVerificationInput {
 }
 
 function violationIdentity(violation: Violation): string {
-  return [
-    violation.ruleId,
-    violation.route,
-    violation.target.join(" >> "),
-  ].join("|");
+  return violationKey(violation);
 }
 
 function reject(
@@ -64,7 +63,8 @@ function verifyAriaTree(
       const decorative =
         previous.text.trim().length === 0 &&
         previous.name.trim().length === 0 &&
-        !previous.interactive;
+        !previous.interactive &&
+        previous.protectedContent !== true;
 
       if (!decorative) {
         return reject(
@@ -73,6 +73,10 @@ function verifyAriaTree(
         );
       }
       continue;
+    }
+
+    if (previous.protectedContent === true && current.protectedContent !== true && current.name.length === 0) {
+      return reject("aria-tree", `Informative content became decorative at ${previous.id}`);
     }
 
     if (previous.text.length > 0 && previous.text !== current.text) {
@@ -127,11 +131,13 @@ export function verifyPerPatch(
 ): PerPatchVerificationResult {
   const targetIdentities = new Set(input.task.violations.map(violationIdentity));
   const afterIdentities = new Set(input.after.violations.map(violationIdentity));
+  const unresolved = new Set((input.after.incomplete ?? []).map(violationIdentity));
 
   for (const target of targetIdentities) {
     if (afterIdentities.has(target)) {
       return reject("target", `Target violation remains: ${target}`);
     }
+    if (unresolved.has(target)) return reject("target", `Target became inconclusive rather than resolved: ${target}`);
   }
 
   const beforeIdentities = new Set(input.before.violations.map(violationIdentity));
@@ -142,11 +148,10 @@ export function verifyPerPatch(
     }
   }
 
-  if (input.after.probeFailures.length > 0) {
-    return reject(
-      "probe",
-      `Dynamic verifier probe failed: ${input.after.probeFailures.join(", ")}`,
-    );
+  const baselineProbes = new Set(input.before.probeFailures);
+  const newProbes = input.after.probeFailures.filter(failure => !baselineProbes.has(failure));
+  if (newProbes.length > 0) {
+    return reject("probe", `Dynamic verifier probe failed: ${newProbes.join(", ")}`);
   }
 
   const ariaFailure = verifyAriaTree(

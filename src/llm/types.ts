@@ -10,12 +10,18 @@ export interface LlmUsage {
   costUsd: number;
 }
 
+export interface LlmImage {
+  data: Uint8Array;
+  mediaType: "image/png" | "image/jpeg" | "image/webp";
+}
+
 export interface LlmCallRequest {
   taskType: string;
   model: LlmModelConfig;
   prompt: string;
   system?: string;
   maxOutputTokens: number;
+  images?: readonly LlmImage[];
 }
 
 export interface LlmProviderResponse {

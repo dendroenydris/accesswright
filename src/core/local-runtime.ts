@@ -1,12 +1,11 @@
 import {
-  cp,
   mkdir,
   mkdtemp,
   readFile,
   rm,
-  writeFile,
 } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { isAbsolute, join, resolve, sep } from "node:path";
+import { applySourcePatch, copyTargetSnapshot, resolveSafeSource } from "../sandbox/source-boundary.js";
 
 import type { NoLlmRuntime } from "./no-llm.js";
 import {
@@ -60,63 +59,18 @@ function toVerificationState(
   };
 }
 
-function excludedCopyPath(root: string, source: string): boolean {
-  const path = relative(root, source);
-  if (path.length === 0) return false;
-  const segments = path.split(sep);
-  const first = segments[0];
-  return (
-    first === ".git" ||
-    first === ".next" ||
-    first === "node_modules" ||
-    first === ".accesswright" ||
-    segments.some(
-      (segment) => segment.startsWith("._") || segment === ".DS_Store",
-    )
-  );
-}
-
 async function copyCandidateRepository(
   repoPath: string,
   tempRoot: string,
 ): Promise<string> {
   await mkdir(tempRoot, { recursive: true });
   const destination = await mkdtemp(join(tempRoot, "candidate-"));
-  await cp(repoPath, destination, {
-    recursive: true,
-    filter: (source) => !excludedCopyPath(repoPath, source),
-  });
+  await copyTargetSnapshot(repoPath, destination);
   return destination;
 }
 
 async function applyPatchToRoot(root: string, patch: Patch): Promise<void> {
-  const prepared: Array<{
-    path: string;
-    before: string;
-    after: string;
-  }> = [];
-
-  for (const change of patch.changes) {
-    const path = resolveSourcePath(root, change.path);
-    const current = await readFile(path, "utf8");
-    if (current !== change.before) {
-      throw new Error(`Source changed before patch application: ${change.path}`);
-    }
-    prepared.push({ path, before: current, after: change.after });
-  }
-
-  const written: typeof prepared = [];
-  try {
-    for (const change of prepared) {
-      await writeFile(change.path, change.after, "utf8");
-      written.push(change);
-    }
-  } catch (error) {
-    for (const change of written.reverse()) {
-      await writeFile(change.path, change.before, "utf8").catch(() => undefined);
-    }
-    throw error;
-  }
+  await applySourcePatch(root, patch);
 }
 
 export class LocalNoLlmRuntime implements NoLlmRuntime {
@@ -133,8 +87,8 @@ export class LocalNoLlmRuntime implements NoLlmRuntime {
     return toVerificationState(scan);
   }
 
-  readSource(path: string): Promise<string> {
-    return readFile(resolveSourcePath(this.options.repoPath, path), "utf8");
+  async readSource(path: string): Promise<string> {
+    return readFile(await resolveSafeSource(this.options.repoPath, path), "utf8");
   }
 
   async scanCandidate(patch: Patch): Promise<PageVerificationState> {
