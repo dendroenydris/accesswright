@@ -1,105 +1,72 @@
+#!/usr/bin/env node
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import {
-  LocalNoLlmRuntime,
-} from "./core/local-runtime.js";
-import {
-  runNoLlmRepair,
-} from "./core/no-llm.js";
-import type {
-  NoLlmRepairResult,
-  NoLlmRuntime,
-} from "./core/no-llm.js";
+import { parseCliArgs } from "./cli-options.js";
+import type { CliArgs } from "./cli-options.js";
+import { repairRepository } from "./core/repository.js";
+import type { RunReport } from "./reporter/report.js";
 
-export interface CliArgs {
-  repoPath: string;
-  noLlm: boolean;
-}
+export { parseCliArgs };
+export type { CliArgs };
 
-export type NoLlmRuntimeFactory = (repoPath: string) => NoLlmRuntime;
-
-export function parseCliArgs(args: readonly string[]): CliArgs {
-  let noLlm = false;
-  const positional: string[] = [];
-
-  for (const argument of args) {
-    if (argument === "--no-llm") {
-      noLlm = true;
-    } else if (argument.startsWith("--")) {
-      throw new Error(`Unknown option: ${argument}`);
-    } else {
-      positional.push(argument);
-    }
-  }
-
-  if (positional.length !== 1 || positional[0] === undefined) {
-    throw new Error(
-      "Exactly one repository path is required: accesswright <repo> --no-llm",
-    );
-  }
-
-  return {
-    repoPath: positional[0],
-    noLlm,
-  };
-}
-
-export async function runCli(
-  args: readonly string[],
-  runtimeFactory: NoLlmRuntimeFactory,
-): Promise<NoLlmRepairResult> {
-  const parsed = parseCliArgs(args);
-  if (!parsed.noLlm) {
-    throw new Error(
-      "Live LLM mode is not available yet; run this milestone with --no-llm",
-    );
-  }
-  return runNoLlmRepair(runtimeFactory(parsed.repoPath));
-}
+export type CliCoordinator<T = RunReport> = (options: CliArgs) => Promise<T>;
 
 function environmentPath(name: string, fallback: string): string {
   const value = process.env[name];
   return value === undefined || value.trim().length === 0 ? fallback : value;
 }
 
-export function createLocalRuntime(repoPath: string): NoLlmRuntime {
+async function runRepositoryFromCli(options: CliArgs): Promise<RunReport> {
   const moduleDirectory = dirname(fileURLToPath(import.meta.url));
-  const defaultPackageRoot = resolve(moduleDirectory, "../..");
   const packageRoot = environmentPath(
     "ACCESSWRIGHT_PACKAGE_ROOT",
-    defaultPackageRoot,
+    resolve(moduleDirectory, "../.."),
   );
   const tempRoot = environmentPath(
     "ACCESSWRIGHT_TMP_ROOT",
     join(tmpdir(), "accesswright"),
   );
-
-  return new LocalNoLlmRuntime({
-    repoPath: resolve(repoPath),
+  const pricing =
+    options.inputUsdPerMillion === undefined ||
+    options.outputUsdPerMillion === undefined
+      ? undefined
+      : {
+          inputUsdPerMillion: options.inputUsdPerMillion,
+          outputUsdPerMillion: options.outputUsdPerMillion,
+        };
+  const result = await repairRepository({
+    repoPath: resolve(options.repoPath),
     tempRoot,
-    image:
-      process.env.ACCESSWRIGHT_DOCKER_IMAGE ??
-      "mcr.microsoft.com/playwright:v1.63.0-noble",
-    accesswrightNodeModules: environmentPath(
-      "ACCESSWRIGHT_NODE_MODULES",
-      join(packageRoot, "node_modules"),
-    ),
-    accesswrightRuntime: environmentPath(
-      "ACCESSWRIGHT_RUNTIME_DIR",
-      join(packageRoot, "dist"),
-    ),
-    npmCache: environmentPath(
-      "ACCESSWRIGHT_NPM_CACHE",
-      join(tempRoot, "npm-cache"),
-    ),
+    runtimeRoot: packageRoot,
+    noLlm: options.noLlm,
+    dryRun: options.dryRun,
+    retainEvidence: options.retainEvidence,
+    trustProviderConfig: options.trustProviderConfig,
+    maxTasks: options.maxTasks,
+    maxCostUsd: options.maxCostUsd,
+    ...(options.offline === undefined ? {} : { offline: options.offline }),
+    ...(pricing === undefined ? {} : { pricing }),
   });
+  return result.report;
+}
+
+export function runCli(args: readonly string[]): Promise<RunReport>;
+export function runCli<T>(args: readonly string[], coordinator: CliCoordinator<T>): Promise<T>;
+export async function runCli<T>(args: readonly string[], coordinator?: CliCoordinator<T>): Promise<RunReport | T> {
+  const parsed = parseCliArgs(args);
+  return coordinator === undefined ? runRepositoryFromCli(parsed) : coordinator(parsed);
+}
+
+export function cliExitCode(report: Pick<RunReport, "status">): number {
+  return report.status === "blocked" ? 1 : 0;
 }
 
 async function main(): Promise<void> {
-  const result = await runCli(process.argv.slice(2), createLocalRuntime);
+  const result = await runCli(process.argv.slice(2));
   process.stdout.write(`${JSON.stringify(result)}\n`);
+  process.exitCode = cliExitCode(result);
 }
 
 const invokedPath = process.argv[1];

@@ -7,3 +7,13 @@ run.jsonl
 # macOS metadata
 .DS_Store
 ._*
+
+# Local secrets and private run records
+eval/spend.json
+.accesswright/
+.env
+.env.*
+*.pem
+*.key
+live-run.jsonl
+artifacts/private/

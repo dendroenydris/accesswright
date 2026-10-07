@@ -1,4 +1,5 @@
 import { Project, SyntaxKind } from "ts-morph";
+import { defaults } from "../config.js";
 
 export interface CallSiteContext {
   file: string;
@@ -111,6 +112,7 @@ export function buildRepairContext(input: RepairContextInput): RepairContext {
   }
 
   const callSites = [...input.callSites]
+    .slice(0, defaults.maxContextFiles)
     .map((item) => ({
       ...item,
       source: truncate(item.source, 2_000),
@@ -122,7 +124,7 @@ export function buildRepairContext(input: RepairContextInput): RepairContext {
         left.column - right.column,
     );
 
-  return {
+  const context: RepairContext = {
     component: {
       file: input.source.file,
       line: input.source.line,
@@ -142,4 +144,7 @@ export function buildRepairContext(input: RepairContextInput): RepairContext {
     },
     screenshotPath: input.screenshotPath,
   };
+  while (Buffer.byteLength(JSON.stringify(context)) > defaults.maxContextBytes && context.callSites.length > 0) context.callSites.pop();
+  if (Buffer.byteLength(JSON.stringify(context)) > defaults.maxContextBytes) throw new Error("Deterministic context exceeds the aggregate byte limit");
+  return context;
 }

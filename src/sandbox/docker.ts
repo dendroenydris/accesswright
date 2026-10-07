@@ -1,4 +1,5 @@
 import { execa } from "execa";
+import { defaults } from "../config.js";
 
 export interface DockerRunOptions {
   image: string;
@@ -8,6 +9,8 @@ export interface DockerRunOptions {
   offline?: boolean;
   name?: string;
   detach?: boolean;
+  network?: string;
+  noNewPrivileges?: boolean;
   extraVolumes?: readonly { hostPath: string; containerPath: string; readOnly?: boolean }[];
   publishPorts?: readonly { hostPort?: number; containerPort: number }[];
 }
@@ -47,6 +50,12 @@ export function buildDockerRunArgs(options: DockerRunOptions): string[] {
   if (options.offline === true) {
     args.push("--network", "none");
   }
+  if (options.network !== undefined) {
+    if (options.offline === true) throw new Error("Choose either an isolated named network or no network");
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]+$/.test(options.network)) throw new Error("Invalid Docker network name");
+    args.push("--network", options.network);
+  }
+  if (options.noNewPrivileges === true) args.push("--security-opt", "no-new-privileges:true");
 
   for (const port of options.publishPorts ?? []) {
     const host = port.hostPort === undefined ? "" : String(port.hostPort);
@@ -85,6 +94,8 @@ export async function runDockerContainer(options: DockerRunOptions): Promise<str
   const result = await execa("docker", buildDockerRunArgs(options), {
     env: buildDockerCliEnvironment(process.env),
     extendEnv: false,
+    timeout: defaults.dockerControlTimeoutMs,
+    forceKillAfterDelay: 5000,
   });
   return result.stdout.trim();
 }
@@ -105,7 +116,15 @@ export async function dockerCopy(
   await execa("docker", buildDockerCopyArgs(source, container, destination), {
     env: buildDockerCliEnvironment(process.env),
     extendEnv: false,
+    timeout: defaults.dockerControlTimeoutMs,
+    forceKillAfterDelay: 5000,
   });
+}
+
+/** Controlled browser output only; callers validate each flat evidence filename before copying. */
+export async function dockerCopyToHost(container: string, source: string, destination: string): Promise<void> {
+  await execa("docker", ["cp", `${container}:${source}`, destination], { env: buildDockerCliEnvironment(process.env), extendEnv: false,
+    timeout: defaults.dockerCopyTimeoutMs, forceKillAfterDelay: 5000 });
 }
 
 export function parseDockerPublishedPort(output: string): number {
@@ -129,6 +148,8 @@ export async function getDockerPublishedPort(
   const result = await execa("docker", ["port", container, `${containerPort}/tcp`], {
     env: buildDockerCliEnvironment(process.env),
     extendEnv: false,
+    timeout: defaults.dockerControlTimeoutMs,
+    forceKillAfterDelay: 5000,
   });
   return parseDockerPublishedPort(result.stdout);
 }
@@ -148,8 +169,31 @@ export async function dockerExec(
   const result = await execa("docker", args, {
     env: buildDockerCliEnvironment(process.env),
     extendEnv: false,
+    timeout: defaults.dockerControlTimeoutMs,
+    forceKillAfterDelay: 5000,
   });
   return result.stdout;
+}
+
+export interface DockerExecResultOptions {
+  environment?: Readonly<Record<string, string>>;
+  user?: string;
+  timeoutMs?: number;
+}
+
+export async function dockerExecResult(container: string, command: readonly string[], options: DockerExecResultOptions = {}) {
+  const environment = options.environment ?? {};
+  assertSafeContainerEnvironment(environment);
+  const args = ["exec", "--workdir", "/workspace"];
+  if (options.user !== undefined) {
+    if (!/^[a-zA-Z0-9_-]+(?::[a-zA-Z0-9_-]+)?$/.test(options.user)) throw new Error("Invalid container user");
+    args.push("--user", options.user);
+  }
+  for (const [name, value] of Object.entries(environment).sort(([a], [b]) => a.localeCompare(b))) args.push("--env", `${name}=${value}`);
+  args.push(container, ...command);
+  const result = await execa("docker", args, { env: buildDockerCliEnvironment(process.env), extendEnv: false, reject: false,
+    timeout: options.timeoutMs ?? defaults.productionCheckTimeoutMs, forceKillAfterDelay: 5000, maxBuffer: 32 * 1024 * 1024 });
+  return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode ?? (result.timedOut ? 124 : 1), timedOut: result.timedOut };
 }
 
 export async function dockerExecDetached(
@@ -167,6 +211,8 @@ export async function dockerExecDetached(
   await execa("docker", args, {
     env: buildDockerCliEnvironment(process.env),
     extendEnv: false,
+    timeout: defaults.dockerControlTimeoutMs,
+    forceKillAfterDelay: 5000,
   });
 }
 
@@ -174,5 +220,7 @@ export async function stopDockerContainer(container: string): Promise<void> {
   await execa("docker", ["rm", "--force", container], {
     env: buildDockerCliEnvironment(process.env),
     extendEnv: false,
+    timeout: defaults.dockerControlTimeoutMs,
+    forceKillAfterDelay: 5000,
   });
 }

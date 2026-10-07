@@ -10,7 +10,7 @@ import {
   NoObjectGeneratedError,
   Output,
 } from "ai";
-import type { LanguageModel } from "ai";
+import type { LanguageModel, ModelMessage } from "ai";
 import type { z } from "zod";
 
 import type {
@@ -20,6 +20,7 @@ import type {
   LlmProviderResponse,
 } from "./types.js";
 import { LlmStructuredOutputError } from "./errors.js";
+import { defaults } from "../config.js";
 
 export interface ModelPricing {
   inputUsdPerMillion: number;
@@ -79,6 +80,20 @@ export function calculateUsageCost(
       usage.outputTokens * pricing.outputUsdPerMillion) /
     1_000_000
   );
+}
+
+export function normalizeBilledUsage(usage: { inputTokens?: number | undefined; outputTokens?: number | undefined }, pricing: ModelPricing | null) {
+  const { inputTokens, outputTokens } = usage;
+  if (inputTokens === undefined || outputTokens === undefined || !Number.isInteger(inputTokens) || !Number.isInteger(outputTokens) || inputTokens < 0 || outputTokens < 0) {
+    throw new Error("Provider returned missing or invalid usage; billing must be reconciled before another call");
+  }
+  return { inputTokens, outputTokens, costUsd: calculateUsageCost({ inputTokens, outputTokens }, pricing) };
+}
+
+export function buildProviderPrompt(request: LlmCallRequest): { prompt: string } | { messages: ModelMessage[] } {
+  if (!request.images?.length) return { prompt: request.prompt };
+  if (request.images.length > 4 || request.images.some(image => image.data.byteLength === 0 || image.data.byteLength > 4 * 1024 * 1024)) throw new Error("Image context exceeds the configured bound");
+  return { messages: [{ role: "user", content: [{ type: "text", text: request.prompt }, ...request.images.map(image => ({ type: "file" as const, data: image.data, mediaType: image.mediaType }))] }] };
 }
 
 function openAIReasoningEffort(
@@ -179,34 +194,22 @@ export class AiSdkLlmProvider implements LlmProvider {
       const result = await generateText({
         model: languageModel(request.model, this.environment),
         output: Output.object({ schema }),
-        prompt: request.prompt,
+        ...buildProviderPrompt(request),
+        maxRetries: 0,
+        abortSignal: AbortSignal.timeout(defaults.providerTimeoutMs),
+        telemetry: { isEnabled: false, recordInputs: false, recordOutputs: false },
         maxOutputTokens: request.maxOutputTokens,
         ...(request.system === undefined ? {} : { system: request.system }),
-        ...(effort === undefined
-          ? {}
-          : {
-              providerOptions: {
-                openai: {
-                  reasoningEffort: effort,
-                  reasoningSummary: null,
-                } satisfies OpenAILanguageModelResponsesOptions,
-              },
-            }),
+        ...(request.model.provider === "openai" ? {
+          providerOptions: { openai: {
+            store: false,
+            serviceTier: "default",
+            ...(effort === undefined ? {} : { reasoningEffort: effort, reasoningSummary: null, forceReasoning: true }),
+          } satisfies OpenAILanguageModelResponsesOptions },
+        } : {}),
       });
 
-      const inputTokens = result.usage.inputTokens ?? 0;
-      const outputTokens = result.usage.outputTokens ?? 0;
-      return {
-        object: result.output,
-        usage: {
-          inputTokens,
-          outputTokens,
-          costUsd: calculateUsageCost(
-            { inputTokens, outputTokens },
-            pricing,
-          ),
-        },
-      };
+      return { object: result.output, usage: normalizeBilledUsage(result.usage, pricing) };
     } catch (error: unknown) {
       if (!NoObjectGeneratedError.isInstance(error)) {
         throw error;
@@ -215,18 +218,7 @@ export class AiSdkLlmProvider implements LlmProvider {
       const usage =
         error.usage === undefined
           ? undefined
-          : (() => {
-              const inputTokens = error.usage.inputTokens ?? 0;
-              const outputTokens = error.usage.outputTokens ?? 0;
-              return {
-                inputTokens,
-                outputTokens,
-                costUsd: calculateUsageCost(
-                  { inputTokens, outputTokens },
-                  pricing,
-                ),
-              };
-            })();
+          : normalizeBilledUsage(error.usage, pricing);
       throw new LlmStructuredOutputError(
         "structured output did not match provider schema",
         usage,

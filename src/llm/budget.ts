@@ -15,7 +15,7 @@ export type BudgetAuthorization =
   | { allowed: true }
   | {
       allowed: false;
-      reason: "cost" | "tokens";
+      reason: "cost" | "tokens" | "unknown-usage";
       message: string;
     };
 
@@ -36,6 +36,8 @@ export class BudgetLedger {
   private spentUsd = 0;
   private inputTokens = 0;
   private outputTokens = 0;
+  private readonly taskTokens = new Map<string, number>();
+  private unknownUsage = false;
 
   constructor(policy: BudgetPolicy) {
     requireFiniteNonNegative(policy.maxRunCostUsd, "max run cost");
@@ -43,7 +45,8 @@ export class BudgetLedger {
     this.policy = policy;
   }
 
-  authorize(estimate: CallEstimate): BudgetAuthorization {
+  authorize(estimate: CallEstimate, taskId = "default"): BudgetAuthorization {
+    if (this.unknownUsage) return { allowed: false, reason: "unknown-usage", message: "A previous attempt has unreconciled usage; further paid calls are blocked" };
     requireFiniteNonNegative(estimate.estimatedCostUsd, "estimated cost");
     requireNonNegativeInteger(
       estimate.estimatedInputTokens,
@@ -52,7 +55,7 @@ export class BudgetLedger {
     requireNonNegativeInteger(estimate.maxOutputTokens, "max output tokens");
 
     const estimatedTokens =
-      estimate.estimatedInputTokens + estimate.maxOutputTokens;
+      (this.taskTokens.get(taskId) ?? 0) + estimate.estimatedInputTokens + estimate.maxOutputTokens;
     if (estimatedTokens > this.policy.maxTaskTokens) {
       return {
         allowed: false,
@@ -77,13 +80,18 @@ export class BudgetLedger {
     return { allowed: true };
   }
 
-  recordUsage(usage: LlmUsage): void {
+  recordUnknownUsage(): void { this.unknownUsage = true; }
+
+  hasUnknownUsage(): boolean { return this.unknownUsage; }
+
+  recordUsage(usage: LlmUsage, taskId = "default"): void {
     requireNonNegativeInteger(usage.inputTokens, "input tokens");
     requireNonNegativeInteger(usage.outputTokens, "output tokens");
     requireFiniteNonNegative(usage.costUsd, "cost");
     this.inputTokens += usage.inputTokens;
     this.outputTokens += usage.outputTokens;
     this.spentUsd += usage.costUsd;
+    this.taskTokens.set(taskId, (this.taskTokens.get(taskId) ?? 0) + usage.inputTokens + usage.outputTokens);
   }
 
   snapshot(): {

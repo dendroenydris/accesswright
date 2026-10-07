@@ -24,7 +24,10 @@ export type LlmModelConfig = z.infer<typeof LlmModelConfigSchema>;
 
 export const AccesswrightConfigSchema = z
   .object({
-    routes: z.array(z.string().startsWith("/")).default([]),
+    routes: z.array(z.string().startsWith("/").refine(
+      value => !value.startsWith("//") && !value.includes("\\") && ![...value].some(char => char.charCodeAt(0) <= 32),
+      "Route must be a same-origin relative URL",
+    )).default([]),
     ignore: z
       .object({
         rules: z.array(z.string().min(1)).default([]),
@@ -64,6 +67,7 @@ export const ViolationSchema = z
     target: z.array(z.string()).min(1),
     html: z.string(),
     failureSummary: z.string().nullable(),
+    condition: z.enum(["desktop-light", "mobile-light", "desktop-dark"]).optional(),
     source: SourceLocationSchema.nullable(),
   })
   .strict();
@@ -101,8 +105,15 @@ const forbiddenSourcePath = [
   /(^|\/)\.github\//i,
 ];
 
-function isSourcePath(path: string): boolean {
-  return !forbiddenSourcePath.some((pattern) => pattern.test(path));
+export function isSourcePath(path: string): boolean {
+  const segments = path.split("/");
+  return (
+    /\.(?:[cm]?[jt]sx?|css|scss|sass|less|html|svg)$/.test(path) &&
+    !/[\\\\:]/.test(path) && ![...path].some(char => char.charCodeAt(0) < 32) &&
+    !segments.some(segment => segment.length === 0 || segment === "." || segment === ".." || segment.startsWith(".") || segment === "node_modules") &&
+    !/(?:^|\/)(?:eslint|prettier|babel|postcss|tailwind|vitest|jest|rollup|next|vite|webpack)\.config\./i.test(path) &&
+    !forbiddenSourcePath.some((pattern) => pattern.test(path))
+  );
 }
 
 export const PatchChangeSchema = z
@@ -118,7 +129,10 @@ export const PatchChangeSchema = z
 export const PatchSchema = z
   .object({
     taskId: z.string().min(1),
-    changes: z.array(PatchChangeSchema).min(1),
+    changes: z.array(PatchChangeSchema).min(1).refine(
+      changes => new Set(changes.map(change => change.path)).size === changes.length,
+      "A patch must not change the same path twice",
+    ),
   })
   .strict();
 

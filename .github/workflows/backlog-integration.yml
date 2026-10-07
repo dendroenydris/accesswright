@@ -1,0 +1,37 @@
+name: Product backlog integration
+
+on:
+  workflow_dispatch:
+    inputs:
+      base-branch:
+        description: Existing owned test branch to repair in this repository
+        required: true
+        default: test/accesswright-action-fixture-20261007
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: backlog-integration-${{ inputs.base-branch }}
+  cancel-in-progress: false
+
+jobs:
+  backlog:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out reviewed product Action code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Run product Action against the selected owned branch
+        uses: ./
+        with:
+          github-token: ${{ github.token }}
+          base-branch: ${{ inputs.base-branch }}
+          no-llm: 'true'
+          max-cost-usd: '0'
+          offline: 'true'
+          retain-evidence: 'false'
