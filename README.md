@@ -65,6 +65,17 @@ A model configuration additionally specifies `provider`, the exact model `id`, a
 
 PR mode (`mode: pr`) checks out the exact pull-request head and verifies it using the same Docker and final production gates, then posts GitHub suggested changes only on lines already inside the PR diff. Out-of-diff verified changes receive a CLI handoff instead of silently widening the review. Fork PRs are read-only with LLM spending disabled, regardless of caller flags or head-repository metadata. `.github/workflows/pr-mode-integration.yml` is a manual, no-model test workflow requiring an existing PR number and exact head SHA; it is not an automatically privileged PR trigger. Use a reviewed immutable Action revision and review permissions before enabling it in other repositories.
 
+## Local MCP scan / verify
+
+The development-stage MCP stdio server exposes `scan`, `verify`, and `close` for a coding agent working in an existing local Next.js repository. Build the coordinator and configure the agent to launch:
+
+```sh
+npm run build
+ACCESSWRIGHT_TMP_ROOT=/tmp/accesswright/integration-20261007 npm run mcp -- --repo /absolute/path/to/next-project
+```
+
+`scan` freezes a sanitized source snapshot and genuine browser/axe and production baselines in isolated Docker containers. The coding agent edits its own checkout; `verify` uses an exact session/task ID to check the source diff against that baseline, run the existing per-patch anti-gaming verifier, and rerun the full production gate. Concurrent changes to the checkout invalidate the result. `close` cleans run-scoped resources. MCP never writes the developer checkout, makes paid provider calls, or publishes PRs. Source and screenshots remain local, with private evidence removed by default. This is not a hosted service or a published npm package.
+
 ## Security and privacy
 
 Target source executes only in an isolated application container. The trusted browser is a separate container; the application cannot write browser evidence or access the Docker socket. The model and GitHub credentials remain in the coordinator. Source snapshots exclude Git metadata, environment files, package-manager credentials, private-key files, dependency directories, and symbolic links. Model patches cannot edit manifests, lockfiles, build configuration, or workflows.
