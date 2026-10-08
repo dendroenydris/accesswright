@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
-import { resolveEvalSelection, implementationDigest, snapshotCompiledRuntime } from "../../src/eval/runner.js";
+import { resolveEvalSelection, implementationDigest, snapshotCompiledRuntime, classifyOriginalPreparationError } from "../../src/eval/runner.js";
+import { UnsupportedRepositoryError } from "../../src/runner/repair-session.js";
 import { EvalProtocolSchema } from "../../src/eval/protocol.js";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -38,4 +39,11 @@ it("freezes compiled evaluation code without copying the dependency tree", async
     expect(await implementationDigest(snapshot.path)).toBe(snapshot.digest);
     await expect(readFile(join(snapshot.path, "node_modules", "large-dependency", "index.js"), "utf8")).rejects.toThrow();
   } finally { await rm(root, { recursive: true, force: true }); await rm(output, { recursive: true, force: true }); }
+});
+it("distinguishes unsupported source baselines from failed Docker/disk/network infrastructure", () => {
+  expect(classifyOriginalPreparationError(new UnsupportedRepositoryError(
+    "The unmodified production baseline does not build", "/tmp/evidence",
+  ))).toBe("unsupported");
+  expect(classifyOriginalPreparationError(new Error("Docker overlay2 read-only file system"))).toBe("blocked");
+  expect(classifyOriginalPreparationError(new Error("No space left on device"))).toBe("blocked");
 });

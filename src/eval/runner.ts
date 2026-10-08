@@ -187,6 +187,11 @@ async function executeCell(options: EvalRunOptions, runtimeDistRoot: string, bas
   return EvalCellSchema.parse(cell);
 }
 
+/** Genuine fixture incompatibility is not interchangeable with transport or resource failure. */
+export function classifyOriginalPreparationError(error: unknown): "unsupported" | "blocked" {
+  return error instanceof UnsupportedRepositoryError ? "unsupported" : "blocked";
+}
+
 /** Executes one immutable corpus selection. Every source project executes only inside the secret-free Docker runner. */
 export async function runEvaluation(options: EvalRunOptions) {
   const protocol = EvalProtocolSchema.parse(options.frozen.protocol);
@@ -229,7 +234,7 @@ export async function runEvaluation(options: EvalRunOptions) {
       await writeFile(join(options.outputDir,`${referenceId}-reference.json`),JSON.stringify({ repository, rendered, implementationDigest:implementation },null,2),{flag:"wx",mode:0o600});
       if (!rendered.eligible.length) throw new UnsupportedRepositoryError("No originally clean rendered targets are eligible",original.evidenceDir);
     } catch (error) {
-      for (const seed of selection.seeds) for (const system of selection.systems) await store({ ...emptyCell(options,implementation,repository,system,seed,0),status:"unsupported",reason:diagnostic(error) });
+      for (const seed of selection.seeds) for (const system of selection.systems) await store({ ...emptyCell(options,implementation,repository,system,seed,0),status:classifyOriginalPreparationError(error),reason:diagnostic(error) });
       continue;
     } finally { if (original) await original.close(); }
     for (const seed of selection.seeds) {
