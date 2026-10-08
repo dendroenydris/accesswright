@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { publishVerifiedPullRequest, createGitHubRequest } from "../../src/reporter/github-publisher.js";
 import type { GitHubRequest, PublishInput } from "../../src/reporter/github-publisher.js";
@@ -23,6 +24,7 @@ class FixtureApi {
   race = false;
   headReads = 0;
   writes = 0;
+  extraOrphanFile = false;
   request: GitHubRequest = (method, path, body) => {
     this.calls.push({ method, path, body });
     if (method !== "GET") this.writes += 1;
@@ -34,6 +36,9 @@ class FixtureApi {
     }
     if (relative.startsWith("/pulls?") && method === "GET") return Promise.resolve(this.existing ? [{ number: 7, body: "Human introduction.\n", head: { sha: existingHead, ref: fixBranchName("main"), repo: { full_name: "owner/repo" } } }] : []);
     if (relative.startsWith("/pulls/7/commits?")) return Promise.resolve([{ sha: existingHead, parents: [{ sha: base }], commit: { message: this.human ? "Human change" : "fix: verified repair\n\nAccesswright-Verified-Fix: fixture" }, committer: { login: this.human ? "human" : "github-actions[bot]" } }]);
+    if (relative.startsWith("/compare/")) return Promise.resolve({ status: "ahead", total_commits: 1, merge_base_commit: { sha: base },
+      commits: [{ sha: existingHead, parents: [{ sha: base }], committer: { login: this.human ? "human" : "github-actions[bot]" }, commit: { message: `fix: verified repair\n\nAccesswright-Verified-Fix: ${createHash("sha256").update("fix-1").digest("hex")}` } }],
+      files: [{ filename: this.extraOrphanFile ? "unverified.ts" : "components/Button.tsx", status: "modified" }] });
     if (relative.startsWith("/git/commits/") && method === "GET") return Promise.resolve({ sha: relative.slice("/git/commits/".length), tree: { sha: "d".repeat(40) } });
     if (relative.startsWith("/git/trees/") && method === "GET") return Promise.resolve({ truncated: false, tree: [...this.files.keys()].map(path => ({ path, mode: "100644", type: "blob" })) });
     if (relative.startsWith("/contents/") && method === "GET") {
@@ -74,6 +79,28 @@ describe("verified GitHub publication boundary", () => {
     const api = new FixtureApi(); api.existing = true; api.branchHead = existingHead; api.files.set("components/Button.tsx", "after\n");
     expect(await publishVerifiedPullRequest(api.request, input)).toMatchObject({ status: "unchanged", number: 7, commits: [] });
     expect(api.writes).toBe(0);
+  });
+  it("recovers an exactly verified owned branch after PR creation failed without creating duplicate commits", async () => {
+    const api = new FixtureApi(); api.branchHead = existingHead; api.files.set("components/Button.tsx", "after\n");
+    const result = await publishVerifiedPullRequest(api.request, input);
+    expect(result).toMatchObject({ status: "created", number: 8, commits: [] });
+    expect(api.calls.filter(call => call.method !== "GET").map(call => call.path)).toEqual(["/repos/owner/repo/pulls"]);
+  });
+  it("does not adopt an orphan branch with a human commit or extra unverified file", async () => {
+    const human = new FixtureApi(); human.branchHead = existingHead; human.human = true;
+    await expect(publishVerifiedPullRequest(human.request, input)).rejects.toThrow(/unowned|unverified|preserved/i);
+    expect(human.writes).toBe(0);
+    const extra = new FixtureApi(); extra.branchHead = existingHead; extra.extraOrphanFile = true;
+    await expect(publishVerifiedPullRequest(extra.request, input)).rejects.toThrow(/unowned|unverified|preserved/i);
+    expect(extra.writes).toBe(0);
+  });
+  it("rechecks the lease and exact final source before recovering a missing PR", async () => {
+    const race = new FixtureApi(); race.branchHead = existingHead; race.race = true; race.files.set("components/Button.tsx", "after\n");
+    await expect(publishVerifiedPullRequest(race.request, input)).rejects.toThrow(/changed|concurrent/i);
+    expect(race.writes).toBe(0);
+    const mismatch = new FixtureApi(); mismatch.branchHead = existingHead;
+    await expect(publishVerifiedPullRequest(mismatch.request, input)).rejects.toThrow(/source|verified/i);
+    expect(mismatch.writes).toBe(0);
   });
   it("preserves any human commit and does not rewrite its PR body", async () => {
     const api = new FixtureApi(); api.existing = true; api.branchHead = existingHead; api.human = true;

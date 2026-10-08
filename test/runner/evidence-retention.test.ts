@@ -9,10 +9,11 @@ it("removes raw screenshots and content by default while retaining structured ru
   try {
     await writeFile(join(root,"report.json"), '{"status":"verified"}');
     await writeFile(join(root,"run.jsonl"), '{"step":"scan","status":"ok"}\n');
+    await writeFile(join(root,"accesswright-report.md"), "# evidence\n");
     await writeFile(join(root,"candidate-page.png"), "private screenshot bytes");
     await writeFile(join(root,"context.json"), '{"source":"private source"}');
     await clearPrivateEvidence(root, false);
-    expect((await readdir(root)).sort()).toEqual(["report.json","run.jsonl"]);
+    expect((await readdir(root)).sort()).toEqual(["accesswright-report.md","report.json","run.jsonl"]);
     await writeFile(join(root,"candidate-page.png"), "explicitly retained screenshot bytes");
     await clearPrivateEvidence(root, true);
     expect(await readFile(join(root,"candidate-page.png"),"utf8")).toContain("explicitly retained");

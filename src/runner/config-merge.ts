@@ -60,7 +60,7 @@ export function withSourceMapping(original: unknown, plugins: MappingPlugins, ne
 }
 
 /** Changes a sandbox copy's export expression, preserving relative imports and the original filename. */
-export function instrumentConfigSource(source: string, file: string, esm: boolean, nextVersion: string): string {
+export function instrumentConfigSource(source: string, file: string, esm: boolean, nextVersion: string, inspectorModule = "code-inspector-plugin"): string {
   if (!/^next\.config\.(?:js|mjs|cjs|ts|mts|cts)$/.test(file)) throw new Error("Unsupported Next configuration filename");
   const project = new Project({ useInMemoryFileSystem: true, skipAddingFilesFromTsConfig: true });
   const parsed = project.createSourceFile(file, source);
@@ -83,7 +83,7 @@ export function instrumentConfigSource(source: string, file: string, esm: boolea
       declaration.setIsDefaultExport(false);
       parsed.addExportAssignment({ isExportEquals: false, expression: wrap(name) });
     } else throw new Error("Configuration needs one identifiable default export");
-    parsed.insertStatements(0, `import { withSourceMapping as ${wrapper} } from "/accesswright/dist/src/runner/config-merge.js";\nimport { codeInspectorPlugin as ${inspector} } from "code-inspector-plugin";`);
+    parsed.insertStatements(0, `import { withSourceMapping as ${wrapper} } from "/accesswright/dist/src/runner/config-merge.js";\nimport { createRequire as __aw_create_require_${suffix} } from "node:module";\nconst { codeInspectorPlugin: ${inspector} } = __aw_create_require_${suffix}(import.meta.url)(${JSON.stringify(inspectorModule)});`);
   } else {
     const exports = parsed.getDescendantsOfKind(SyntaxKind.BinaryExpression).filter(expression =>
       expression.getOperatorToken().getKind() === SyntaxKind.EqualsToken && expression.getLeft().getText() === "module.exports",
@@ -92,7 +92,7 @@ export function instrumentConfigSource(source: string, file: string, esm: boolea
     const exported = exports[0];
     if (!exported) throw new Error("Missing CommonJS export");
     exported.getRight().replaceWithText(wrap(exported.getRight().getText()));
-    parsed.insertStatements(0, `const { withSourceMapping: ${wrapper} } = require("/accesswright/dist/src/runner/config-merge.js");\nconst { codeInspectorPlugin: ${inspector} } = require("code-inspector-plugin");`);
+    parsed.insertStatements(0, `const { withSourceMapping: ${wrapper} } = require("/accesswright/dist/src/runner/config-merge.js");\nconst { codeInspectorPlugin: ${inspector} } = require(${JSON.stringify(inspectorModule)});`);
   }
   return parsed.getFullText();
 }

@@ -6,6 +6,7 @@ import { SourceBaseline } from "../sandbox/apply-verified.js";
 import { DockerRepairSession } from "../runner/repair-session.js";
 import { makeRunReport } from "../reporter/report.js";
 import { summarizeScans } from "../reporter/scan-summary.js";
+import { renderEvidenceReport } from "../reporter/evidence-report.js";
 import type { RunReport } from "../reporter/report.js";
 import type { PublishInput } from "../reporter/github-publisher.js";
 import { appendRunRecord } from "../tracer/run-record.js";
@@ -20,6 +21,7 @@ import { resolveExecutionModel } from "../llm/execution-policy.js";
 import { createSemanticRepair } from "../llm/semantic-runner.js";
 import { runRepair } from "./repair.js";
 import type { SemanticRepair } from "./repair.js";
+import { isSourcePath } from "../types/schemas.js";
 
 export interface RepositoryRepairOptions {
   repoPath: string;
@@ -29,7 +31,11 @@ export interface RepositoryRepairOptions {
   offline?: boolean;
   dryRun?: boolean;
   retainEvidence?: boolean;
+  /** Explicit local diagnostics for owned fixtures; never enabled by target config or Action inputs. */
+  privateDiagnostics?: boolean;
   maxTasks?: number;
+  /** Trusted PR-mode scope. Unknown/shared files conservatively map to all routes. */
+  changedPaths?: readonly string[];
   /** Operator authorization, never inherited upward from a target repository. Defaults to zero. */
   maxCostUsd?: number;
   pricing?: ModelPricing;
@@ -53,11 +59,14 @@ export async function repairRepository(options: RepositoryRepairOptions): Promis
   const limit = Math.min(authorizedCost, config.maxCostUsd ?? authorizedCost);
   const budget = new BudgetLedger({ maxRunCostUsd: limit, maxTaskTokens: defaults.maxTaskTokens });
   const session = await DockerRepairSession.prepare({ repoPath: options.repoPath, tempRoot: options.tempRoot, runtimeRoot: options.runtimeRoot, config,
+    ...(options.privateDiagnostics === undefined ? {} : { privateDiagnostics: options.privateDiagnostics }),
     ...(options.retainEvidence === undefined ? {} : { retainEvidence: options.retainEvidence }) });
   try {
     const baseline = await SourceBaseline.fromSnapshot(options.repoPath, session.sourceRoot, options.tempRoot);
     let semanticRepair: SemanticRepair | undefined;
     let providerCalls = 0;
+    const changedPaths = options.changedPaths === undefined ? undefined : z.array(z.string().min(1).refine(isSourcePath)).max(300).refine(paths => new Set(paths).size === paths.length, "Duplicate changed path").parse(options.changedPaths);
+    const changedRoutes = changedPaths === undefined ? undefined : new Set(session.affectedRoutes(changedPaths));
     if (!options.noLlm && config.model !== undefined && limit > 0 && options.pricing !== undefined) {
       const pricing = z.object({ inputUsdPerMillion: z.number().finite().nonnegative(), outputUsdPerMillion: z.number().finite().nonnegative() }).strict().parse(options.pricing);
       const model = resolveExecutionModel(config.model, options.trustProviderConfig === true);
@@ -77,7 +86,10 @@ export async function repairRepository(options: RepositoryRepairOptions): Promis
       semanticRepair = createSemanticRepair({ session, client, budget, model, pricing });
     }
     const result = await runRepair(session, { noLlm: options.noLlm === true,
-      ...(options.maxTasks === undefined ? {} : { maxTasks: options.maxTasks }), ...(semanticRepair === undefined ? {} : { semanticRepair }) });
+      ...(options.maxTasks === undefined ? {} : { maxTasks: options.maxTasks }),
+      ...(semanticRepair === undefined ? {} : { semanticRepair }),
+      ...(changedRoutes === undefined ? {} : { includeTask: (task) => task.routes.some(route => changedRoutes.has(route)) }),
+    });
     const patches = result.status === "verified" ? await session.journal.exportPatches(result.final.acceptedFixIds) : [];
     const groups: PublishInput["groups"] = patches.map(patch => {
       const task = session.tasks.get(patch.taskId);
@@ -94,6 +106,14 @@ export async function repairRepository(options: RepositoryRepairOptions): Promis
       scanSummary: summarizeScans(session.productionBaseline, session.finalObservations, session.baselineObservations),
       providerVerification: providerCalls === 0 ? "not-run" : options.provider ? "fake-provider" : "provider-api" });
     await writeFile(join(session.evidenceDir, "report.json"), JSON.stringify(report, null, 2));
+    const evidenceCommits = session.journal.fixes
+      .filter(fix => report.final.acceptedFixIds.includes(fix.id))
+      .map(fix => ({ id: fix.id, commit: fix.commit }));
+    await writeFile(
+      join(session.evidenceDir, "accesswright-report.md"),
+      renderEvidenceReport(report, { commits: evidenceCommits }),
+      { flag: "wx", mode: 0o600 },
+    );
     return { report, evidenceDir: session.evidenceDir, groups };
   } finally { await session.close(); }
 }

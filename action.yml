@@ -1,6 +1,18 @@
 name: Accesswright verified accessibility repair
-description: Verify source accessibility repairs in isolated Docker before opening a backlog pull request.
+description: Verify source accessibility repairs in isolated Docker before backlog PRs or in-diff PR suggestions.
 inputs:
+  mode:
+    description: "backlog opens a verified repair PR; pr comments with verified in-diff suggestions."
+    default: 'backlog'
+  pull-number:
+    description: Existing PR number for pr mode.
+    default: ''
+  head-sha:
+    description: Exact expected PR head SHA, verified against checkout and GitHub.
+    default: ''
+  is-fork:
+    description: Force fork PR read-only mode; GitHub's actual head repository is also checked.
+    default: 'false'
   github-token:
     description: Repository token with contents and pull-requests write permission; never passed to target containers.
     required: true
@@ -31,7 +43,7 @@ inputs:
     default: 'false'
 outputs:
   status:
-    description: created, updated, unchanged, preserved-human, or blocked.
+    description: Backlog created/updated/unchanged/preserved-human; PR published/handoff/read-only; or blocked.
     value: ${{ steps.repair.outputs.status }}
   pull-request-url:
     description: Verified repair pull request URL, when available.
@@ -39,6 +51,12 @@ outputs:
   fixed:
     description: Number of finally verified fix groups.
     value: ${{ steps.repair.outputs.fixed }}
+  suggestions:
+    description: Number of verified PR review suggestions produced in pr mode.
+    value: ${{ steps.repair.outputs.suggestions }}
+  handoffs:
+    description: Number of verified changes requiring local CLI review in pr mode.
+    value: ${{ steps.repair.outputs.handoffs }}
   evidence-directory:
     description: Runner-local metadata/evidence directory; no automatic screenshot upload.
     value: ${{ steps.repair.outputs.evidence-directory }}
@@ -50,7 +68,7 @@ runs:
       uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       with:
         repository: ${{ github.repository }}
-        ref: ${{ inputs.base-branch }}
+        ref: ${{ inputs.mode == 'pr' && format('refs/pull/{0}/head', inputs['pull-number']) || inputs['base-branch'] }}
         path: .accesswright-target
         persist-credentials: false
         token: ${{ inputs.github-token }}
@@ -71,6 +89,10 @@ runs:
       shell: bash
       env:
         GITHUB_ACTION_PATH: ${{ github.action_path }}
+        ACCESSWRIGHT_ACTION_MODE: ${{ inputs.mode }}
+        ACCESSWRIGHT_ACTION_PULL_NUMBER: ${{ inputs['pull-number'] }}
+        ACCESSWRIGHT_ACTION_HEAD_SHA: ${{ inputs['head-sha'] }}
+        ACCESSWRIGHT_ACTION_IS_FORK: ${{ inputs['is-fork'] }}
         ACCESSWRIGHT_ACTION_REPO_PATH: ${{ github.workspace }}/.accesswright-target
         ACCESSWRIGHT_ACTION_BASE_BRANCH: ${{ inputs.base-branch }}
         ACCESSWRIGHT_ACTION_BASE_SHA: ${{ steps.target.outputs.commit }}

@@ -1,0 +1,42 @@
+name: Product PR review integration
+
+on:
+  workflow_dispatch:
+    inputs:
+      pull-number:
+        description: Existing pull request number in this private repository
+        required: true
+        type: number
+      head-sha:
+        description: Exact 40-character PR head SHA to verify; fail closed if stale
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: accesswright-pr-review-${{ inputs.pull-number }}
+  cancel-in-progress: false
+
+jobs:
+  review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out reviewed product Action code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Run PR-mode verifier with no model credentials
+        uses: ./
+        with:
+          mode: pr
+          github-token: ${{ github.token }}
+          pull-number: ${{ inputs.pull-number }}
+          head-sha: ${{ inputs.head-sha }}
+          no-llm: 'true'
+          max-cost-usd: '0'
+          offline: 'true'
+          retain-evidence: 'false'

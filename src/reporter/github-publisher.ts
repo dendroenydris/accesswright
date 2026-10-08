@@ -66,6 +66,29 @@ function managedBody(previous: string | null, report: string, base: string): str
   return existing.slice(0, from) + generated + existing.slice(to + end.length);
 }
 
+/** Recover only a fully attributable, linear branch containing exactly this run's source scope. */
+async function inspectOrphan(request: GitHubRequest, root: string, input: PublishInput, head: string): Promise<void> {
+  const commit = z.object({ sha, parents: z.array(z.object({ sha })), commit: z.object({ message: z.string() }), committer: z.object({ login: z.string() }).nullable() });
+  const schema = z.object({ status: z.literal("ahead"), total_commits: z.number().int().positive().max(1000), merge_base_commit: z.object({ sha }), commits: z.array(commit).max(100), files: z.array(z.object({ filename: z.string(), status: z.string() })).optional() });
+  const allowedPaths = new Set(input.groups.flatMap(group => group.changes.map(change => change.path)));
+  const allowedGroups = new Set(input.groups.map(group => createHash("sha256").update(group.id).digest("hex")));
+  let parent = input.verifiedBaseSha, count = 0, expectedCount = 0;
+  for (let page = 1; page <= 10; page += 1) {
+    const response = schema.parse(await request("GET", `${root}/compare/${input.verifiedBaseSha}...${head}?per_page=100&page=${page}`));
+    if (response.merge_base_commit.sha !== input.verifiedBaseSha || (page > 1 && response.total_commits !== expectedCount)) throw new Error("Unverified orphan history was preserved");
+    expectedCount = response.total_commits;
+    if (page === 1 && (!response.files?.length || response.files.length > 64 || response.files.some(file => file.status !== "modified" || !allowedPaths.has(file.filename)))) throw new Error("Unverified orphan source scope was preserved");
+    for (const item of response.commits) {
+      const marker = /^Accesswright-Verified-Fix: ([a-f0-9]{64})$/m.exec(item.commit.message)?.[1];
+      if (item.committer?.login !== input.actorLogin || item.parents.length !== 1 || item.parents[0]?.sha !== parent || !marker || !allowedGroups.has(marker)) throw new Error("An unowned orphan branch was preserved");
+      parent = item.sha; count += 1;
+    }
+    if (count === expectedCount) break;
+    if (!response.commits.length || count > expectedCount || page === 10) throw new Error("Incomplete orphan history was preserved");
+  }
+  if (parent !== head || count !== expectedCount) throw new Error("Orphan branch history changed; preserved without writes");
+}
+
 /** The caller supplies outputs of the actual per-patch/final verifiers; this module never substitutes a verifier. */
 export async function publishVerifiedPullRequest(request: GitHubRequest, raw: unknown): Promise<PublishResult> {
   const input = inputSchema.parse(raw);
@@ -99,7 +122,7 @@ export async function publishVerifiedPullRequest(request: GitHubRequest, raw: un
       if (commits.length < 100) break;
     }
     if (count === 0) throw new Error("Existing PR has no attributable repair commits");
-  } else if (head !== null) throw new Error("An existing unowned repair branch was preserved");
+  } else if (head !== null) await inspectOrphan(request, root, input, head);
   const originalHead = head;
   head ??= input.verifiedBaseSha;
   const parent = commitSchema.parse(await request("GET", `${root}/git/commits/${head}`));
@@ -117,7 +140,13 @@ export async function publishVerifiedPullRequest(request: GitHubRequest, raw: un
     current.set(path, content);
   }
   for (const group of input.groups) for (const change of group.changes) final.set(change.path, change.after);
-  if ([...final].every(([path, content]) => current.get(path) === content)) return { ...unchanged, number: existing?.number ?? null, url: existing ? `https://github.com/${input.repository}/pull/${existing.number}` : null };
+  if ([...final].every(([path, content]) => current.get(path) === content)) {
+    if (existing !== null || originalHead === null) return { ...unchanged, number: existing?.number ?? null, url: existing ? `https://github.com/${input.repository}/pull/${existing.number}` : null };
+    if (await readRef(input.baseBranch) !== input.verifiedBaseSha || await readRef(branch) !== originalHead) throw new Error("Branch changed concurrently before orphan PR recovery");
+    const published = resultSchema.parse(await request("POST", `${root}/pulls`, { title: input.title, head: branch, base: input.baseBranch, body: managedBody(null, input.report, input.verifiedBaseSha), draft: false }));
+    return { ...unchanged, status: "created", number: published.number, url: published.html_url };
+  }
+  if (existing === null && originalHead !== null) throw new Error("Orphan source does not match the newly verified result; branch preserved");
   const selected: typeof input.groups = [];
   // Complete every source preflight before creating any Git object or moving any reference.
   for (const group of input.groups) {

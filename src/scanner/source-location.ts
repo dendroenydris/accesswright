@@ -14,12 +14,16 @@ function normalizeFile(file: string): string {
 }
 
 function parsePositiveInteger(value: string): number | null {
-  const parsed = Number.parseInt(value, 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  if (!/^[1-9]\d*$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 export function extractSourceLocationFromHtml(html: string): SourceLocation | null {
-  const file = readAttribute(html, "data-insp-path");
+  return extractSourceLocationFromAttributes(readAttribute(html, "data-insp-path"), readAttribute(html, "data-insp-row"), readAttribute(html, "data-insp-col"));
+}
+
+export function extractSourceLocationFromAttributes(file: string | null, row: string | null, column: string | null): SourceLocation | null {
   if (file === null) return null;
 
   const combined = /^(.*):(\d+):(\d+):[^:]+$/.exec(file);
@@ -31,8 +35,6 @@ export function extractSourceLocationFromHtml(html: string): SourceLocation | nu
     }
   }
 
-  const row = readAttribute(html, "data-insp-row");
-  const column = readAttribute(html, "data-insp-col");
   if (row === null || column === null) return null;
 
   const line = parsePositiveInteger(row);

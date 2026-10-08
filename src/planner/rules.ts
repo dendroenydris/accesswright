@@ -103,7 +103,7 @@ const rules: Readonly<Record<string, RuleDefinition>> = {
     ruleId: "heading-order",
     criterion: "1.3.1",
     kind: "global",
-    route: "human",
+    route: "codemod",
     ariaPermissions: {
       ...strictAriaPermissions,
       allowHeadingLevelChange: true,

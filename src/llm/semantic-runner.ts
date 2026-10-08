@@ -10,11 +10,12 @@ import { calculateUsageCost } from "./ai-sdk-provider.js";
 import type { ModelPricing } from "./ai-sdk-provider.js";
 
 export interface SemanticRunnerOptions {
-  session: DockerRepairSession;
+  session: Pick<DockerRepairSession, "sourceRoot" | "evidenceDir" | "observations">;
   client: LlmClient;
   budget: BudgetLedger;
   model: LlmModelConfig;
   pricing: ModelPricing;
+  maxAttempts?: number;
 }
 
 export function createSemanticRepair(options: SemanticRunnerOptions): SemanticRepair {
@@ -25,7 +26,7 @@ export function createSemanticRepair(options: SemanticRunnerOptions): SemanticRe
     const estimatedInputTokens = Buffer.byteLength(JSON.stringify(context)) + images.reduce((sum, image) => sum + Math.ceil(image.data.byteLength * 4 / 3), 0) + 8192;
     const estimate = { estimatedInputTokens, maxOutputTokens: defaults.maxOutputTokens,
       estimatedCostUsd: calculateUsageCost({ inputTokens: estimatedInputTokens, outputTokens: defaults.maxOutputTokens }, options.pricing) };
-    const result = await runSemanticRepair({ client: options.client, budget: options.budget, task, context, images, model: options.model, estimate, maxAttempts: defaults.maxAttempts,
+    const result = await runSemanticRepair({ client: options.client, budget: options.budget, task, context, images, model: options.model, estimate, maxAttempts: options.maxAttempts ?? defaults.maxAttempts,
       verifyPatch: async patch => {
         const verdict = await verify(patch);
         return verdict.accepted ? { accepted: true } : { accepted: false, check: verdict.check, reason: verdict.reason ?? "Verification did not pass" };

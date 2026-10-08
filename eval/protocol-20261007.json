@@ -1,0 +1,164 @@
+{
+  "digest": "02dc0d3b1a4d880d2921c79f13e48f2b15662258e2341a8d05d3a01902dc9daf",
+  "protocol": {
+    "version": 1,
+    "corpus": "public-nextjs",
+    "frozenAt": "2026-10-07T11:32:46.737Z",
+    "selection": "First20 unique permissive-license Next15/16 root npm/pnpm-lock repositories in case-insensitive alphabetical order from the archived read-only metadata candidate pool. Earlier observed SHA and hash-assigned split retained for duplicates. No repair outcomes observed; compatibility failures remain reported, not replaced by outcome-selected repositories.",
+    "repositories": [
+      {
+        "repository": "alemoraru/nextjs-portofolio-website",
+        "sha": "082faf5c174f7af44e092ed46901f7cf4548b5e0",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "alex289/Portfolio",
+        "sha": "6e9f4015da3ffab44ed0931d98f0f9f2a7dd4b3b",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "bymaul/maulana.dev",
+        "sha": "5946f651f7683d7737714a768bff13ddfd919251",
+        "license": "MIT",
+        "split": "dev"
+      },
+      {
+        "repository": "ColorlibHQ/velora-ui",
+        "sha": "a07bcc129b45eeed3fc070357a6a74b876d96159",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "dedeard/next-personal-web-app",
+        "sha": "418f9e3e4aa6b9734e0e1c04a0ed7a179b67c590",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "ixartz/Next-js-Boilerplate",
+        "sha": "6acd079673a4eaaf7df6875d8025d2bec1240985",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "jpedroschmitz/typescript-nextjs-starter",
+        "sha": "c8076aafbe54a7207a9cec4c10b9f82b0ac93281",
+        "license": "MIT",
+        "split": "dev"
+      },
+      {
+        "repository": "jpvalery/portfolio",
+        "sha": "72652b14ba5cfed5d89ee6ad7436a98b684519fa",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "KasperiP/windows11-portfolio",
+        "sha": "3d7647e39553db158a09d5a4a61316e9f072ad81",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "mk965/mengke.me",
+        "sha": "2dc662d220bc85474a20c0afd5ab6a448f844946",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "ncdai/chanhdai.com",
+        "sha": "1951e213749f58787fc2211cb1cfdc4f386de033",
+        "license": "MIT",
+        "split": "dev"
+      },
+      {
+        "repository": "netlify-templates/nextjs-blog-theme",
+        "sha": "473909fa3f50cb50ea1bd97987cb2ea14afaa76f",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "NotHarshhaa/cv-portfolio",
+        "sha": "eacb3e89619766b51edd7794551d5d9dde39f472",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "pdsuwwz/nextjs-nextra-starter",
+        "sha": "05b8bd442637ef59c888aa0283283af27d8b3b90",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "sanidhyy/modern-portfolio",
+        "sha": "76e21aa4fb439747fbfd28b10fc70456b1c6ac2f",
+        "license": "MIT",
+        "split": "dev"
+      },
+      {
+        "repository": "sanidhyy/portfolio",
+        "sha": "01139cc91c96cf75a3e6fe62523cda9365dd835d",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "sanidhyy/space-portfolio",
+        "sha": "f956a02c3eb1f1b1182b17c9f9dfca66ff9a5ee4",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "Skolaczk/next-starter",
+        "sha": "5de3b14ad471feb06300a5e9e92570c9668729f1",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "uday-a/next-boilerplate",
+        "sha": "08d5aeaa64eddb47b4fe65efe0cc9441af64bbe2",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "umutxyp/Personal-Website",
+        "sha": "bf3820b3e140aa0c604632296b8af63c8a5d4f9e",
+        "license": "MIT",
+        "split": "test"
+      }
+    ],
+    "model": {
+      "provider": "openai",
+      "id": "gpt-6-luna",
+      "reasoningEffort": "high"
+    },
+    "operators": [
+      "remove-alt",
+      "break-label",
+      "remove-button-name",
+      "remove-link-name",
+      "low-contrast",
+      "invalid-aria",
+      "remove-lang",
+      "positive-tabindex"
+    ],
+    "systems": [
+      "A",
+      "A1",
+      "B1",
+      "deterministic"
+    ],
+    "seeds": {
+      "dev": [
+        1
+      ],
+      "test": [
+        1,
+        2,
+        3
+      ]
+    },
+    "maxCasesPerRepository": 30,
+    "targetTestCases": 300
+  }
+}

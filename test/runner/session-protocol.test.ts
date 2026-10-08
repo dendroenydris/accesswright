@@ -12,7 +12,7 @@ describe("persistent runner protocol boundaries", () => {
   });
   it("never forwards host credentials or NODE_OPTIONS to target code", () => {
     const env = targetProcessEnvironment({ PATH: "/usr/bin", HOME: "/home/pwuser", OPENAI_API_KEY: "fixture", GITHUB_TOKEN: "fixture", NODE_OPTIONS: "--require=/malicious.js" });
-    expect(env).toEqual({ PATH: "/usr/bin", HOME: "/home/pwuser", CI: "1", NEXT_TELEMETRY_DISABLED: "1" });
+    expect(env).toEqual({ PATH: "/workspace/node_modules/.accesswright-tools/node_modules/.bin:/usr/bin", HOME: "/home/pwuser", CI: "1", NEXT_TELEMETRY_DISABLED: "1" });
   });
   it("rescans mapped component routes and all routes for shared layouts or new unmapped files", () => {
     const map = { "components/Button.tsx": ["/", "/settings"], "app/other/page.tsx": ["/other"] };

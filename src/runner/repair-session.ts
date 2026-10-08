@@ -19,7 +19,7 @@ import type { PerPatchVerificationResult } from "../verifier/per-patch.js";
 import { verifyFinal as verifyFixSet } from "../verifier/final.js";
 import type { FinalCheckSnapshot, FinalVerificationResult } from "../verifier/final.js";
 import { appendRunRecord } from "../tracer/run-record.js";
-import { detectPackageManager } from "./detect.js";
+import { dependencyInstallPlan, installedToolingRoot, instrumentationPackagePath, toolingRoot } from "./install-plan.js";
 import { PatchJournal, listSnapshotFiles } from "./patch-journal.js";
 import { instrumentConfigSource } from "./config-merge.js";
 import { clearPrivateEvidence, recordPrivateScan } from "./evidence-retention.js";
@@ -36,6 +36,8 @@ export interface RepairSessionOptions {
   repoPath: string;
   tempRoot: string;
   runtimeRoot: string;
+  /** Optional frozen compiled runtime; dependencies/package still come from runtimeRoot. */
+  runtimeDistRoot?: string;
   config?: z.input<typeof AccesswrightConfigSchema>;
   /** Opt-in local diagnostics for owned fixtures; never enabled by hosted or normal CLI defaults. */
   privateDiagnostics?: boolean;
@@ -88,28 +90,33 @@ export class DockerRepairSession {
     await mkdir(evidenceDir);
     await copyTargetSnapshot(options.repoPath, sourceRoot);
     const files = await listSnapshotFiles(sourceRoot);
-    const manager = detectPackageManager(files);
-    if (manager !== null && manager !== "npm") throw new UnsupportedRepositoryError(`Persistent runner does not yet support the ${manager} lockfile`, evidenceDir);
     const manifest = PackageManifestSchema.parse(JSON.parse(await readFile(join(sourceRoot, "package.json"), "utf8")));
+    const install = dependencyInstallPlan(files, manifest);
     if (!(manifest.dependencies.next ?? manifest.devDependencies.next)) throw new UnsupportedRepositoryError("The source is not an eligible Next.js repository", evidenceDir);
     const fileRoutes = discoverFileRoutes(files);
     if (fileRoutes.length === 0) throw new UnsupportedRepositoryError("No eligible application routes were discovered", evidenceDir);
     const journal = await PatchJournal.create(sourceRoot);
+    const runtimeDistRoot = options.runtimeDistRoot ?? join(options.runtimeRoot, "dist");
     const sandbox = new IsolatedDockerSession({ name: `accesswright-${randomUUID().slice(0, 12)}`, image: defaults.dockerImage,
-      runtime: join(options.runtimeRoot, "dist"), dependencies: await realpath(join(options.runtimeRoot, "node_modules")),
+      runtime: runtimeDistRoot, dependencies: await realpath(join(options.runtimeRoot, "node_modules")),
       packageJson: join(options.runtimeRoot, "package.json"), evidence: evidenceDir, offline: config.offline });
     const session = new DockerRepairSession(options, config, runRoot, journal, sandbox);
     try {
-      await access(join(options.runtimeRoot, "dist/src/runner/target-entry.js"));
+      await access(join(runtimeDistRoot, "src/runner/target-entry.js"));
       await sandbox.create(sourceRoot);
       const installStarted = Date.now();
-      const installed = await dockerExecResult(sandbox.application, ["npm", files.includes("package-lock.json") || files.includes("npm-shrinkwrap.json") ? "ci" : "install", "--ignore-scripts", "--no-audit", "--no-fund"],
+      await dockerExec(sandbox.application, ["mkdir", "-p", toolingRoot]);
+      await dockerExec(sandbox.application, ["chown", "pwuser:pwuser", toolingRoot]);
+      const tools = await dockerExecResult(sandbox.application, install.tooling,
+        { user: "pwuser", environment: targetEnvironment, timeoutMs: defaults.installTimeoutMs });
+      if (tools.exitCode !== 0) throw new UnsupportedRepositoryError("Isolated tooling installation failed", evidenceDir);
+      const installed = await dockerExecResult(sandbox.application, install.target,
         { user: "pwuser", environment: targetEnvironment, timeoutMs: defaults.installTimeoutMs });
       await session.recordStep("install", installed.exitCode === 0 ? "ok" : "error", installStarted, { exitCode: installed.exitCode });
       if (installed.exitCode !== 0) throw new UnsupportedRepositoryError(`Dependency installation failed (exit ${installed.exitCode})`, evidenceDir);
-      const mapping = await dockerExecResult(sandbox.application, ["npm", "install", "--ignore-scripts", "--no-save", "--package-lock=false", "--no-audit", "--no-fund", "code-inspector-plugin@2.0.9"],
-        { user: "pwuser", environment: targetEnvironment, timeoutMs: defaults.installTimeoutMs });
-      if (mapping.exitCode !== 0) throw new UnsupportedRepositoryError("Source-mapping dependency installation failed", evidenceDir);
+      // Turbopack must resolve the injected client module inside the project root.
+      // Move (do not duplicate) the isolated tooling after the frozen target install.
+      await dockerExec(sandbox.application, ["node", "-e", "const fs=require('fs');const [from,to]=process.argv.slice(1);if(fs.existsSync(to))throw Error('Reserved tooling path already exists');fs.renameSync(from,to);", toolingRoot, installedToolingRoot]);
       session.inspection = TargetInspectionSchema.parse(await session.target({ action: "inspect" }));
       if (session.inspection.privateFilesPresent.length > 0) throw new Error("Private target configuration crossed the snapshot boundary");
       await sandbox.finishInstall();
@@ -131,7 +138,7 @@ export class DockerRepairSession {
       const configName = existingConfigs[0] ?? "next.config.mjs";
       const originalConfig = existingConfigs[0] ? await readFile(join(sourceRoot, configName), "utf8") : "export default {};\n";
       const esm = /\.(?:mjs|mts|ts)$/.test(configName) || (configName.endsWith(".js") && manifest.type === "module");
-      const instrumentation = instrumentConfigSource(originalConfig, configName, esm, session.inspection.nextVersion);
+      const instrumentation = instrumentConfigSource(originalConfig, configName, esm, session.inspection.nextVersion, instrumentationPackagePath);
       const instrumentationPath = join(runRoot, `instrumented-${configName}`);
       await writeFile(instrumentationPath, instrumentation);
       await dockerCopy(instrumentationPath, sandbox.application, `/workspace/${configName}`);
@@ -150,6 +157,12 @@ export class DockerRepairSession {
       return session;
     } catch (error) {
       await session.recordStep("prepare", "error", Date.now(), { errorClass: error instanceof Error ? error.name : "unknown" });
+      if (session.privateDiagnostics) {
+        try {
+          const diagnostic = await dockerExecResult(sandbox.application, ["tail", "-c", "12000", "/tmp/accesswright/server.log"], { user: "pwuser", environment: targetEnvironment, timeoutMs: 10000 });
+          if (diagnostic.exitCode === 0) await writeFile(join(evidenceDir, "startup-diagnostic.txt"), diagnostic.stdout, { mode: 0o600 });
+        } catch { await session.recordStep("private-diagnostic", "skipped", Date.now()); }
+      }
       await session.close();
       throw error;
     }

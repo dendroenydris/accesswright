@@ -1,6 +1,7 @@
 import { defaults, isIgnoredPath } from "../config.js";
 import { applyCodemod } from "../fixers/codemods/index.js";
 import { applyRenderedContrastFix } from "../fixers/runtime-contrast.js";
+import { applyHeadingOrderFix } from "../fixers/page-heading.js";
 import { planFixTasks } from "../planner/planner.js";
 import { PatchSchema } from "../types/schemas.js";
 import { SourcePatchRejectedError } from "../sandbox/source-boundary.js";
@@ -34,6 +35,11 @@ export interface RepairOptions {
   noLlm?: boolean;
   maxTasks?: number;
   semanticRepair?: SemanticRepair;
+  /** Coordinator-selected scope; excluded tasks still remain part of all regression scans. */
+  includeTask?: (task: FixTask) => boolean;
+  /** Single-shot baselines may supply proposals, but cannot replace either verification gate. */
+  proposalRepair?: SemanticRepair;
+  onVerification?: (task: FixTask, verdict: PerPatchVerificationResult) => void | Promise<void>;
 }
 export interface TaskOutcome {
   id: string;
@@ -68,7 +74,7 @@ export async function runRepair(runtime: RepairRuntime, options: RepairOptions =
   let attempts = 0, handled = 0;
   const rank = { codemod: 0, optimizer: 1, llm: 2, human: 3 };
   while (handled < maximum) {
-    const tasks = planFixTasks(observationsToState(runtime.observations).violations).sort((a, b) => rank[a.route] - rank[b.route]);
+    const tasks = planFixTasks(observationsToState(runtime.observations).violations).filter(task => options.includeTask?.(task) ?? true).sort((a, b) => rank[a.route] - rank[b.route]);
     const task = tasks.find(item => !completed.has(stableTaskKey(item)));
     if (!task) break;
     const key = stableTaskKey(task);
@@ -78,12 +84,12 @@ export async function runRepair(runtime: RepairRuntime, options: RepairOptions =
     const ignored = runtime.config.ignore.rules.includes(task.ruleId) || (task.source !== null && isIgnoredPath(task.source.file, runtime.config.ignore.paths));
     if (ignored) { outcomes.push({ ...outcome, status: "ignored", reason: "explicit-ignore" }); continue; }
     if (task.route === "human" || task.source === null) { outcomes.push({ ...outcome, reason: "unsupported-or-unmapped" }); continue; }
-    if (task.route === "llm" && (options.noLlm === true || !options.semanticRepair)) {
+    if (task.route === "llm" && (options.noLlm === true || (!options.semanticRepair && !options.proposalRepair))) {
       outcomes.push({ ...outcome, reason: options.noLlm ? "no-llm" : "provider-not-configured" }); continue;
     }
     let accepted: { patch: Patch; after: BrowserObservation[]; verification: PerPatchVerificationResult } | null = null;
     let lastVerification: PerPatchVerificationResult | null = null;
-    const verify = async (input: Patch): Promise<PerPatchVerificationResult> => {
+    const checkCandidate = async (input: Patch): Promise<PerPatchVerificationResult> => {
       if (accepted !== null) throw new Error("A candidate was already accepted for this task");
       const patch = PatchSchema.parse(input);
       if (patch.taskId !== task.id || patch.changes.some(change => isIgnoredPath(change.path, runtime.config.ignore.paths))) {
@@ -126,14 +132,26 @@ export async function runRepair(runtime: RepairRuntime, options: RepairOptions =
       return verification;
     };
 
-    if (task.route === "llm") {
+    const verify = async (input: Patch): Promise<PerPatchVerificationResult> => {
+      const verdict = await checkCandidate(input);
+      await options.onVerification?.(task, verdict);
+      return verdict;
+    };
+    if (options.proposalRepair && options.noLlm !== true) {
+      const result = await options.proposalRepair(task, verify);
+      if (result.status !== "accepted") outcome.reason = result.reason ?? "single-shot-proposal-unresolved";
+    } else if (task.route === "llm") {
       const semantic = options.semanticRepair;
       if (!semantic) throw new Error("Semantic provider unexpectedly unavailable");
       const result = await semantic(task, verify);
       if (result.status !== "accepted") outcome.reason = result.reason ?? "semantic-repair-unresolved";
     } else {
       const source = await runtime.readSource(task.source.file);
-      const decision = task.route === "codemod" ? { patch: applyCodemod(source, task), reason: "deterministic-source-shape-not-supported" } : applyRenderedContrastFix(source, task, runtime.observations);
+      const decision = task.ruleId === "heading-order"
+        ? applyHeadingOrderFix(source, task, runtime.observations)
+        : task.route === "codemod"
+          ? { patch: applyCodemod(source, task), reason: "deterministic-source-shape-not-supported" }
+          : applyRenderedContrastFix(source, task, runtime.observations);
       const patch = decision.patch;
       if (patch === null) outcome.reason = decision.reason;
       else await verify(patch);
@@ -149,7 +167,7 @@ export async function runRepair(runtime: RepairRuntime, options: RepairOptions =
       outcomes.push({ ...outcome, status: "rejected", reason: checked.reason });
     } else outcomes.push(outcome);
   }
-  const unresolved = planFixTasks(observationsToState(runtime.observations).violations).filter(task => !completed.has(stableTaskKey(task)));
+  const unresolved = planFixTasks(observationsToState(runtime.observations).violations).filter(task => (options.includeTask?.(task) ?? true) && !completed.has(stableTaskKey(task)));
   for (const task of unresolved) outcomes.push({ id: task.id, ruleId: task.ruleId, criterion: task.criterion, route: task.route, status: "needs-human", reason: "run-task-limit" });
   const final = await runtime.verifyFinal();
   const valid = final.failures.length === 0;

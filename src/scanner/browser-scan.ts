@@ -8,6 +8,7 @@ import { contrastRatio } from "../fixers/contrast.js";
 import { isSourcePath } from "../types/schemas.js";
 import { normalizeAxeResults } from "./scan.js";
 import { extractSourceLocationFromHtml } from "./source-location.js";
+import { collectSourceIndex } from "./source-index.js";
 import { mergeBrowserFacts } from "./browser-facts.js";
 import type { BrowserAxFact, BrowserDomFact, ScanCondition } from "./browser-facts.js";
 import { BrowserObservationSchema } from "./observations.js";
@@ -161,7 +162,7 @@ export async function collectAccessibleFacts(page: Page, prefix: string, interac
         }
       }
     }
-    return { aria, probeFailures, probeUnavailable };
+    return { aria, probeFailures, probeUnavailable, markerIds: Object.fromEntries(dom.map(node => [node.marker, node.id])) };
   } finally { await client.detach(); }
 }
 
@@ -206,10 +207,13 @@ export async function scanBrowserPage(page: Page, options: BrowserScanOptions): 
   await page.screenshot({ path: join(options.evidenceDir, screenshot), fullPage: true, animations: "disabled", caret: "hide" });
   const contexts: RenderedContext[] = [];
   const title = await page.title();
+  const documentLanguage = await page.evaluate(() => document.documentElement.lang);
+  const sourceIndex = await collectSourceIndex(page, `${options.route}|${options.condition}`);
   for (const [index, violation] of violations.entries()) {
     const locator = page.locator(violation.target.join(" >> ")).first();
     try {
       const context = await locator.evaluate(element => {
+        const marker = element.getAttribute("data-accesswright-ref");
         const parents: string[] = [];
         for (let node: Element | null = element; node; node = node.parentElement) {
           if (node.hasAttribute("data-insp-path")) parents.push(node.outerHTML.slice(0, 16000));
@@ -225,7 +229,7 @@ export async function scanBrowserPage(page: Page, options: BrowserScanOptions): 
         const caption = figure?.querySelector("figcaption")?.textContent?.trim() ?? null;
         const anchor = element.closest("a");
         return {
-          parents, direct: element.hasAttribute("data-insp-path"), surroundingText: (element.parentElement?.textContent ?? "").trim().slice(0, 3000),
+          marker, isRoot: element === document.documentElement, parents, direct: element.hasAttribute("data-insp-path"), surroundingText: (element.parentElement?.textContent ?? "").trim().slice(0, 3000),
           imageCaption: caption?.slice(0, 1000) ?? null, linkTarget: anchor?.getAttribute("href") ?? null,
           foreground: style.color, background,
           contrastTarget: Number.parseFloat(style.fontSize) >= 24 || (Number.parseFloat(style.fontSize) >= 18.66 && Number.parseFloat(style.fontWeight) >= 700) ? 3 : 4.5,
@@ -239,7 +243,8 @@ export async function scanBrowserPage(page: Page, options: BrowserScanOptions): 
         crop = `${base}-target-${index}.png`;
         await locator.screenshot({ path: join(options.evidenceDir, crop), animations: "disabled", caret: "hide", timeout: 10000 });
       }
-      contexts.push({ target: violation.target, source: mapped, mapping: mapped === null ? "unmapped" : direct ? "direct" : "ancestor", pageTitle: title,
+      const nodeId = context.isRoot ? `${options.route}|${options.condition}|html` : facts.markerIds[context.marker ?? ""];
+      contexts.push({ ...(nodeId === undefined ? {} : { nodeId }), target: violation.target, source: mapped, mapping: mapped === null ? "unmapped" : direct ? "direct" : "ancestor", pageTitle: title,
         surroundingText: context.surroundingText, imageCaption: context.imageCaption, linkTarget: context.linkTarget,
         screenshot: crop, foreground: context.foreground, background: context.background, contrastTarget: context.contrastTarget, palette: palette.palette });
     } catch {
@@ -259,5 +264,6 @@ export async function scanBrowserPage(page: Page, options: BrowserScanOptions): 
     return extractSourceLocationFromHtml(html)?.file;
   }).filter((file): file is string => file !== undefined && isSourcePath(file)))].sort();
   return BrowserObservationSchema.parse({ route: options.route, condition: options.condition, checkerVersion: rawAnalysis.testEngine.version, violations, incomplete,
-    ...facts, sourceFiles, ariaTree: await page.locator("body").ariaSnapshot(), contexts, screenshot, darkMediaDetected: palette.darkMediaDetected });
+    aria: facts.aria, probeFailures: facts.probeFailures, probeUnavailable: facts.probeUnavailable, sourceIndex, documentLanguage, documentTitle: title,
+    sourceFiles, ariaTree: await page.locator("body").ariaSnapshot(), contexts, screenshot, darkMediaDetected: palette.darkMediaDetected });
 }

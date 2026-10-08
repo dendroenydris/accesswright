@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ScanConditionSchema } from "./browser-facts.js";
+import { SourceIndexEntrySchema } from "./source-index.js";
 import { SourceLocationSchema, ViolationSchema } from "../types/schemas.js";
 import type { PageVerificationState } from "../verifier/per-patch.js";
 
@@ -10,6 +11,7 @@ export const AccessibleFactSchema = z.object({
 }).strict();
 const artifactName = z.string().regex(/^[a-zA-Z0-9_-]+\.png$/);
 export const RenderedContextSchema = z.object({
+  nodeId: z.string().optional(),
   target: z.array(z.string()),
   source: SourceLocationSchema.nullable(),
   mapping: z.enum(["direct", "ancestor", "unmapped"]),
@@ -23,6 +25,8 @@ export type RenderedContext = z.infer<typeof RenderedContextSchema>;
 export const BrowserObservationSchema = z.object({
   route: z.string().startsWith("/"), condition: ScanConditionSchema,
   checkerVersion: z.string().min(1).optional(),
+  documentLanguage: z.string().optional(), documentTitle: z.string().optional(),
+  sourceIndex: z.array(SourceIndexEntrySchema).max(20000).optional(),
   violations: z.array(ViolationSchema), incomplete: z.array(ViolationSchema),
   aria: z.array(AccessibleFactSchema), ariaTree: z.string(),
   probeFailures: z.array(z.string()), probeUnavailable: z.array(z.string()),

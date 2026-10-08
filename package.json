@@ -15,7 +15,8 @@
     "test": "vitest run",
     "build": "tsc -p tsconfig.build.json",
     "build:integration": "tsc -p tsconfig.integration.json",
-    "test:integration": "npm run build:integration && vitest run --config vitest.integration.config.ts"
+    "test:integration": "npm run build:integration && vitest run --config vitest.integration.config.ts",
+    "eval": "node dist/src/eval/cli.js"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.72",

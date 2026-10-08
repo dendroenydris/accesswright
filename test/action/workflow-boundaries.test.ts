@@ -19,3 +19,16 @@ it("keeps product Action integration separate from retired live-key workflows", 
   expect(text).not.toMatch(/OPENAI_API_KEY|secrets\.OPENAI|LIVE_BROWSER/);
   expect(await readdir(".github/workflows")).not.toContain("verify-openai-model.yml");
 });
+
+it("keeps PR-mode integration manual, pinned, and free of provider secrets", async () => {
+  const text = await readFile(".github/workflows/pr-mode-integration.yml", "utf8");
+  const workflow = z.object({
+    on: z.object({ workflow_dispatch: z.unknown() }).strict(),
+    permissions: z.object({ contents: z.literal("read"), "pull-requests": z.literal("write") }).strict(),
+  }).parse(parse(text));
+  expect(workflow.on).toHaveProperty("workflow_dispatch");
+  expect(text).toContain("mode: pr");
+  expect(text).toContain("no-llm: 'true'");
+  expect(text).toContain("max-cost-usd: '0'");
+  expect(text).not.toMatch(/OPENAI_API_KEY|secrets\.OPENAI|pull_request_target|LIVE_BROWSER/);
+});

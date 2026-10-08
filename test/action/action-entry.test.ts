@@ -34,6 +34,27 @@ it("parses safe backlog defaults with no paid authorization", () => {
   });
 });
 
+it("parses pull-request mode and forces fork contexts to no-LLM", () => {
+  expect(parseActionEnvironment({
+    ...baseEnvironment,
+    GITHUB_EVENT_NAME: "pull_request",
+    GITHUB_REF_TYPE: "branch",
+    ACCESSWRIGHT_ACTION_MODE: "pr",
+    ACCESSWRIGHT_ACTION_PULL_NUMBER: "7",
+    ACCESSWRIGHT_ACTION_HEAD_SHA: "b".repeat(40),
+    ACCESSWRIGHT_ACTION_IS_FORK: "true",
+    ACCESSWRIGHT_ACTION_NO_LLM: "false",
+    ACCESSWRIGHT_ACTION_MAX_COST_USD: "1",
+  })).toMatchObject({
+    mode: "pr",
+    pullNumber: 7,
+    verifiedHeadSha: "b".repeat(40),
+    isFork: true,
+    noLlm: true,
+    maxCostUsd: 0,
+  });
+});
+
 it("requires explicit prices before an Action run can authorize LLM spend", () => {
   expect(() =>
     parseActionEnvironment({
@@ -73,6 +94,9 @@ it("declares a pinned composite Action with safe default inputs", async () => {
   };
   expect(action.inputs?.["no-llm"]?.default).toBe("true");
   expect(action.inputs?.["max-cost-usd"]?.default).toBe("0");
+  expect(action.inputs?.mode?.default).toBe("backlog");
+  expect(action.inputs?.["pull-number"]?.default).toBe("");
+  expect(action.inputs?.["head-sha"]?.default).toBe("");
   expect(action.runs?.using).toBe("composite");
   const uses = action.runs?.steps
     ?.map(step => step.uses)

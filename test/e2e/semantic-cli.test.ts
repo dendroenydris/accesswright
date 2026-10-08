@@ -45,6 +45,12 @@ it("repairs a real Next.js semantic target through the coordinator, rejects hidi
   expect(result.groups).toHaveLength(3);
   expect(result.groups.every(group => group.perPatchAccepted)).toBe(true);
   await assertSaveButtonEvidence(result.evidenceDir);
+  const evidenceReport = await readFile(join(result.evidenceDir, "accesswright-report.md"), "utf8");
+  expect(evidenceReport).toContain("# Accesswright evidence report");
+  expect(evidenceReport).toContain("Found / fixed / remaining");
+  expect(evidenceReport).toContain("9.4.1.2");
+  expect(evidenceReport).toContain("Conditions: desktop-light, mobile-light");
+  expect(evidenceReport).not.toContain("Content must remain present.");
   expect(await ledger.snapshot()).toMatchObject({ settledAttempts: 2, pendingAttempts: 0, unknownAttempts: 0 });
   const rerun = await execa("node", [join(process.cwd(),"dist/src/cli.js"), "fix", fixture, "--no-llm", "--offline", "--dry-run"], {
     env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: process.env.HOME ?? "/tmp", ACCESSWRIGHT_TMP_ROOT: tempRoot }, extendEnv: false, timeout: 600000,

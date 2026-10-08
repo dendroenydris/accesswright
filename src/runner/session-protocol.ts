@@ -29,7 +29,7 @@ export const CheckOutputSchema = z.object({ checks: z.array(ProductionCheckResul
 
 export function targetProcessEnvironment(input: NodeJS.ProcessEnv): Record<string, string> {
   const environment: Record<string, string> = {
-    PATH: input.PATH ?? "/usr/local/bin:/usr/bin:/bin",
+    PATH: `/workspace/node_modules/.accesswright-tools/node_modules/.bin:${input.PATH ?? "/usr/local/bin:/usr/bin:/bin"}`,
     HOME: input.HOME ?? "/home/pwuser",
     CI: "1",
     NEXT_TELEMETRY_DISABLED: "1",

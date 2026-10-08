@@ -4,7 +4,7 @@ import { z } from "zod";
 import { BrowserObservationSchema } from "../scanner/observations.js";
 import type { BrowserObservation } from "../scanner/observations.js";
 
-const retainedMetadata = new Set(["report.json", "run.jsonl", "baseline-checks.json", "final-verification.json"]);
+const retainedMetadata = new Set(["report.json", "accesswright-report.md", "run.jsonl", "baseline-checks.json", "final-verification.json"]);
 
 /** Raw page facts can contain private content, so saving them requires explicit opt-in. */
 export async function recordPrivateScan(directory: string, generation: string, observations: readonly BrowserObservation[], retain: boolean): Promise<void> {

@@ -105,6 +105,37 @@ describe("real repair orchestrator gates", () => {
     expect(runtime.recorded).toEqual([]);
     expect(runtime.finalSeen).toBe(false);
   });
+  it("limits proposal targets without skipping full final verification", async () => {
+    const runtime = new FakeRuntime();
+    const result = await runRepair(runtime, { includeTask: () => false });
+    expect(result.fixed).toBe(0);
+    expect(result.outcomes).toEqual([]);
+    expect(runtime.events).toEqual(["final", "patch-output"]);
+  });
+  it("evaluates an external proposal with the same rejection and final gates", async () => {
+    const runtime = new FakeRuntime(); runtime.hide = true;
+    let proposals = 0;
+    const checks: string[] = [];
+    const result = await runRepair(runtime, {
+      proposalRepair: async (task, verify) => {
+        proposals += 1;
+        const verdict = await verify({ taskId: task.id, changes: [{ path: location.file, before: source, after: source.replace(' aria-bogus="bad"', '') }] });
+        return { status: verdict.accepted ? "accepted" : "needs-human" };
+      },
+      onVerification: (_task, verdict) => { checks.push(verdict.check); },
+    });
+    expect(proposals).toBe(1);
+    expect(checks).toContain("aria-tree");
+    expect(runtime.recorded).toEqual([]);
+    expect(runtime.finalSeen).toBe(true);
+    expect(result.fixed).toBe(0);
+  });
+  it("does not let an alternate proposer override explicit no-LLM mode", async () => {
+    const runtime = new FakeRuntime();
+    let proposals = 0;
+    await runRepair(runtime, { noLlm: true, proposalRepair: () => { proposals += 1; return Promise.resolve({ status: "needs-human" }); } });
+    expect(proposals).toBe(0);
+  });
   it("keeps semantic tasks unresolved when --no-llm is explicit", async () => {
     const runtime = new FakeRuntime(); runtime.observations = [observation([{ ...violation, ruleId: "button-name" }])];
     const result = await runRepair(runtime, { noLlm: true });
