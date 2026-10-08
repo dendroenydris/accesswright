@@ -36,6 +36,17 @@ const AxTreeSchema = z.object({ nodes: z.array(z.object({
 const ComputedStylesSchema = z.object({ computedStyle: z.array(z.object({ name: z.string(), value: z.string() })) });
 const BackgroundSchema = z.object({ backgroundColors: z.array(z.string()).optional(), computedFontSize: z.string().optional(), computedFontWeight: z.string().optional() });
 
+/** All interactive controls must be probed, including large real-world sites; excessive pages fail closed. */
+export function enforceInteractionProbeCapacity(count: number, maximum = 2048): number {
+  if (!Number.isSafeInteger(count) || count < 0) throw new Error("Invalid interaction-probe count");
+  if (count > maximum) throw new Error(`Interaction-probe count ${count} exceeds explicit capacity ${maximum}`);
+  return count;
+}
+
+export function isDetachedInteractionNodeError(error: unknown): boolean {
+  return error instanceof Error && /Could not find node with given id|No node with given id|Node is detached|Interactive marker detached/i.test(error.message);
+}
+
 export interface BrowserScanOptions {
   route: string;
   condition: ScanCondition;
@@ -131,35 +142,66 @@ export async function collectAccessibleFacts(page: Page, prefix: string, interac
       await client.send("CSS.enable");
       const interactiveIds = new Set(aria.filter(node => node.interactive).map(node => node.id));
       const controls = dom.filter(node => interactiveIds.has(node.id));
-      if (controls.length > 150) throw new Error("Page exceeds the explicit interaction-probe limit");
+      enforceInteractionProbeCapacity(controls.length);
       for (const control of controls) {
         const identity = markers.get(control.marker);
         if (!identity) throw new Error("An interactive browser node lost its DOM identity");
+        let nodeId = identity.nodeId;
+        const refreshIdentity = async (): Promise<boolean> => {
+          const updatedDocument = z.object({ root: DomNodeSchema }).parse(await client.send("DOM.getDocument", { depth: -1, pierce: true }));
+          const updatedMarker = findDomMarkers(updatedDocument.root).get(control.marker);
+          if (!updatedMarker) return false;
+          nodeId = updatedMarker.nodeId;
+          return true;
+        };
+        const withFreshIdentity = async <T>(operation: (currentNodeId: number) => Promise<T>): Promise<T> => {
+          try { return await operation(nodeId); }
+          catch (error) {
+            if (!isDetachedInteractionNodeError(error)) throw error;
+            if (!await refreshIdentity()) throw new Error("Interactive marker detached during full probe", { cause: error });
+            return operation(nodeId);
+          }
+        };
+        const forcePseudo = async (classes: string[]): Promise<void> => {
+          await withFreshIdentity(async currentNodeId => {
+            await client.send("CSS.forcePseudoState", { nodeId: currentNodeId, forcedPseudoClasses: classes });
+          });
+        };
         const readStyle = async () => {
-          const result = ComputedStylesSchema.parse(await client.send("CSS.getComputedStyleForNode", { nodeId: identity.nodeId }));
+          const result = ComputedStylesSchema.parse(await withFreshIdentity(currentNodeId => client.send("CSS.getComputedStyleForNode", { nodeId: currentNodeId })));
           return Object.fromEntries(result.computedStyle.map(property => [property.name, property.value]));
         };
-        const baseline = await readStyle();
+        let cleanupError: unknown;
         try {
-          await client.send("CSS.forcePseudoState", { nodeId: identity.nodeId, forcedPseudoClasses: ["focus", "focus-visible"] });
+          const baseline = await readStyle();
+          await forcePseudo(["focus", "focus-visible"]);
           const focus = await readStyle();
           const outline = Number.parseFloat(focus["outline-width"] ?? "0") > 0 && focus["outline-style"] !== "none";
           const shadow = focus["box-shadow"] !== undefined && focus["box-shadow"] !== "none";
           const changedBackground = focus["background-color"] !== baseline["background-color"];
           const changedBorder = focus["border-top-color"] !== baseline["border-top-color"] || focus["border-top-width"] !== baseline["border-top-width"];
           if (!outline && !shadow && !changedBackground && !changedBorder) probeFailures.push(`focus-style:${control.id}`);
-          await client.send("CSS.forcePseudoState", { nodeId: identity.nodeId, forcedPseudoClasses: ["hover"] });
+          await forcePseudo(["hover"]);
           const hover = await readStyle();
-          const background = BackgroundSchema.parse(await client.send("CSS.getBackgroundColors", { nodeId: identity.nodeId }));
+          const background = BackgroundSchema.parse(await withFreshIdentity(currentNodeId => client.send("CSS.getBackgroundColors", { nodeId: currentNodeId })));
           const colors = background.backgroundColors;
           if (colors?.length === 1 && hover.color) {
             const target = Number.parseFloat(hover["font-size"] ?? "0") >= 24 || (Number.parseFloat(hover["font-size"] ?? "0") >= 18.66 && Number.parseFloat(hover["font-weight"] ?? "0") >= 700) ? 3 : 4.5;
             try { if (contrastRatio(hover.color, colors[0] ?? "") < target) probeFailures.push(`interaction-contrast:${control.id}`); }
             catch { probeUnavailable.push(`interaction-contrast:${control.id}`); }
           } else if (control.text.length > 0) probeUnavailable.push(`interaction-contrast:${control.id}`);
+        } catch (error) {
+          if (!isDetachedInteractionNodeError(error)) throw error;
+          probeFailures.push(`unstable-interactive:${control.id}`);
         } finally {
-          await client.send("CSS.forcePseudoState", { nodeId: identity.nodeId, forcedPseudoClasses: [] });
+          try { await forcePseudo([]); }
+          catch (error) {
+            if (!isDetachedInteractionNodeError(error)) cleanupError = error;
+            else if (!probeFailures.includes(`unstable-interactive:${control.id}`)) probeFailures.push(`unstable-interactive:${control.id}`);
+          }
         }
+        if (cleanupError instanceof Error) throw cleanupError;
+        if (cleanupError !== undefined) throw new Error("Browser probe cleanup failed");
       }
     }
     return { aria, probeFailures, probeUnavailable, markerIds: Object.fromEntries(dom.map(node => [node.marker, node.id])) };

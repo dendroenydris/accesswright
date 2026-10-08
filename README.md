@@ -92,6 +92,7 @@ Model-assisted mode sends bounded source excerpts, deterministic call-site conte
 npm run build
 npm run eval -- --protocol eval/protocol-20261007.json --output /absolute/path/to/results --split dev --systems deterministic --max-cases 2 --tmp-root /tmp/accesswright/integration-20261007 --cache-root /tmp/accesswright/integration-20261007/eval-source-cache
 ```
+To continue an interrupted run, repeat its *identical* command with `--resume` and the same output folder. Completed cells and original reference data are checked and reused without generating new paid calls. A changed protocol, model, selected corpus, system, seed, batch bound or compiled implementation fails closed; completed reports cannot be resumed. A previously stored `blocked` cell is retained as failed evidence and is not silently converted into a success: rerun genuinely changed infrastructure in a separate output and report it separately, without pooling unlike implementations.
 
 Evaluation outputs carry both the frozen protocol digest and a digest of an immutable compiled-runtime snapshot stored in the selected output directory. Trusted dependencies are still reused read-only, not duplicated into Docker; changes to that snapshot during a run fail closed without pooling implementations. Live `B1,A1,A` cells additionally require a dated explicit authorization metadata file, current authenticated model availability, pricing, a per-run cap, and a durable cumulative spending ledger. Fake-provider cells are labeled separately and are never pooled with live measurements.
 

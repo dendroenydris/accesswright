@@ -30,6 +30,8 @@ import type { EvalProtocol, EvalSystem, FrozenProtocol } from "./protocol.js";
 import { EvalCellSchema, aggregateEvaluation, renderEvaluationReport } from "./report.js";
 import type { EvalCell } from "./report.js";
 import { fetchPinnedRepository } from "./repository.js";
+import { evalCellFileName, evalReferenceFileName, loadEvalResumeState } from "./resume.js";
+import type { EvalReference } from "./resume.js";
 
 export interface EvalSelection {
   split: "dev" | "test";
@@ -97,6 +99,8 @@ export interface EvalRunOptions extends EvalSelection {
   cacheRoot: string;
   /** Explicit smoke-subset bound, retained in the manifest; never changes the frozen target. */
   caseLimit?: number;
+  /** Resume matching persisted cells without mixing frozen implementations or duplicating calls. */
+  resume?: boolean;
   pricing?: ModelPricing;
   maxRunCostUsd?: number;
   durableBudget?: Pick<DurableProviderOptions, "ledger" | "maxInputTokens" | "expiresAt">;
@@ -201,21 +205,53 @@ export async function runEvaluation(options: EvalRunOptions) {
   if (!Number.isSafeInteger(maximum) || maximum < 1 || maximum > protocol.maxCasesPerRepository) throw new Error("Case subset exceeds the frozen bound");
   if (options.fixtureRoots && protocol.corpus !== "controlled-fixtures") throw new Error("Local fixtures cannot substitute for the public corpus");
   await mkdir(options.tempRoot,{recursive:true});
-  await mkdir(options.outputDir,{recursive:false});
-  const runtimeSnapshot = await snapshotCompiledRuntime(options.runtimeRoot, options.outputDir);
+  let runtimeSnapshot: { path: string; digest: string };
+  let cells: EvalCell[];
+  const previousReferences = new Map<string, EvalReference>();
+  if (options.resume === true) {
+    const currentDigest = await implementationDigest(join(options.runtimeRoot, "dist"));
+    const previous = await loadEvalResumeState({
+      outputDir: options.outputDir, frozen: options.frozen,
+      implementationDigest: currentDigest, selection, caseLimit: maximum,
+      providerInjection: Boolean(options.providerFactory),
+    });
+    const snapshotPath = join(options.outputDir, "runtime");
+    if (await implementationDigest(snapshotPath) !== currentDigest) {
+      throw new Error("Refusing to resume: immutable runtime snapshot digest changed");
+    }
+    runtimeSnapshot = { path: snapshotPath, digest: currentDigest };
+    cells = [...previous.cells];
+    for (const [key, value] of previous.references) previousReferences.set(key, value);
+  } else {
+    await mkdir(options.outputDir,{recursive:false});
+    runtimeSnapshot = await snapshotCompiledRuntime(options.runtimeRoot, options.outputDir);
+    cells = [];
+    await writeFile(join(options.outputDir,"manifest.json"),JSON.stringify({ schemaVersion:1, protocol: options.frozen, implementationDigest:runtimeSnapshot.digest, runtimeSnapshot:"runtime", selection, caseLimit:maximum, providerInjection:Boolean(options.providerFactory), createdAt:new Date().toISOString() },null,2),{flag:"wx",mode:0o600});
+  }
   const implementation = runtimeSnapshot.digest;
-  await writeFile(join(options.outputDir,"manifest.json"),JSON.stringify({ schemaVersion:1, protocol: options.frozen, implementationDigest:implementation, runtimeSnapshot:"runtime", selection, caseLimit:maximum, providerInjection:Boolean(options.providerFactory), createdAt:new Date().toISOString() },null,2),{flag:"wx",mode:0o600});
-  const cells: EvalCell[] = [];
+  const cellFiles = new Set(cells.map(evalCellFileName));
+  const alreadyStored = (repository: EvalProtocol["repositories"][number], system: EvalSystem, seed: number, batch: number) =>
+    cellFiles.has(evalCellFileName({ repository: repository.repository, sha: repository.sha, system, seed, batch }));
   const store = async (cell: EvalCell) => {
     if (await implementationDigest(runtimeSnapshot.path) !== implementation) throw new Error("Frozen evaluation runtime changed; completed cells remain on disk but cannot be pooled");
     const validated = EvalCellSchema.parse(cell);
-    const identity = `${cell.repository}@${cell.sha}|${cell.system}|${cell.seed}|${cell.batch}`;
-    const id = createHash("sha256").update(identity).digest("hex");
-    await writeFile(join(options.outputDir,`${id}.json`),JSON.stringify(validated,null,2),{flag:"wx",mode:0o600});
+    const filename = evalCellFileName(validated);
+    if (cellFiles.has(filename)) throw new Error("Cannot store the same frozen evaluation cell twice");
+    await writeFile(join(options.outputDir,filename),JSON.stringify(validated,null,2),{flag:"wx",mode:0o600});
+    cellFiles.add(filename);
     cells.push(validated);
     options.onProgress?.({ repository:cell.repository, system:cell.system, seed:cell.seed, batch:cell.batch, status:cell.status, cases:cell.cases.length, correct:cell.cases.filter(item=>item.correctlyFixed).length, costUsd:cell.usage.spentUsd, reason:cell.reason });
   };
   for (const repository of selection.repositories) {
+    const existingReference = previousReferences.get(repository.repository.toLowerCase());
+    const allExpectedCellsPresent = existingReference?.rendered.eligible.length
+      ? selection.seeds.every(seed => planCaseBatches(existingReference.rendered.eligible, seed, maximum)
+          .every((_, batch) => selection.systems.every(system => alreadyStored(repository, system, seed, batch))))
+      : selection.seeds.every(seed => selection.systems.every(system => alreadyStored(repository, system, seed, 0)));
+    if (options.resume && allExpectedCellsPresent) {
+      options.onProgress?.({ repository:repository.repository, phase:"resumed-complete" });
+      continue;
+    }
     let original: DockerRepairSession | undefined;
     let sourceRoot: string;
     let rendered: ReturnType<typeof freezeRenderedCases>;
@@ -230,16 +266,28 @@ export async function runEvaluation(options: EvalRunOptions) {
         mutations.push(...generated.filter(mutation => protocol.operators.includes(mutation.operator)));
       }
       rendered = freezeRenderedCases(mutations,original.observations);
-      const referenceId = createHash("sha256").update(repository.repository).digest("hex");
-      await writeFile(join(options.outputDir,`${referenceId}-reference.json`),JSON.stringify({ repository, rendered, implementationDigest:implementation },null,2),{flag:"wx",mode:0o600});
+      if (existingReference) {
+        if (JSON.stringify(existingReference.rendered) !== JSON.stringify(rendered)) {
+          throw new Error("Frozen rendered reference changed during resumed evaluation");
+        }
+      } else {
+        await writeFile(join(options.outputDir, evalReferenceFileName(repository.repository)),
+          JSON.stringify({ repository, rendered, implementationDigest:implementation },null,2),
+          {flag:"wx",mode:0o600});
+      }
       if (!rendered.eligible.length) throw new UnsupportedRepositoryError("No originally clean rendered targets are eligible",original.evidenceDir);
     } catch (error) {
-      for (const seed of selection.seeds) for (const system of selection.systems) await store({ ...emptyCell(options,implementation,repository,system,seed,0),status:classifyOriginalPreparationError(error),reason:diagnostic(error) });
+      for (const seed of selection.seeds) for (const system of selection.systems) {
+        if (!alreadyStored(repository, system, seed, 0)) {
+          await store({ ...emptyCell(options,implementation,repository,system,seed,0),status:classifyOriginalPreparationError(error),reason:diagnostic(error) });
+        }
+      }
       continue;
     } finally { if (original) await original.close(); }
     for (const seed of selection.seeds) {
       const batches = planCaseBatches(rendered.eligible,seed,maximum);
       for (const [batch,candidates] of batches.entries()) {
+        if (selection.systems.every(system => alreadyStored(repository, system, seed, batch))) continue;
         const temporary = await mkdtemp(join(options.tempRoot,"seeded-input-"));
         const mutated = join(temporary,"source");
         try {
@@ -250,6 +298,7 @@ export async function runEvaluation(options: EvalRunOptions) {
             await writeFile(path,applyMutations(before,candidates.filter(item=>item.mutation.file===file).map(item=>item.mutation)),"utf8");
           }
           for (const system of selection.systems) {
+            if (alreadyStored(repository, system, seed, batch)) continue;
             const cell = await executeCell(options,runtimeSnapshot.path,emptyCell(options,implementation,repository,system,seed,batch),mutated,candidates);
             await store(cell);
           }

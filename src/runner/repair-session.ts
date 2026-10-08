@@ -183,7 +183,12 @@ export class DockerRepairSession {
   private async browser(input: z.input<typeof BrowserCommandSchema>): Promise<unknown> {
     const command = BrowserCommandSchema.parse(input);
     const result = await dockerExecResult(this.sandbox.browser, ["node", "/accesswright/dist/src/scanner/browser-session-entry.js", JSON.stringify(command)], { timeoutMs: defaults.productionCheckTimeoutMs * 2 });
-    if (result.exitCode !== 0) throw new Error(`Isolated browser ${command.action} failed (exit ${result.exitCode}); diagnostic ${createHash("sha256").update(result.stderr).digest("hex").slice(0, 16)}`);
+    if (result.exitCode !== 0) {
+      if (this.privateDiagnostics) {
+        await writeFile(join(this.evidenceDir, "browser-" + command.action + "-diagnostic.txt"), result.stderr.slice(-12000), { mode: 0o600 });
+      }
+      throw new Error(`Isolated browser ${command.action} failed (exit ${result.exitCode}); diagnostic ${createHash("sha256").update(result.stderr).digest("hex").slice(0, 16)}`);
+    }
     return JSON.parse(result.stdout) as unknown;
   }
 

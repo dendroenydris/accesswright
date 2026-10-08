@@ -148,6 +148,9 @@ export function verifyPerPatch(
     }
   }
 
+  const unstable = [...input.before.probeFailures, ...input.after.probeFailures].find(item => item.startsWith("unstable-interactive:"));
+  if (unstable) return reject("probe", "Unstable interactive node prevents a complete verifier judgment");
+
   const baselineProbes = new Set(input.before.probeFailures);
   const newProbes = input.after.probeFailures.filter(failure => !baselineProbes.has(failure));
   if (newProbes.length > 0) {

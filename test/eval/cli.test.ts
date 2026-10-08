@@ -10,6 +10,8 @@ it("exposes the compiled evaluation CLI as the reproducible npm entrypoint", asy
 it("defaults evaluation to zero-cost deterministic work and requires an explicit output destination", () => {
   expect(parseEvalArgs(["--protocol","eval/frozen.json","--output","/tmp/results","--split","dev"])).toMatchObject({protocol:"eval/frozen.json",output:"/tmp/results",split:"dev",systems:["deterministic"]});
   expect(() => parseEvalArgs(["--protocol","eval/frozen.json"])).toThrow(/output/i);
+  expect(parseEvalArgs(["--output","/tmp/results","--resume"])).toMatchObject({resume:true,systems:["deterministic"]});
+  expect(() => parseEvalArgs(["--output","/tmp/results","--resume","--resume"])).toThrow(/duplicate/i);
 });
 it("preserves explicit subsets and rejects unknown, duplicate, malformed, or empty selection flags", () => {
   expect(parseEvalArgs(["--output","/tmp/results","--systems","B1,A1,A","--seeds","1,2,3","--repositories","owner/a,owner/b","--max-cases","4"])).toMatchObject({systems:["B1","A1","A"],seeds:[1,2,3],repositories:["owner/a","owner/b"],caseLimit:4});

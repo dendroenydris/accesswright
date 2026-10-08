@@ -76,6 +76,15 @@ describe("verifyPerPatch", () => {
     ).toMatchObject({ accepted: false, check: "target" });
   });
 
+  it("rejects a pre-existing unstable interactive node rather than silently treating it as probed", () => {
+    const unstable = "unstable-interactive:/|desktop-light|dom/0/1";
+    expect(verifyPerPatch({
+      task: task(),
+      before: state([violation()], [node()], [unstable]),
+      after: state([], [node()], [unstable]),
+    })).toMatchObject({ accepted: false, check: "probe" });
+  });
+
   it("rejects a newly introduced violation", () => {
     expect(
       verifyPerPatch({

@@ -13,16 +13,25 @@ export interface EvalCliArgs {
   protocol:string; output:string; split:"dev"|"test"; systems:EvalSystem[];
   seeds?:number[]; repositories?:string[]; caseLimit?:number;
   tempRoot?:string; cacheRoot?:string; authorization?:string;
+  resume?:boolean;
 }
 export function parseEvalArgs(args: readonly string[]): EvalCliArgs {
   const values = new Map<string,string>();
   const allowed = new Set(["--protocol","--output","--split","--systems","--seeds","--repositories","--max-cases","--tmp-root","--cache-root","--authorization"]);
-  for(let index=0;index<args.length;index+=2){
-    const name=args[index],value=args[index+1];
+  for(let index=0;index<args.length;){
+    const name=args[index];
+    if(name==="--resume"){
+      if(values.has(name))throw new Error("Duplicate option: --resume");
+      values.set(name,"true");
+      index+=1;
+      continue;
+    }
+    const value=args[index+1];
     if(!name||!allowed.has(name))throw new Error(`Unknown evaluation argument: ${name ?? "missing"}`);
     if(values.has(name))throw new Error(`Duplicate option: ${name}`);
     if(!value?.trim()||value.startsWith("--"))throw new Error(`Missing value for ${name}`);
     values.set(name,value);
+    index+=2;
   }
   const output=values.get("--output"); if(!output)throw new Error("An explicit --output directory is required");
   const systems=(values.get("--systems")??"deterministic").split(",").map(value=>EvalSystemSchema.parse(value));
@@ -33,6 +42,7 @@ export function parseEvalArgs(args: readonly string[]): EvalCliArgs {
   return {protocol:values.get("--protocol")??"eval/protocol-20261007.json",output,split:z.enum(["dev","test"]).parse(values.get("--split")??"dev"),systems,
     ...(seeds?{seeds}:{}),...(repositories?{repositories}:{}),...(caseLimit===undefined?{}:{caseLimit}),
     ...(values.has("--tmp-root")?{tempRoot:values.get("--tmp-root")}:{}),...(values.has("--cache-root")?{cacheRoot:values.get("--cache-root")}:{}),...(values.has("--authorization")?{authorization:values.get("--authorization")}:{}),
+    ...(values.has("--resume")?{resume:true}:{}),
   };
 }
 
