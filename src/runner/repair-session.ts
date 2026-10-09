@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { partitionRouteScans, validateRouteScanChunk } from "./scan-batches.js";
 import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
@@ -207,11 +208,32 @@ export class DockerRepairSession {
 
   async scan(routes: readonly string[], generation: string): Promise<BrowserObservation[]> {
     const started = Date.now();
-    const output = BrowserScanOutputSchema.parse(await this.browser({ action: "scan", baseUrl, routes: [...routes], generation, mobile: this.config.scan.mobile, dark: this.config.scan.darkScheme, interactions: true }));
-    for (const route of routes) {
-      if (!output.observations.some(page => page.route === route && page.condition === "desktop-light")) throw new Error("The browser omitted a requested route");
-      if (this.config.scan.mobile && !output.observations.some(page => page.route === route && page.condition === "mobile-light")) throw new Error("The browser omitted a requested mobile scan");
+    const chunks = partitionRouteScans(routes, 6);
+    const observations: BrowserObservation[] = [];
+    for (const [index, chunk] of chunks.entries()) {
+      const chunkStarted = Date.now();
+      try {
+        const part = BrowserScanOutputSchema.parse(await this.browser({
+          action: "scan", baseUrl, routes: chunk, generation,
+          mobile: this.config.scan.mobile, dark: this.config.scan.darkScheme, interactions: true,
+        }));
+        validateRouteScanChunk(chunk, part.observations, this.config.scan.mobile);
+        observations.push(...part.observations);
+        await this.recordStep("scan-batch", "ok", chunkStarted, {
+          generation, batch: index, totalBatches: chunks.length, routeCount: chunk.length,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "unknown";
+        await this.recordStep("scan-batch", "error", chunkStarted, {
+          generation, batch: index, totalBatches: chunks.length, routeCount: chunk.length,
+          errorClass: error instanceof Error ? error.name : "unknown",
+          diagnostic: createHash("sha256").update(message).digest("hex").slice(0, 16),
+        });
+        throw new Error("Isolated browser route batch failed; its incomplete scan cannot be accepted", { cause: error });
+      }
     }
+    const output = BrowserScanOutputSchema.parse({ observations });
+    validateRouteScanChunk(routes, output.observations, this.config.scan.mobile);
     await this.sandbox.syncEvidence(output.observations.flatMap(page => [page.screenshot, ...page.contexts.map(context => context.screenshot)].filter((name): name is string => name !== null)));
     await recordPrivateScan(this.evidenceDir, generation, output.observations, this.retainEvidence);
     await this.recordStep("scan", "ok", started, { routeCount: routes.length, observationCount: output.observations.length, generation });
