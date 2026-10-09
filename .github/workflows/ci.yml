@@ -51,6 +51,14 @@ jobs:
         run: npm run check
       - name: Run deterministic unit and integration-boundary tests
         run: npm test -- --maxWorkers=2
+      - name: Install locked hosted dashboard dependencies
+        run: npm ci --prefix app --ignore-scripts --no-audit --no-fund
+      - name: Check and build the operator dashboard
+        run: |
+          npm run check --prefix app
+          npm run build --prefix app
+      - name: Smoke test private dashboard HTTP authentication
+        run: npm run test:smoke --prefix app
 
   browser:
     needs: checks
