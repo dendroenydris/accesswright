@@ -31,6 +31,7 @@ import { EvalCellSchema, aggregateEvaluation, renderEvaluationReport } from "./r
 import type { EvalCell } from "./report.js";
 import { fetchPinnedRepository } from "./repository.js";
 import { evalCellFileName, evalReferenceFileName, loadEvalResumeState } from "./resume.js";
+import { verifyFrozenReferenceSource } from "./reference-reuse.js";
 import type { EvalReference } from "./resume.js";
 
 export interface EvalSelection {
@@ -249,12 +250,25 @@ export async function runEvaluation(options: EvalRunOptions) {
           .every((_, batch) => selection.systems.every(system => alreadyStored(repository, system, seed, batch))))
       : selection.seeds.every(seed => selection.systems.every(system => alreadyStored(repository, system, seed, 0)));
     if (options.resume && allExpectedCellsPresent) {
+      if (existingReference) {
+        const pinned = options.fixtureRoots?.[repository.repository] ??
+          await fetchPinnedRepository(options.cacheRoot,repository.repository,repository.sha);
+        await verifyFrozenReferenceSource(pinned, existingReference, protocol.operators);
+      }
       options.onProgress?.({ repository:repository.repository, phase:"resumed-complete" });
       continue;
     }
     let original: DockerRepairSession | undefined;
     let sourceRoot: string;
     let rendered: ReturnType<typeof freezeRenderedCases>;
+    if (existingReference) {
+      options.onProgress?.({ repository:repository.repository, phase:"reuse-original-reference" });
+      sourceRoot = options.fixtureRoots?.[repository.repository] ?? await fetchPinnedRepository(options.cacheRoot,repository.repository,repository.sha);
+      // Any source/AST mismatch invalidates the entire resume, never a benign blocked cell.
+      await verifyFrozenReferenceSource(sourceRoot, existingReference, protocol.operators);
+      rendered = existingReference.rendered;
+      if (!rendered.eligible.length) throw new Error("Cannot resume an empty original reference");
+    } else {
     options.onProgress?.({ repository:repository.repository, phase:"prepare-original" });
     try {
       sourceRoot = options.fixtureRoots?.[repository.repository] ?? await fetchPinnedRepository(options.cacheRoot,repository.repository,repository.sha);
@@ -266,15 +280,9 @@ export async function runEvaluation(options: EvalRunOptions) {
         mutations.push(...generated.filter(mutation => protocol.operators.includes(mutation.operator)));
       }
       rendered = freezeRenderedCases(mutations,original.observations);
-      if (existingReference) {
-        if (JSON.stringify(existingReference.rendered) !== JSON.stringify(rendered)) {
-          throw new Error("Frozen rendered reference changed during resumed evaluation");
-        }
-      } else {
-        await writeFile(join(options.outputDir, evalReferenceFileName(repository.repository)),
-          JSON.stringify({ repository, rendered, implementationDigest:implementation },null,2),
-          {flag:"wx",mode:0o600});
-      }
+      await writeFile(join(options.outputDir, evalReferenceFileName(repository.repository)),
+        JSON.stringify({ repository, rendered, implementationDigest:implementation },null,2),
+        {flag:"wx",mode:0o600});
       if (!rendered.eligible.length) throw new UnsupportedRepositoryError("No originally clean rendered targets are eligible",original.evidenceDir);
     } catch (error) {
       for (const seed of selection.seeds) for (const system of selection.systems) {
@@ -284,6 +292,7 @@ export async function runEvaluation(options: EvalRunOptions) {
       }
       continue;
     } finally { if (original) await original.close(); }
+    }
     for (const seed of selection.seeds) {
       const batches = planCaseBatches(rendered.eligible,seed,maximum);
       for (const [batch,candidates] of batches.entries()) {
