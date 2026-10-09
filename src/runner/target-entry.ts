@@ -10,6 +10,7 @@ import { PackageManifestSchema, checkFailureIds, productionCheckPlan } from "./p
 import type { ProductionCheckResult } from "./production-checks.js";
 import { TargetCommandSchema, targetProcessEnvironment } from "./session-protocol.js";
 import { hasStaticExport } from "./static-export-server.js";
+import { targetServerCommand } from "./server-plan.js";
 
 await access("/.dockerenv");
 if (process.platform !== "linux" || process.env.ACCESSWRIGHT_ISOLATED_TARGET !== "1") throw new Error("Target execution requires an explicitly isolated Docker process");
@@ -51,13 +52,10 @@ if (command.action === "inspect") {
 } else if (command.action === "start") {
   await stopServer();
   const manifest = PackageManifestSchema.parse(JSON.parse(await readFile(join(workspace, "package.json"), "utf8")));
-  if (command.mode === "dev" && !manifest.scripts.dev) throw new Error("A development server script is required");
   const staticMode = command.mode === "production" && await hasStaticExport(workspace);
   const argv = staticMode
     ? ["node", "/accesswright/dist/src/runner/static-export-server.js", String(defaults.targetPort)]
-    : command.mode === "dev" ? ["npm", "run", "dev", "--", "--hostname", "0.0.0.0", "--port", String(defaults.targetPort)]
-    : manifest.scripts.start ? ["npm", "run", "start", "--", "--hostname", "0.0.0.0", "--port", String(defaults.targetPort)]
-    : ["node", "node_modules/next/dist/bin/next", "start", "--hostname", "0.0.0.0", "--port", String(defaults.targetPort)];
+    : targetServerCommand(command.mode, manifest.scripts, defaults.targetPort);
   const executable = argv[0];
   if (executable === undefined) throw new Error("No target executable");
   const log = await open("/tmp/accesswright/server.log", "w");
