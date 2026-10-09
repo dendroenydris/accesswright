@@ -76,6 +76,16 @@ ACCESSWRIGHT_TMP_ROOT=/tmp/accesswright/integration-20261007 npm run mcp -- --re
 
 `scan` freezes a sanitized source snapshot and genuine browser/axe and production baselines in isolated Docker containers. The coding agent edits its own checkout; `verify` uses an exact session/task ID to check the source diff against that baseline, run the existing per-patch anti-gaming verifier, and rerun the full production gate. Concurrent changes to the checkout invalidate the result. `close` cleans run-scoped resources. MCP never writes the developer checkout, makes paid provider calls, or publishes PRs. Source and screenshots remain local, with private evidence removed by default. This is not a hosted service or a published npm package.
 
+## Hosted App service core (local verification only)
+
+The local Hosted service modules now include a signed GitHub webhook receiver with installation allowlisting, delivery/comment deduplication and bounded HTTP transport; a run-token-authenticated model patch endpoint; and an aggregate-results state machine for `POST /runs/{id}/results`, `POST /runs/{id}/finish` and authenticated `GET /runs/{id}/status`. The target runner receives only a scoped per-run token, never provider or GitHub credentials.
+
+Submitting a job's own success report **does not authorize a PR**. The finish gate requires all four real production checks, exact verified fix IDs, reconciled usage, and a separately trusted verifier receipt matching the report digest and a pinned base SHA. Its only automatic successful state is `ready-for-review`; there is no cloud publishing in this local implementation. Run metadata intentionally omits raw source, screenshots and prompt text.
+
+The service now has separate **Cloud Tasks REST** and **Firestore REST** adapters, both validated with exact-request, duplicate-delivery and optimistic-concurrency tests; Firestore stores only bounded aggregate run metadata, never source or prompts. The webhook can enqueue an OIDC-authenticated task through the Cloud Tasks adapter, and a second service instance can recover a submitted run through Firestore and complete the trusted-receipt check. Production infrastructure credentials are injected by trusted workload identity, not read from an untrusted repository. No GCP API requests or billable resources were created in these tests.
+
+**Not deployment-ready:** live Cloud Tasks/Firestore IAM and service ingress have not been verified. Durable webhook deduplication beyond the queue retention window, per-run token registration across service restarts, actual Cloud Run Jobs dispatch and ephemeral runner, independently produced trusted verifier receipts, Next.js dashboard, release workflow, alerts and the planned operations period are still missing. The current code must not be deployed or described as a completed Hosted App.
+
 ## Security and privacy
 
 Target source executes only in an isolated application container. The trusted browser is a separate container; the application cannot write browser evidence or access the Docker socket. The model and GitHub credentials remain in the coordinator. Source snapshots exclude Git metadata, environment files, package-manager credentials, private-key files, dependency directories, and symbolic links. Model patches cannot edit manifests, lockfiles, build configuration, or workflows.
@@ -97,6 +107,17 @@ To continue an interrupted run, repeat its *identical* command with `--resume` a
 Evaluation outputs carry both the frozen protocol digest and a digest of an immutable compiled-runtime snapshot stored in the selected output directory. Trusted dependencies are still reused read-only, not duplicated into Docker; changes to that snapshot during a run fail closed without pooling implementations. Live `B1,A1,A` cells additionally require a dated explicit authorization metadata file, current authenticated model availability, pricing, a per-run cap, and a durable cumulative spending ledger. Fake-provider cells are labeled separately and are never pooled with live measurements.
 
 A frozen development deterministic smoke on 2026-10-07 selected four public repositories and produced five eligible seeded cases across three verified-compatible repositories: three semantically correct fixes, two unresolved cases, zero changed clean controls out of 368 observed, and USD 0 model spend. One fourth repository was unsupported because the unmodified production build failed. This `max-cases=2` smoke is **not** the 300-case Track S test result and is not a live B1/A1/A comparison.
+
+## Deutscher technischer Prüfbericht (lokal)
+
+A German-language evidence template is available for an existing **aggregate** run report. It is not a WCAG / EN 301 549 / EAA legal conformity certification. A reviewed list of accepted fix commits is required; missing or contradictory evidence fails closed. The command never contacts a cloud service and refuses to overwrite existing output:
+
+```sh
+npm run build
+npm run evidence:de -- --report /absolute/path/report.json --commits /absolute/path/accepted-commits.json --out /absolute/path/evidence-de.md
+```
+
+The commits file contains an array of objects with only `id` and the 40-character `commit` SHA. The output contains counts, route/condition coverage, unavailable checks, technical references, limitations and mandatory manual-review topics, not raw source code, screenshots or prompts.
 
 ## Verification evidence and limits
 
