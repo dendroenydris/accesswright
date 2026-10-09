@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { resolveEvalSelection, implementationDigest, snapshotCompiledRuntime, classifyOriginalPreparationError } from "../../src/eval/runner.js";
+import { resolveEvalSelection, implementationDigest, snapshotCompiledRuntime, classifyOriginalPreparationError, classifyFinalEvaluationOutcome } from "../../src/eval/runner.js";
 import { UnsupportedRepositoryError } from "../../src/runner/repair-session.js";
 import { EvalProtocolSchema } from "../../src/eval/protocol.js";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -40,6 +40,29 @@ it("freezes compiled evaluation code without copying the dependency tree", async
     await expect(readFile(join(snapshot.path, "node_modules", "large-dependency", "index.js"), "utf8")).rejects.toThrow();
   } finally { await rm(root, { recursive: true, force: true }); await rm(output, { recursive: true, force: true }); }
 });
+it("labels an unpatched production reference drift as blocked without bypassing the final gate", () => {
+  const referenceDrift = classifyFinalEvaluationOutcome({
+    status: "blocked",
+    final: { acceptedFixIds: [], droppedFixIds: ["valid-codemod"], failures: [
+      { check: "violations", id: "color-contrast|/contact|desktop-light|h2" },
+    ] },
+  });
+  expect(referenceDrift.status).toBe("blocked");
+  expect(referenceDrift.reason).toMatch(/unpatched.*baseline|baseline.*unpatched/i);
+  const genuineRegression = classifyFinalEvaluationOutcome({
+    status: "blocked",
+    final: { acceptedFixIds: ["fix-a", "fix-b"], droppedFixIds: [], failures: [
+      { check: "tests", id: "regression" },
+    ] },
+  });
+  expect(genuineRegression.status).toBe("completed");
+  expect(genuineRegression.reason).toMatch(/gate rejected/i);
+  const accepted = classifyFinalEvaluationOutcome({
+    status: "verified", final: { acceptedFixIds: ["fix-a"], droppedFixIds: [], failures: [] },
+  });
+  expect(accepted).toEqual({ status: "completed", reason: null });
+});
+
 it("distinguishes unsupported source baselines from failed Docker/disk/network infrastructure", () => {
   expect(classifyOriginalPreparationError(new UnsupportedRepositoryError(
     "The unmodified production baseline does not build", "/tmp/evidence",

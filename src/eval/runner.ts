@@ -4,6 +4,7 @@ import { basename, join, relative } from "node:path";
 import { z } from "zod";
 import { defaults } from "../config.js";
 import { runRepair } from "../core/repair.js";
+import type { RepairResult } from "../core/repair.js";
 import { AiSdkLlmProvider } from "../llm/ai-sdk-provider.js";
 import type { ModelPricing } from "../llm/ai-sdk-provider.js";
 import { BudgetLedger } from "../llm/budget.js";
@@ -125,6 +126,25 @@ function emptyCell(options: EvalRunOptions, implementation: string, repository: 
     usage: { spentUsd: 0, inputTokens: 0, outputTokens: 0, unknownUsage: false }, controls: { observed: 0, changed: 0, unexpectedEditedFiles: [] }, newViolations: 0, report: null });
 }
 
+/**
+ * A final scan performed with *zero* selected patches can fail the original
+ * production baseline on non-deterministic pages. The verifier must still
+ * reject the fix; the evaluation cannot claim its failures were patch-induced.
+ * Keep the attempted case evidence but classify the cell as blocked.
+ */
+export function classifyFinalEvaluationOutcome(
+  result: Pick<RepairResult, "status" | "final">,
+): { status: "completed" | "blocked"; reason: string | null } {
+  if (result.status === "verified") return { status: "completed", reason: null };
+  if (result.final.acceptedFixIds.length === 0 && result.final.failures.length > 0) {
+    return {
+      status: "blocked",
+      reason: "Unpatched production baseline did not reproduce; final gate held, investigate scan drift before attributing regressions",
+    };
+  }
+  return { status: "completed", reason: "Final gate rejected this fix set" };
+}
+
 async function executeCell(options: EvalRunOptions, runtimeDistRoot: string, base: EvalCell, repoPath: string, candidates: readonly RenderedCase[]): Promise<EvalCell> {
   const started = Date.now();
   const cell = structuredClone(base);
@@ -173,8 +193,9 @@ async function executeCell(options: EvalRunOptions, runtimeDistRoot: string, bas
     cell.report = makeRunReport({ result, startedAt: cell.startedAt, finishedAt: new Date().toISOString(), applied: false, checks: session.finalChecks, usage: budget.snapshot(), unknownUsage: budget.hasUnknownUsage(), providerVerification: cell.providerEvidence,
       scanSummary: summarizeScans(session.productionBaseline, session.finalObservations, session.baselineObservations) });
     await writeFile(join(session.evidenceDir,"report.json"),JSON.stringify(cell.report,null,2));
-    cell.status = "completed";
-    cell.reason = result.status === "blocked" ? "Final gate rejected this fix set" : null;
+    const finalOutcome = classifyFinalEvaluationOutcome(result);
+    cell.status = finalOutcome.status;
+    cell.reason = finalOutcome.reason;
   } catch (error) {
     cell.reason = diagnostic(error);
     cell.status = error instanceof UnsupportedRepositoryError ? "unsupported" : "blocked";
