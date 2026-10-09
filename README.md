@@ -97,6 +97,17 @@ Evaluation outputs carry both the frozen protocol digest and a digest of an immu
 
 A frozen development deterministic smoke on 2026-10-07 selected four public repositories and produced five eligible seeded cases across three verified-compatible repositories: three semantically correct fixes, two unresolved cases, zero changed clean controls out of 368 observed, and USD 0 model spend. One fourth repository was unsupported because the unmodified production build failed. This `max-cases=2` smoke is **not** the 300-case Track S test result and is not a live B1/A1/A comparison.
 
+## Deutscher technischer Prüfbericht (lokal)
+
+A German-language evidence template is available for an existing **aggregate** run report. It is not a WCAG / EN 301 549 / EAA legal conformity certification. A reviewed list of accepted fix commits is required; missing or contradictory evidence fails closed. The command never contacts a cloud service and refuses to overwrite existing output:
+
+```sh
+npm run build
+npm run evidence:de -- --report /absolute/path/report.json --commits /absolute/path/accepted-commits.json --out /absolute/path/evidence-de.md
+```
+
+The commits file contains an array of objects with only `id` and the 40-character `commit` SHA. The output contains counts, route/condition coverage, unavailable checks, technical references, limitations and mandatory manual-review topics, not raw source code, screenshots or prompts.
+
 ## Verification evidence and limits
 
 Development checks on 2026-10-07 include more than 360 passing deterministic/unit tests, an owned Next.js 16 App Router fixture, Next.js 15.5.27 TSX and 16.3.8 JSX Pages Router fixtures with dynamic routes and a controlled HTTP data service, and a Tailwind 4.3.3 runtime-palette fixture. Actual Chromium/axe/ARIA scans cover desktop/mobile conditions. Production checks discard both compiler-breaking patches and patches whose target disappears only in development but returns in production. A compiled CLI rerun makes no duplicate change. A fixed browser soundness set rejected all 8 harmful modifications and accepted all 4 legitimate changes. These are controlled integration cases, not a broad public-repository success rate.

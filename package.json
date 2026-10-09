@@ -18,7 +18,8 @@
     "build:integration": "tsc -p tsconfig.integration.json",
     "test:integration": "npm run build:integration && vitest run --config vitest.integration.config.ts",
     "eval": "node dist/src/eval/cli.js",
-    "mcp": "node dist/src/mcp/server.js"
+    "mcp": "node dist/src/mcp/server.js",
+    "evidence:de": "node dist/src/reporter/evidence-cli-de.js"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.72",
