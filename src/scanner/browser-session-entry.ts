@@ -8,6 +8,7 @@ import { crawlSameOriginPaths } from "../routes/discovery.js";
 import { BrowserCommandSchema, BrowserScanOutputSchema, CrawlOutputSchema } from "../runner/session-protocol.js";
 import { scanBrowserPage } from "./browser-scan.js";
 import { scanConditions } from "./browser-facts.js";
+import { mapRoutesBounded } from "./bounded-routes.js";
 import type { BrowserObservation } from "./observations.js";
 
 await access("/.dockerenv");
@@ -47,8 +48,10 @@ if (command.action === "ready") {
         console.log(JSON.stringify(CrawlOutputSchema.parse({ paths })));
       } finally { await context.close(); }
     } else {
-      const observations: BrowserObservation[] = [];
-      for (const route of command.routes) {
+      // Independent routes can scan in parallel; each route's conditions
+      // remain sequential and all contexts finish before output is accepted.
+      const observations = (await mapRoutesBounded(command.routes, 2, async route => {
+        const routeObservations: BrowserObservation[] = [];
         let darkSupported = false;
         for (const condition of scanConditions({ mobile: command.mobile, darkScheme: command.dark })) {
           if (condition === "desktop-dark" && !darkSupported) continue;
@@ -62,10 +65,11 @@ if (command.action === "ready") {
             const result = await scanBrowserPage(page, { route, condition, generation: command.generation, evidenceDir: "/evidence", interactionProbes: command.interactions });
             result.probeFailures.push(...runtimeFailures);
             if (condition === "desktop-light") darkSupported = result.darkMediaDetected;
-            observations.push(result);
+            routeObservations.push(result);
           } finally { await context.close(); }
         }
-      }
+        return routeObservations;
+      })).flat();
       console.log(JSON.stringify(BrowserScanOutputSchema.parse({ observations })));
     }
   } finally { await browser.close(); }
