@@ -156,6 +156,14 @@ export async function runSemanticRepair(
       return { status: "needs-human", reason: "budget", attempts: attempt, lastFailure: "Provider usage is unknown; paid retries are blocked" };
     }
 
+    const settledAuthorization = options.budget.authorize(
+      { estimatedCostUsd: 0, estimatedInputTokens: 0, maxOutputTokens: 0 },
+      options.task.id,
+    );
+    if (!settledAuthorization.allowed) {
+      return { status: "needs-human", reason: "budget", attempts: attempt, lastFailure: settledAuthorization.message };
+    }
+
     if (result.status === "rejected") {
       lastFailure = `${result.reason}: ${result.message}`;
       feedback = lastFailure;

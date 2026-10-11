@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { BudgetLedger } from "../../src/llm/budget.js";
 import { LlmClient } from "../../src/llm/client.js";
@@ -242,6 +242,28 @@ describe("runSemanticRepair", () => {
       reason: "retry-exhausted",
       attempts: 3,
     });
+  });
+
+  it.each([
+    { label: "cost", usage: { inputTokens: 300, outputTokens: 80, costUsd: 1.01 } },
+    { label: "tokens", usage: { inputTokens: 4_950, outputTokens: 80, costUsd: 0.004 } },
+  ])("rejects an actual $label overshoot before verifying even the last attempt", async ({ usage }) => {
+    const provider = new FakeLlmProvider([{ object: patch(), usage }]);
+    const ledger = budget();
+    const verifyPatch = vi.fn(() => Promise.resolve({ accepted: true as const }));
+
+    const result = await runSemanticRepair({
+      client: new LlmClient(provider), budget: ledger, task: task(),
+      context: context(), model, estimate, maxAttempts: 1, verifyPatch,
+    });
+
+    expect(result).toMatchObject({ status: "needs-human", reason: "budget", attempts: 1 });
+    expect(verifyPatch).not.toHaveBeenCalled();
+    expect(provider.requests).toHaveLength(1);
+    expect(ledger.snapshot()).toMatchObject({
+      spentUsd: usage.costUsd, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens,
+    });
+    expect(ledger.hasUnknownUsage()).toBe(false);
   });
 
   it("honors a lower explicit attempt limit for bounded live probes", async () => {
