@@ -70,6 +70,7 @@ export class DockerRepairSession {
   private finalSequence = 0;
   private currentFixSet = "";
   private finalResult: FinalVerificationResult | null = null;
+  private sourceChanged = false;
   private readonly privateDiagnostics: boolean;
   private readonly retainEvidence: boolean;
 
@@ -198,6 +199,7 @@ export class DockerRepairSession {
   async readSource(path: string): Promise<string> { return readFile(await resolveSafeSource(this.sourceRoot, path), "utf8"); }
 
   async applyPatch(patch: Patch): Promise<Patch> {
+    this.sourceChanged = true;
     return applyTransferredPatch(this.sourceRoot, patch, async path => {
       await dockerCopy(join(this.sourceRoot, path), this.sandbox.application, `/workspace/${path}`);
       await dockerExec(this.sandbox.application, ["chown", "pwuser:pwuser", `/workspace/${path}`]);
@@ -213,6 +215,7 @@ export class DockerRepairSession {
     for (const [index, chunk] of chunks.entries()) {
       const chunkStarted = Date.now();
       try {
+        if (this.sourceChanged) for (const route of chunk) await this.ready(route);
         const part = BrowserScanOutputSchema.parse(await this.browser({
           action: "scan", baseUrl, routes: chunk, generation,
           mobile: this.config.scan.mobile, dark: this.config.scan.darkScheme, interactions: true,
@@ -237,6 +240,7 @@ export class DockerRepairSession {
     await this.sandbox.syncEvidence(output.observations.flatMap(page => [page.screenshot, ...page.contexts.map(context => context.screenshot)].filter((name): name is string => name !== null)));
     await recordPrivateScan(this.evidenceDir, generation, output.observations, this.retainEvidence);
     await this.recordStep("scan", "ok", started, { routeCount: routes.length, observationCount: output.observations.length, generation });
+    this.sourceChanged = false;
     return output.observations;
   }
 
