@@ -13,6 +13,7 @@ import { hostedReportDigest, InMemoryHostedRunStore } from "../../src/hosted/run
 import { verifyHostedCandidate } from "../../src/hosted/trusted-verifier.js";
 import { DurableSpendLedger } from "../../src/llm/durable-spend.js";
 import { listSnapshotFiles } from "../../src/runner/patch-journal.js";
+import { removePlatformMetadata } from "../../src/sandbox/platform-metadata.js";
 import { createNextIntegrationFixture } from "../fixtures/next-integration.js";
 import { FakeLlmProvider } from "../helpers/fake-provider.js";
 
@@ -36,6 +37,9 @@ it("requires a second real Docker verifier before a private Hosted service accep
     const candidate = await repairRepository({ repoPath, tempRoot: privateTemp, runtimeRoot: process.cwd(), noLlm: true, offline: true, dryRun: true });
     expect(candidate.report).toMatchObject({ status: "verified", fixed: 2, applied: false, providerVerification: "not-run" });
     expect(await readFile(join(repoPath, "components/Controls.tsx"), "utf8")).toBe(original);
+    // The owned fixture may acquire AppleDouble files on macOS volumes; the verifier still requires a clean checkout.
+    await removePlatformMetadata(repoPath);
+    expect(await git(["status", "--porcelain", "--untracked-files=all"])).toBe("");
     const input = { report: candidate.report, patches: candidate.groups.map(group => ({ taskId: group.id, changes: group.changes })) };
     const provider = new FakeLlmProvider([]);
     const ledger = await DurableSpendLedger.initialize(join(root, "spend.json"), { maxUsd: 1, history: [] });
