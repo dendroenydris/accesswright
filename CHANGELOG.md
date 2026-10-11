@@ -16,6 +16,8 @@
 
 ### Added
 
+- Read-only GitHub App source access with installation/owner/repository checks, bounded signed requests and metadata-only revision records.
+- Create-only Firestore original-revision pins shared by source provisioning and independent verification across service restarts.
 - Temporary trusted checkouts with pinned HTTPS Git fetches, scrubbed installation-token runtime configuration, metadata-only records and explicit source erasure.
 - Run-scoped, one-time source download using bounded pinned Git blobs, shared credential exclusions, exclusive materialization and cleanup before candidate transfer.
 - Private candidate task HTTP ingress with distinct OIDC authentication, digest-bound trusted finish, interrupted-upload cleanup and metadata-only step records.
