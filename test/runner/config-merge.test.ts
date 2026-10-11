@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { Project, SyntaxKind } from "ts-morph";
 import { withSourceMapping, instrumentConfigSource } from "../../src/runner/config-merge.js";
 
 const plugins = { turbopack: { "*.tsx": { loaders: ["inspector"], as: "*.js" } }, webpack: { name: "inspector" } };
@@ -41,5 +42,21 @@ describe("sandbox-only instrumentation preserves the original configuration", ()
   });
   it("does not guess when a configuration has no identifiable export", () => {
     expect(() => instrumentConfigSource("const config = {};", "next.config.mjs", true, "16.3.8")).toThrow(/export/i);
+  });
+  it.each([
+    ["next.config.mjs", 'export default function configuration(phase) { return { env: { PHASE: phase } }; }'],
+    ["next.config.mjs", 'const __aw_original_0 = 1, __aw_create_require_0 = 2; export default function(phase) { return { env: { PHASE: phase } }; }'],
+    ["next.config.ts", 'function configuration(phase: string) { return { env: { PHASE: phase } }; } export default configuration;'],
+  ])("emits one default export and preserves function configuration semantics for %s", (file, source) => {
+    const output = instrumentConfigSource(source, file, true, "16.3.8");
+    const parsed = new Project({ useInMemoryFileSystem: true, skipLoadingLibFiles: true }).createSourceFile(file, output);
+    expect(parsed.getFunctions().some(declaration => declaration.getModifiers().some(modifier => modifier.getKind() === SyntaxKind.DefaultKeyword))).toBe(false);
+    expect(parsed.getExportAssignments().filter(assignment => !assignment.isExportEquals())).toHaveLength(1);
+    expect(parsed.getFunctions()[0]?.getBodyText()).toBe("return { env: { PHASE: phase } };");
+    if (source.includes("__aw_original_0")) {
+      expect(output).toContain("const __aw_original_0 = 1, __aw_create_require_0 = 2;");
+      expect(output).toContain("function __aw_original_1(phase)");
+      expect(output).toContain("as __aw_create_require_1");
+    }
   });
 });

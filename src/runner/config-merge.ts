@@ -62,15 +62,15 @@ export function withSourceMapping(original: unknown, plugins: MappingPlugins, ne
 /** Changes a sandbox copy's export expression, preserving relative imports and the original filename. */
 export function instrumentConfigSource(source: string, file: string, esm: boolean, nextVersion: string, inspectorModule = "code-inspector-plugin"): string {
   if (!/^next\.config\.(?:js|mjs|cjs|ts|mts|cts)$/.test(file)) throw new Error("Unsupported Next configuration filename");
-  const project = new Project({ useInMemoryFileSystem: true, skipAddingFilesFromTsConfig: true });
+  const project = new Project({ useInMemoryFileSystem: true, skipAddingFilesFromTsConfig: true, skipLoadingLibFiles: true });
   const parsed = project.createSourceFile(file, source);
   let suffix = 0;
-  while (source.includes(`__aw_mapping_${suffix}`) || source.includes(`__aw_inspector_${suffix}`)) suffix += 1;
+  while (["__aw_mapping", "__aw_inspector", "__aw_original", "__aw_create_require"].some(prefix => source.includes(`${prefix}_${suffix}`))) suffix += 1;
   const wrapper = `__aw_mapping_${suffix}`, inspector = `__aw_inspector_${suffix}`;
   const wrap = (expression: string) => `${wrapper}((${expression}), { turbopack: ${inspector}({ bundler: "turbopack" }), webpack: ${inspector}({ bundler: "webpack" }) }, ${JSON.stringify(nextVersion)})`;
   if (esm) {
     const assignments = parsed.getExportAssignments().filter(item => !item.isExportEquals());
-    const declarations = parsed.getFunctions().filter(item => item.isDefaultExport());
+    const declarations = parsed.getFunctions().filter(item => item.hasModifier("default"));
     if (assignments.length === 1 && declarations.length === 0) {
       const assignment = assignments[0];
       if (!assignment) throw new Error("Missing default export");
@@ -80,7 +80,8 @@ export function instrumentConfigSource(source: string, file: string, esm: boolea
       if (!declaration) throw new Error("Missing default function export");
       if (!declaration.getName()) declaration.set({ name: `__aw_original_${suffix}` });
       const name = declaration.getNameOrThrow();
-      declaration.setIsDefaultExport(false);
+      // Only syntax is needed; symbol lookup misses .mjs exports and builds a type checker.
+      declaration.toggleModifier("default", false).toggleModifier("export", false);
       parsed.addExportAssignment({ isExportEquals: false, expression: wrap(name) });
     } else throw new Error("Configuration needs one identifiable default export");
     parsed.insertStatements(0, `import { withSourceMapping as ${wrapper} } from "/accesswright/dist/src/runner/config-merge.js";\nimport { createRequire as __aw_create_require_${suffix} } from "node:module";\nconst { codeInspectorPlugin: ${inspector} } = __aw_create_require_${suffix}(import.meta.url)(${JSON.stringify(inspectorModule)});`);

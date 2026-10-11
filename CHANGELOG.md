@@ -29,6 +29,7 @@
 
 ### Fixed
 
+- Preserved exactly one default export while instrumenting function-based Next.js configuration and avoided generated-name collisions.
 - Rejected development-only repairs whose original target still fails or is inconclusive after the production build.
 - Reused read-only host runtime mounts on macOS by default instead of silently duplicating dependencies into Docker storage.
 - Preserved cumulative model-spend reservations across restarts and retained unknown usage conservatively.
