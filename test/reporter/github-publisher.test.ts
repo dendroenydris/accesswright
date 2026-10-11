@@ -25,6 +25,14 @@ class FixtureApi {
   headReads = 0;
   writes = 0;
   extraOrphanFile = false;
+  webFlow = false;
+  authorLogin: string | null = "github-actions[bot]";
+  verification: { verified: boolean; reason: string } | undefined;
+  private commit(message: string) {
+    return { sha: existingHead, parents: [{ sha: base }], commit: { message, ...(this.verification === undefined ? {} : { verification: this.verification }) },
+      committer: { login: this.human ? "human" : this.webFlow ? "web-flow" : "github-actions[bot]" },
+      author: this.authorLogin === null ? null : { login: this.authorLogin } };
+  }
   request: GitHubRequest = (method, path, body) => {
     this.calls.push({ method, path, body });
     if (method !== "GET") this.writes += 1;
@@ -35,9 +43,9 @@ class FixtureApi {
       return Promise.resolve(this.branchHead === null ? null : { object: { sha: this.race && this.headReads > 1 ? "c".repeat(40) : this.branchHead } });
     }
     if (relative.startsWith("/pulls?") && method === "GET") return Promise.resolve(this.existing ? [{ number: 7, body: "Human introduction.\n", head: { sha: existingHead, ref: fixBranchName("main"), repo: { full_name: "owner/repo" } } }] : []);
-    if (relative.startsWith("/pulls/7/commits?")) return Promise.resolve([{ sha: existingHead, parents: [{ sha: base }], commit: { message: this.human ? "Human change" : "fix: verified repair\n\nAccesswright-Verified-Fix: fixture" }, committer: { login: this.human ? "human" : "github-actions[bot]" } }]);
+    if (relative.startsWith("/pulls/7/commits?")) return Promise.resolve([this.commit(this.human ? "Human change" : "fix: verified repair\n\nAccesswright-Verified-Fix: fixture")]);
     if (relative.startsWith("/compare/")) return Promise.resolve({ status: "ahead", total_commits: 1, merge_base_commit: { sha: base },
-      commits: [{ sha: existingHead, parents: [{ sha: base }], committer: { login: this.human ? "human" : "github-actions[bot]" }, commit: { message: `fix: verified repair\n\nAccesswright-Verified-Fix: ${createHash("sha256").update("fix-1").digest("hex")}` } }],
+      commits: [this.commit(`fix: verified repair\n\nAccesswright-Verified-Fix: ${createHash("sha256").update("fix-1").digest("hex")}`)],
       files: [{ filename: this.extraOrphanFile ? "unverified.ts" : "components/Button.tsx", status: "modified" }] });
     if (relative.startsWith("/git/commits/") && method === "GET") return Promise.resolve({ sha: relative.slice("/git/commits/".length), tree: { sha: "d".repeat(40) } });
     if (relative.startsWith("/git/trees/") && method === "GET") return Promise.resolve({ truncated: false, tree: [...this.files.keys()].map(path => ({ path, mode: "100644", type: "blob" })) });
@@ -85,6 +93,31 @@ describe("verified GitHub publication boundary", () => {
     const result = await publishVerifiedPullRequest(api.request, input);
     expect(result).toMatchObject({ status: "created", number: 8, commits: [] });
     expect(api.calls.filter(call => call.method !== "GET").map(call => call.path)).toEqual(["/repos/owner/repo/pulls"]);
+  });
+  it("recovers a GitHub-signed bot orphan and recognizes its existing PR without duplicate writes", async () => {
+    const api = new FixtureApi(); api.webFlow = true; api.verification = { verified: true, reason: "valid" };
+    api.branchHead = existingHead; api.files.set("components/Button.tsx", "after\n");
+    expect(await publishVerifiedPullRequest(api.request, input)).toMatchObject({ status: "created", commits: [] });
+    expect(api.calls.filter(call => call.method !== "GET").map(call => call.path)).toEqual(["/repos/owner/repo/pulls"]);
+    const existing = new FixtureApi(); existing.webFlow = true; existing.verification = { verified: true, reason: "valid" };
+    existing.existing = true; existing.branchHead = existingHead; existing.files.set("components/Button.tsx", "after\n");
+    expect(await publishVerifiedPullRequest(existing.request, input)).toMatchObject({ status: "unchanged", commits: [] });
+    expect(existing.writes).toBe(0);
+  });
+  it.each([
+    { author: "human", verification: { verified: true, reason: "valid" } },
+    { author: null, verification: { verified: true, reason: "valid" } },
+    { author: "github-actions[bot]", verification: undefined },
+    { author: "github-actions[bot]", verification: { verified: false, reason: "valid" } },
+    { author: "github-actions[bot]", verification: { verified: true, reason: "unknown_key" } },
+  ])("preserves web-flow commits with unmatched authors or unverified signatures: $author/$verification", async ({ author, verification }) => {
+    for (const existing of [false, true]) {
+      const api = new FixtureApi(); api.webFlow = true; api.authorLogin = author; api.verification = verification;
+      api.existing = existing; api.branchHead = existingHead; api.files.set("components/Button.tsx", "after\n");
+      if (existing) expect(await publishVerifiedPullRequest(api.request, input)).toMatchObject({ status: "preserved-human" });
+      else await expect(publishVerifiedPullRequest(api.request, input)).rejects.toThrow(/unowned|preserved/);
+      expect(api.writes).toBe(0);
+    }
   });
   it("does not adopt an orphan branch with a human commit or extra unverified file", async () => {
     const human = new FixtureApi(); human.branchHead = existingHead; human.human = true;

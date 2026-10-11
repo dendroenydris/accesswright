@@ -88,7 +88,7 @@ export function parseActionEnvironment(env: Readonly<Record<string, string | und
 export function actionFailureMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : "unknown";
   const diagnostic = createHash("sha256").update(message).digest("hex").slice(0, 16);
-  const known = /^GitHub (GET|POST|PATCH) failed with HTTP [1-5][0-9]{2}$/.test(message) ? ` ${message}.` : "";
+  const known = /^GitHub (GET|POST|PATCH) failed with HTTP [1-5][0-9]{2}$/.test(message) || message === "An unowned orphan branch was preserved" ? ` ${message}.` : "";
   return `Accesswright Action failed; diagnostic ${diagnostic}.${known} No unverified repair is authorized for publication.`;
 }
 

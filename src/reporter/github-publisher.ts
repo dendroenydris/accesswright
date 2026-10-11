@@ -6,6 +6,17 @@ export type GitHubRequest = (method: "GET" | "POST" | "PATCH", path: string, bod
 const sha = z.string().regex(/^[a-f0-9]{40}$/);
 const refSchema = z.object({ object: z.object({ sha }) });
 const commitSchema = z.object({ sha, tree: z.object({ sha }) });
+const listedCommitSchema = z.object({
+  sha, parents: z.array(z.object({ sha })),
+  commit: z.object({ message: z.string(), verification: z.object({ verified: z.boolean(), reason: z.string() }).optional() }),
+  committer: z.object({ login: z.string() }).nullable(), author: z.object({ login: z.string() }).nullable().optional(),
+});
+
+function madeByActor(commit: z.infer<typeof listedCommitSchema>, actor: string): boolean {
+  // GitHub signs API-created bot commits using its web-flow committer identity.
+  return commit.committer?.login === actor || (commit.committer?.login === "web-flow" && commit.author?.login === actor &&
+    commit.commit.verification?.verified === true && commit.commit.verification.reason === "valid");
+}
 const resultSchema = z.object({ number: z.number().int().positive(), html_url: z.string().url() });
 const pullSchema = z.object({ number: z.number().int().positive(), body: z.string().nullable(), head: z.object({ sha, ref: z.string(), repo: z.object({ full_name: z.string() }).nullable() }) });
 const sourcePath = z.string().max(1024).refine(path => {
@@ -68,8 +79,7 @@ function managedBody(previous: string | null, report: string, base: string): str
 
 /** Recover only a fully attributable, linear branch containing exactly this run's source scope. */
 async function inspectOrphan(request: GitHubRequest, root: string, input: PublishInput, head: string): Promise<void> {
-  const commit = z.object({ sha, parents: z.array(z.object({ sha })), commit: z.object({ message: z.string() }), committer: z.object({ login: z.string() }).nullable() });
-  const schema = z.object({ status: z.literal("ahead"), total_commits: z.number().int().positive().max(1000), merge_base_commit: z.object({ sha }), commits: z.array(commit).max(100), files: z.array(z.object({ filename: z.string(), status: z.string() })).optional() });
+  const schema = z.object({ status: z.literal("ahead"), total_commits: z.number().int().positive().max(1000), merge_base_commit: z.object({ sha }), commits: z.array(listedCommitSchema).max(100), files: z.array(z.object({ filename: z.string(), status: z.string() })).optional() });
   const allowedPaths = new Set(input.groups.flatMap(group => group.changes.map(change => change.path)));
   const allowedGroups = new Set(input.groups.map(group => createHash("sha256").update(group.id).digest("hex")));
   let parent = input.verifiedBaseSha, count = 0, expectedCount = 0;
@@ -80,7 +90,7 @@ async function inspectOrphan(request: GitHubRequest, root: string, input: Publis
     if (page === 1 && (!response.files?.length || response.files.length > 64 || response.files.some(file => file.status !== "modified" || !allowedPaths.has(file.filename)))) throw new Error("Unverified orphan source scope was preserved");
     for (const item of response.commits) {
       const marker = /^Accesswright-Verified-Fix: ([a-f0-9]{64})$/m.exec(item.commit.message)?.[1];
-      if (item.committer?.login !== input.actorLogin || item.parents.length !== 1 || item.parents[0]?.sha !== parent || !marker || !allowedGroups.has(marker)) throw new Error("An unowned orphan branch was preserved");
+      if (!madeByActor(item, input.actorLogin) || item.parents.length !== 1 || item.parents[0]?.sha !== parent || !marker || !allowedGroups.has(marker)) throw new Error("An unowned orphan branch was preserved");
       parent = item.sha; count += 1;
     }
     if (count === expectedCount) break;
@@ -110,13 +120,12 @@ export async function publishVerifiedPullRequest(request: GitHubRequest, raw: un
   let head = await readRef(branch);
   if (existing !== null) {
     if (existing.head.ref !== branch || existing.head.repo?.full_name !== input.repository || existing.head.sha !== head) throw new Error("Existing PR and branch identity do not agree");
-    const listedCommit = z.object({ sha, parents: z.array(z.object({ sha })), commit: z.object({ message: z.string() }), committer: z.object({ login: z.string() }).nullable() });
     let count = 0;
     for (let page = 1; ; page += 1) {
       if (page > 10) throw new Error("PR commit inspection exceeded its explicit limit");
-      const commits = z.array(listedCommit).max(100).parse(await request("GET", `${root}/pulls/${existing.number}/commits?per_page=100&page=${page}`));
+      const commits = z.array(listedCommitSchema).max(100).parse(await request("GET", `${root}/pulls/${existing.number}/commits?per_page=100&page=${page}`));
       count += commits.length;
-      if (commits.some(commit => commit.committer?.login !== input.actorLogin || commit.parents.length !== 1 || !/^Accesswright-Verified-Fix: [a-zA-Z0-9_-]+$/m.test(commit.commit.message))) {
+      if (commits.some(commit => !madeByActor(commit, input.actorLogin) || commit.parents.length !== 1 || !/^Accesswright-Verified-Fix: [a-zA-Z0-9_-]+$/m.test(commit.commit.message))) {
         return { ...unchanged, status: "preserved-human", number: existing.number, url: `https://github.com/${input.repository}/pull/${existing.number}` };
       }
       if (commits.length < 100) break;

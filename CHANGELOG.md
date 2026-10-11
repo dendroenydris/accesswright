@@ -60,6 +60,8 @@
 
 ### Fixed
 
+- Recognized GitHub-signed web-flow commits authored by the expected bot during verified PR recovery and duplicate-run checks, retaining human-commit protection.
+- Identified preserved unattributable repair branches in Action errors without exposing arbitrary diagnostics.
 - Recognized installed npm command symlinks and mounted complete hoisted runtime dependencies without substituting module versions.
 - Docker repairs on Next.js 12-14 no longer time out after a patch: webpack dev watchers could read a copied file before ownership was transferred, cache EACCES, and never recompile. Ownership transfer now also refreshes the file mtime.
 - Excluded macOS transport sidecars from lint discovery and removed only verified untracked AppleDouble bytes in a newly owned pinned fetch.

@@ -71,6 +71,8 @@ A model configuration additionally specifies `provider`, the exact model `id`, a
 
 ## Backlog and PR-mode GitHub Action
 
+Backlog publication also requires the target repository's **Allow GitHub Actions to create and approve pull requests** setting and explicit workflow `contents: write` and `pull-requests: write` permissions. A disabled repository setting can return HTTP403 after verified repair commits are created. For GitHub's web-flow commits, recovery requires the expected bot author and a valid signature. Every recovery checks exact verified source and branch ownership before opening a missing PR; human or unattributable changes remain preserved.
+
 `action.yml` is the product Action. It checks out the target branch separately, runs target code in Docker, and publishes only the verifier-selected source groups. Use a reviewed immutable Action commit when adopting it. Give the calling workflow only `contents: write` and `pull-requests: write`; trigger backlog mode by `workflow_dispatch` or a schedule, not a privileged pull-request event. The default is `no-llm: 'true'` and `max-cost-usd: '0'`.
 
 `.github/workflows/backlog-integration.yml` is a manual, deterministic product integration test on an existing owned branch. It does not use a model key. Ordinary CI likewise does not call paid models and includes the actual Chromium harmful/legitimate-change verifier sets. No temporary API-key workflow is part of the product.

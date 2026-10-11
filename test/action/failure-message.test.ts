@@ -8,3 +8,8 @@ it("reports a whitelisted HTTP status without exposing response bodies or creden
   expect(message).not.toContain("private response");
   expect(message).not.toContain("secret fixture");
 });
+
+it("identifies an unattributable repair branch while keeping other error text private", () => {
+  expect(actionFailureMessage(new Error("An unowned orphan branch was preserved"))).toContain("An unowned orphan branch was preserved");
+  expect(actionFailureMessage(new Error("An unowned orphan branch was preserved: fixture-secret"))).not.toMatch(/orphan|fixture-secret/);
+});
