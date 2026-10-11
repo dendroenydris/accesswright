@@ -1,7 +1,8 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 
 import { HostedRunWorkflow, InMemoryHostedRunStore } from "../../src/hosted/run-workflow.js";
 import type { RunReport } from "../../src/reporter/report.js";
+import { hostedCandidateFixture } from "../helpers/hosted-candidate.js";
 
 const makeReport = (): RunReport => ({
   schemaVersion: 1,
@@ -91,4 +92,40 @@ it("rejects replayed report changes and unauthorized run tokens before metadata 
   expect(await h.workflow.submitResults("run1", "fixture-token", makeReport())).toMatchObject({ status: "recorded" });
   const changed = makeReport(); changed.fixed = 2;
   await expect(h.workflow.submitResults("run1", "fixture-token", changed)).rejects.toThrow(/conflict|changed/i);
+});
+
+it("excludes finish across replicas while an authenticated repeated candidate is still staging", async () => {
+  const store = new InMemoryHostedRunStore(); const candidate = hostedCandidateFixture();
+  let markEntered: () => void = () => undefined, releaseUpload: () => void = () => undefined;
+  const entered = new Promise<void>(resolve => { markEntered = resolve; });
+  const release = new Promise<void>(resolve => { releaseUpload = resolve; });
+  let privateCandidate = false;
+  const dependencies = { store, authenticate: (runId: string) => ({ runId, repository: "owned/private", installationId: 42 }),
+    receiveCandidate: async () => { markEntered(); await release; privateCandidate = true; },
+    verifyTrustedResult: (_runId: string, reportDigest: string) => {
+      privateCandidate = false; return Promise.resolve({ reportDigest, verifiedBaseSha: "a".repeat(40) });
+    } };
+  const uploader = new HostedRunWorkflow(dependencies), finisher = new HostedRunWorkflow(dependencies);
+  await uploader.submitResults("run1", "fixture", candidate.report);
+  const uploading = uploader.submitCandidate("run1", "fixture", candidate);
+  await entered;
+  const outcome = await finisher.finish("run1", "fixture").then(() => "finished", () => "deferred");
+  releaseUpload(); await uploading;
+  expect(outcome).toBe("deferred");
+  expect(store.get("run1")?.status).toBe("recorded");
+  expect(await finisher.finish("run1", "fixture")).toMatchObject({ status: "ready-for-review" });
+  expect(privateCandidate).toBe(false);
+});
+
+it("preserves a failed initial staging claim across replicas without retrying private writes", async () => {
+  const store = new InMemoryHostedRunStore(); const candidate = hostedCandidateFixture();
+  const receiveCandidate = vi.fn(() => Promise.reject(new Error("uncertain private write")));
+  const verifyTrustedResult = vi.fn(() => Promise.resolve(null));
+  const dependencies = { store, receiveCandidate, verifyTrustedResult,
+    authenticate: (runId: string) => ({ runId, repository: "owned/private", installationId: 42 }) };
+  await expect(new HostedRunWorkflow(dependencies).submitCandidate("run1", "fixture", candidate)).rejects.toThrow("uncertain private write");
+  expect(store.get("run1")?.status).toBe("staging");
+  await expect(new HostedRunWorkflow(dependencies).submitCandidate("run1", "fixture", candidate)).rejects.toThrow(/staging|conflict/i);
+  await expect(new HostedRunWorkflow(dependencies).finish("run1", "fixture")).rejects.toThrow(/staging/i);
+  expect(receiveCandidate).toHaveBeenCalledOnce(); expect(verifyTrustedResult).not.toHaveBeenCalled();
 });

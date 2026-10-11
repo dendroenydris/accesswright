@@ -54,6 +54,8 @@ it("reads only exact run identity and rejects unexpected source payload or wrong
   expect((await api.get("run-a"))?.repository).toBe("owner/private");
   body = doc("run-a", { status: "verifying" });
   expect((await api.get("run-a"))?.status).toBe("verifying");
+  body = doc("run-a", { status: "staging" });
+  expect((await api.get("run-a"))?.status).toBe("staging");
   await expect(api.get("../evil")).rejects.toThrow();
   body = doc("run-other");
   await expect(api.get("run-a")).rejects.toThrow(/identity/);

@@ -98,6 +98,7 @@ export function createHostedRunHandler(workflow: HostedRunWorkflow): RequestList
         else if (error instanceof z.ZodError || error instanceof SyntaxError) send(response, 400, { status: "invalid-request" });
         else if (error instanceof Error && /before finish|not.*submitted/i.test(error.message)) send(response, 409, { status: "run-not-ready" });
         else if (error instanceof Error && /verification.*in progress/i.test(error.message)) send(response, 409, { status: "verification-pending" });
+        else if (error instanceof Error && /staging.*pending/i.test(error.message)) send(response, 409, { status: "candidate-pending" });
         else if (error instanceof Error && /conflict|changed|already exists/i.test(error.message)) send(response, 409, { status: "conflict" });
         else send(response, 503, { status: "unavailable" });
       }

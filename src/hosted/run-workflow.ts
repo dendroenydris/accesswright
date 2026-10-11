@@ -15,7 +15,7 @@ export interface StoredRunResult {
   repository: string;
   installationId: number;
   reportDigest: string;
-  status: "recorded" | "verifying" | "blocked" | "ready-for-review";
+  status: "staging" | "recorded" | "verifying" | "blocked" | "ready-for-review";
   acceptedFixes: number;
   /** Computed after full schema and production gate inspection; raw report is not stored. */
   eligibleForReview: boolean;
@@ -37,7 +37,8 @@ export function ensureHostedRunUpdate(before: StoredRunResult, after: StoredRunR
   if (identity(before) !== identity(after)) throw new Error("Run identity and immutable verification metadata cannot be changed");
   if ((before.status === "blocked" || before.status === "ready-for-review") &&
     (after.status !== before.status || after.verifiedBaseSha !== before.verifiedBaseSha)) throw new Error("Terminal run state cannot be changed");
-  if (before.status === "verifying" && after.status === "recorded") throw new Error("Verification claim cannot be released without trusted reconciliation");
+  if (before.status === "verifying" && (after.status === "recorded" || after.status === "staging")) throw new Error("Verification claim cannot be released without trusted reconciliation");
+  if (before.status === "staging" && after.status !== "staging" && after.status !== "recorded") throw new Error("Candidate staging must complete before verification");
 }
 
 /**
@@ -136,20 +137,25 @@ export class HostedRunWorkflow {
   async submitResults(runId: string, token: string, raw: unknown): Promise<HostedRunTransition> {
     const identity = await this.authenticate(runId, token);
     const report = RunReportSchema.parse(raw);
+    const { stored } = await this.recordReport(identity, report, "recorded");
+    return { runId, status: stored.status };
+  }
+
+  private async recordReport(identity: { runId: string; repository: string; installationId: number }, report: RunReport, status: "staging" | "recorded") {
     const reportDigest = hostedReportDigest(report);
     const existing = await this.dependencies.store.get(identity.runId);
     if (existing) {
       if (existing.reportDigest !== reportDigest ||
         existing.installationId !== identity.installationId ||
         existing.repository !== identity.repository) throw new Error("Conflicting run report changed after first submission");
-      return { runId, status: existing.status };
+      return { stored: existing, inserted: false };
     }
     const failedChecks = report.checks.filter(check => check.status !== "passed" || !check.available)
       .map(check => check.check);
     const stored = await this.dependencies.store.insert({
       ...identity,
       reportDigest,
-      status: "recorded",
+      status,
       acceptedFixes: report.final.acceptedFixIds.length,
       eligibleForReview: eligibleForTrustedVerification(report),
       failedChecks,
@@ -160,19 +166,28 @@ export class HostedRunWorkflow {
     });
     // The raw report, original target reasons and snippets are never retained.
     // A durable store can retain this minimal metadata safely.
-    return { runId, status: stored.status };
+    return { stored, inserted: true };
   }
 
   async submitCandidate(runId: string, token: string, raw: unknown) {
     const identity = await this.authenticate(runId, token);
     const candidate = HostedCandidateSchema.parse(raw);
     if (!this.dependencies.receiveCandidate) throw new Error("Private candidate staging is not configured");
-    const existing = await this.dependencies.store.get(identity.runId);
-    if (existing && (existing.reportDigest !== hostedReportDigest(candidate.report) || existing.repository !== identity.repository ||
-      existing.installationId !== identity.installationId)) throw new Error("Conflicting candidate report");
-    if (existing && existing.status !== "recorded") throw new Error("Candidate submission conflicts with claimed or terminal verification");
+    const { inserted, stored } = await this.recordReport(identity, candidate.report, "staging");
+    let claimed = inserted;
+    if (!inserted) {
+      if (stored.status !== "recorded") throw new Error("Candidate staging conflicts with claimed or terminal verification");
+      await this.dependencies.store.update(runId, current => {
+        claimed = current.status === "recorded";
+        return claimed ? { ...current, status: "staging" } : current;
+      });
+    }
+    if (!claimed) throw new Error("Candidate staging conflicts with claimed or terminal verification");
     await this.dependencies.receiveCandidate(identity.runId, candidate);
-    await this.submitResults(runId, token, candidate.report);
+    await this.dependencies.store.update(runId, current => {
+      if (current.status !== "staging") throw new Error("Candidate staging claim changed");
+      return { ...current, status: "recorded" };
+    });
     return { status: "recorded" as const, runId: identity.runId, candidateDigest: hostedCandidateDigest(candidate) };
   }
 
@@ -194,6 +209,7 @@ export class HostedRunWorkflow {
       return { runId, status: current.status, ...(current.verifiedBaseSha ? { verifiedBaseSha: current.verifiedBaseSha } : {}) };
     }
     if (current.status === "blocked") return { runId, status: "blocked" };
+    if (current.status === "staging") throw new Error("Candidate staging is still pending; interrupted work needs trusted reconciliation");
     if (current.status === "verifying") throw new Error("Trusted verification is already in progress; interrupted work needs trusted reconciliation");
 
     let claimed = false;
@@ -201,7 +217,7 @@ export class HostedRunWorkflow {
       claimed = record.status === "recorded";
       return claimed ? { ...record, status: "verifying" } : record;
     });
-    if (!claimed) throw new Error("Trusted verification is already in progress");
+    if (!claimed) throw new Error("Candidate staging or trusted verification is already in progress");
 
     // Client-submitted report flags never authorize a PR: the trusted verifier
     // must independently confirm the exact digest before review can proceed.

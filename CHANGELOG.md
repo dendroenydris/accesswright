@@ -42,6 +42,7 @@
 
 ### Fixed
 
+- Claimed candidate staging atomically before private writes, preventing finish races and retaining uncertain staging claims across restarts.
 - Rejected semantic patches whose settled cost or task tokens exceed the configured cap, including the last allowed attempt, while retaining known usage.
 - Enforced cumulative Hosted task-token limits across restarts and changed worker task IDs, including image expansion and known actual overshoots.
 - Claimed Hosted finish verification atomically across service replicas; interrupted claims remain pending and terminal decisions cannot be overwritten.

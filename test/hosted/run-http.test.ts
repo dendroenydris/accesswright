@@ -126,16 +126,13 @@ it("authenticates and stages a bounded candidate before acknowledging it, withou
     expect(store.get("run1")).toMatchObject({ status: "recorded" });
     expect(JSON.stringify(store.get("run1"))).not.toContain("private-source-marker");
     expect(verifyTrustedResult).not.toHaveBeenCalled();
-    receiveCandidate.mockRejectedValueOnce(new Error("private-source-marker"));
-    const failed = await fetch(origin + "/runs/run1/candidate", { method: "POST", headers, body: JSON.stringify(candidate) });
-    expect(failed.status).toBe(503); expect(await failed.text()).not.toContain("private-source-marker");
     const changed = structuredClone(candidate); changed.report.usage.spentUsd = 0.1;
     const conflict = await fetch(origin + "/runs/run1/candidate", { method: "POST", headers, body: JSON.stringify(changed) });
-    expect(conflict.status).toBe(409); await conflict.arrayBuffer(); expect(receiveCandidate).toHaveBeenCalledTimes(2);
+    expect(conflict.status).toBe(409); await conflict.arrayBuffer(); expect(receiveCandidate).toHaveBeenCalledTimes(1);
     const ack = { status: "recorded", runId: "run1", candidateDigest: hostedCandidateDigest(candidate) };
     expect(ack.candidateDigest).toHaveLength(64);
     expect(await workflow.finish("run1", "a".repeat(64))).toMatchObject({ status: "blocked" });
     const terminal = await fetch(origin + "/runs/run1/candidate", { method: "POST", headers, body: JSON.stringify(candidate) });
-    expect(terminal.status).toBe(409); await terminal.arrayBuffer(); expect(receiveCandidate).toHaveBeenCalledTimes(2);
+    expect(terminal.status).toBe(409); await terminal.arrayBuffer(); expect(receiveCandidate).toHaveBeenCalledTimes(1);
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
 });

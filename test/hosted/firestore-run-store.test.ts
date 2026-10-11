@@ -4,6 +4,7 @@ import { FirestoreHostedRunStore } from "../../src/hosted/firestore-run-store.js
 import { HostedRunWorkflow } from "../../src/hosted/run-workflow.js";
 import type { StoredRunResult, TrustedRunReceipt } from "../../src/hosted/run-workflow.js";
 import { createFakeFirestore } from "../helpers/fake-firestore.js";
+import { hostedCandidateFixture } from "../helpers/hosted-candidate.js";
 
 const record: StoredRunResult = {
   runId: "run-1",
@@ -132,4 +133,28 @@ it("claims independent verification once across service replicas and retains int
   expect((await f.open().get(interrupted.runId))?.status).toBe("verifying");
   await expect(new HostedRunWorkflow({ ...fail, store: f.open() }).finish(interrupted.runId, "token")).rejects.toThrow(/progress/);
   expect(checks).toBe(2);
+});
+
+it("persists staging exclusion and interrupted private writes across independent service instances", async () => {
+  const f = fixture(); const candidate = hostedCandidateFixture();
+  let calls = 0, markEntered: () => void = () => undefined, releaseUpload: () => void = () => undefined;
+  const entered = new Promise<void>(resolve => { markEntered = resolve; });
+  const release = new Promise<void>(resolve => { releaseUpload = resolve; });
+  const dependencies = { authenticate: (runId: string) => ({ runId, repository: record.repository, installationId: record.installationId }),
+    receiveCandidate: async () => { calls++; markEntered(); await release; },
+    verifyTrustedResult: (_id: string, reportDigest: string) => Promise.resolve({ reportDigest, verifiedBaseSha: "b".repeat(40) }) };
+  const uploading = new HostedRunWorkflow({ ...dependencies, store: f.open() }).submitCandidate("staging-run", "fixture", candidate);
+  await entered;
+  const restarted = new HostedRunWorkflow({ ...dependencies, store: f.open() });
+  try {
+    expect((await f.open().get("staging-run"))?.status).toBe("staging");
+    await expect(restarted.finish("staging-run", "fixture")).rejects.toThrow(/staging/i);
+    await expect(restarted.submitCandidate("staging-run", "fixture", candidate)).rejects.toThrow(/staging|conflict/i);
+    expect(calls).toBe(1);
+  } finally { releaseUpload(); await uploading; }
+  expect(await restarted.finish("staging-run", "fixture")).toMatchObject({ status: "ready-for-review" });
+  const interrupted = { ...dependencies, receiveCandidate: () => { calls++; return Promise.reject(new Error("write uncertain")); } };
+  await expect(new HostedRunWorkflow({ ...interrupted, store: f.open() }).submitCandidate("interrupted-staging", "fixture", candidate)).rejects.toThrow("write uncertain");
+  await expect(new HostedRunWorkflow({ ...interrupted, store: f.open() }).submitCandidate("interrupted-staging", "fixture", candidate)).rejects.toThrow(/staging/i);
+  expect(calls).toBe(2);
 });
