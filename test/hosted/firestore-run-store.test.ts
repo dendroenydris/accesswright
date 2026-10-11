@@ -11,6 +11,7 @@ const record: StoredRunResult = {
   repository: "owner/private-app",
   installationId: 42,
   reportDigest: "a".repeat(64),
+  candidateDigest: null,
   status: "recorded",
   acceptedFixes: 1,
   eligibleForReview: true,
@@ -157,4 +158,19 @@ it("persists staging exclusion and interrupted private writes across independent
   await expect(new HostedRunWorkflow({ ...interrupted, store: f.open() }).submitCandidate("interrupted-staging", "fixture", candidate)).rejects.toThrow("write uncertain");
   await expect(new HostedRunWorkflow({ ...interrupted, store: f.open() }).submitCandidate("interrupted-staging", "fixture", candidate)).rejects.toThrow(/staging/i);
   expect(calls).toBe(2);
+});
+
+it("keeps one candidate identity after restart and rejects clearing or replacing its digest", async () => {
+  const f = fixture(), candidate = hostedCandidateFixture(); let writes = 0;
+  const dependencies = { authenticate: (runId: string) => ({ runId, repository: record.repository, installationId: record.installationId }),
+    receiveCandidate: () => { writes++; return Promise.resolve(); }, verifyTrustedResult: () => Promise.resolve(null) };
+  const ack = await new HostedRunWorkflow({ ...dependencies, store: f.open() }).submitCandidate("run-1", "fixture", candidate);
+  expect(await new HostedRunWorkflow({ ...dependencies, store: f.open() }).submitCandidate("run-1", "fixture", candidate)).toEqual(ack);
+  expect(writes).toBe(1);
+  const changed = structuredClone(candidate); changed.patches[0].changes[0].after += " ";
+  await expect(new HostedRunWorkflow({ ...dependencies, store: f.open() }).submitCandidate("run-1", "fixture", changed)).rejects.toThrow(/conflict/i);
+  await expect(f.open().update("run-1", current => ({ ...current, candidateDigest: null }))).rejects.toThrow(/identity/i);
+  await expect(f.open().update("run-1", current => ({ ...current, candidateDigest: "b".repeat(64) }))).rejects.toThrow(/identity/i);
+  expect(writes).toBe(1);
+  expect((await f.open().get("run-1"))?.candidateDigest).toBe(ack.candidateDigest);
 });

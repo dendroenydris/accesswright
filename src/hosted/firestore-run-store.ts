@@ -10,6 +10,7 @@ const recordSchema = z.object({
   repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
   installationId: z.number().int().positive(),
   reportDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  candidateDigest: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   status: z.enum(["staging", "recorded", "verifying", "blocked", "ready-for-review"]),
   acceptedFixes: z.number().int().nonnegative().max(200),
   eligibleForReview: z.boolean(),

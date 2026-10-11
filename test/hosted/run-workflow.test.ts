@@ -129,3 +129,17 @@ it("preserves a failed initial staging claim across replicas without retrying pr
   await expect(new HostedRunWorkflow(dependencies).finish("run1", "fixture")).rejects.toThrow(/staging/i);
   expect(receiveCandidate).toHaveBeenCalledOnce(); expect(verifyTrustedResult).not.toHaveBeenCalled();
 });
+
+it("acknowledges identical completed transfers without restaging expired private source", async () => {
+  const store = new InMemoryHostedRunStore(), candidate = hostedCandidateFixture();
+  const receiveCandidate = vi.fn(() => Promise.resolve());
+  const dependencies = { store, receiveCandidate, verifyTrustedResult: () => Promise.resolve(null),
+    authenticate: (runId: string) => ({ runId, repository: "owned/private", installationId: 42 }) };
+  const ack = await new HostedRunWorkflow(dependencies).submitCandidate("run1", "fixture", candidate);
+  // A restarted service no longer has the old private staging object.
+  expect(await new HostedRunWorkflow(dependencies).submitCandidate("run1", "fixture", candidate)).toEqual(ack);
+  expect(receiveCandidate).toHaveBeenCalledOnce();
+  const changed = structuredClone(candidate); changed.patches[0].changes[0].after += " ";
+  await expect(new HostedRunWorkflow(dependencies).submitCandidate("run1", "fixture", changed)).rejects.toThrow(/conflict|changed/i);
+  expect(receiveCandidate).toHaveBeenCalledOnce();
+});

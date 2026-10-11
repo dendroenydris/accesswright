@@ -4,6 +4,7 @@
 
 ### Breaking Changes
 
+- Hosted run metadata requires a nullable immutable candidate digest; earlier incomplete records fail validation.
 - Hosted authorization records require a fixed per-task token ceiling and hashed cumulative task usage; earlier incomplete records fail validation.
 - `HostedPatchAgent` requires an explicit provider-evidence classification. Durable authorization records now require settled request and token counters plus a verification seal; earlier records fail validation rather than inferring missing usage.
 - LLM `promptHash` now covers a versioned encoding of text, system instructions, image bytes, media types and image order, rather than text alone.
@@ -43,6 +44,7 @@
 
 ### Fixed
 
+- Prevented repeated completed candidate transfers from restaging expired private source or replacing patches with the same report.
 - Claimed candidate staging atomically before private writes, preventing finish races and retaining uncertain staging claims across restarts.
 - Rejected semantic patches whose settled cost or task tokens exceed the configured cap, including the last allowed attempt, while retaining known usage.
 - Enforced cumulative Hosted task-token limits across restarts and changed worker task IDs, including image expansion and known actual overshoots.

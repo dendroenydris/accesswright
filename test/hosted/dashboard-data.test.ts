@@ -4,6 +4,7 @@ import { FirestoreDashboardReader, workloadAccessToken } from "../../app/lib/run
 
 const base = {
   repository: "owner/private", installationId: 42, reportDigest: "f".repeat(64),
+  candidateDigest: null,
   status: "recorded" as const, acceptedFixes: 0, eligibleForReview: false,
   failedChecks: [] as Array<"build" | "typecheck" | "lint" | "tests">,
   unknownUsage: false, spentUsd: 0, verifiedBaseSha: null,
