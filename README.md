@@ -154,7 +154,7 @@ Model-assisted mode sends bounded source excerpts, deterministic call-site conte
 
 ## Reproducible evaluation
 
-`eval/protocol-20261012.json` freezes the public Next.js corpus (47 repositories: 40 test, 7 dev), exact SHAs, dev/test split, operators, seeds, systems, the 80-case test target, and `gpt-6-luna` high-reasoning configuration. It extends `eval/protocol-20261007.json` (20 repositories, unchanged and still valid for its own results) with repositories drawn alphabetically from the archived candidate pool `eval/candidate-pool-20261012.json`; every examined candidate and its rejection reason is in `eval/candidate-checks-20261012.json`. Results under different protocol digests are not pooled. A zero-cost smoke run is:
+`eval/protocol-20261012.json` freezes the public Next.js corpus (51 repositories: 43 test, 8 dev), exact SHAs, dev/test split, operators, seeds, systems, the 80-case test target, and `gpt-6-luna` high-reasoning configuration. It extends `eval/protocol-20261007.json` (20 repositories, unchanged and still valid for its own results) with repositories drawn alphabetically from the archived candidate pool `eval/candidate-pool-20261012.json` (every examined candidate and its rejection reason is in `eval/candidate-checks-20261012.json`) and with the A11YRepair repositories that pass the same filters (`eval/a11yrepair-sources-20261012.json`). Results under different protocol digests are not pooled. A zero-cost smoke run is:
 
 ```sh
 npm run build

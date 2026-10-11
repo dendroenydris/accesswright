@@ -54,7 +54,7 @@
 
 - npm tarballs contain the compiled runtime and public package documents, excluding development checkouts, fixtures and internal files.
 - Opt-in OpenAI live validation uses the standard local `OPENAI_API_KEY` environment variable instead of the temporary GitHub secret name.
-- Evaluation protocol `eval/protocol-20261012.json` replaces `eval/protocol-20261007.json` as the CLI default: 47 pinned repositories (40 test, 7 dev) instead of 20, and a test target of 80 seeded cases instead of 300, which the 16 original test repositories could not reach (about 2.5 valid unique cases per repository). The original 20 repositories, SHAs and splits are retained; the candidate pool and per-candidate qualification results are archived beside it.
+- Evaluation protocol `eval/protocol-20261012.json` replaces `eval/protocol-20261007.json` as the CLI default: 51 pinned repositories (43 test, 8 dev) instead of 20, and a test target of 80 seeded cases instead of 300, which the 16 original test repositories could not reach (about 2.5 valid unique cases per repository). The original 20 repositories, SHAs and splits are retained, plus four A11YRepair repositories (A11YBench commits or the commit before a merged A11YRepair PR) that pass the same filters. The candidate pool and per-candidate qualification results are archived beside it.
 
 ### Fixed
 

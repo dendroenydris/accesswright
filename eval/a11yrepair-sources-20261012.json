@@ -1,0 +1,1867 @@
+{
+  "observedAt": "2026-10-11T22:37:15.385Z",
+  "sources": {
+    "a11ybench": "A11YBench.csv from A11YRepair artifact https://doi.org/10.6084/m9.figshare.31896229 (60 repositories, pinned commits)",
+    "mergedPullRequests": "GitHub search author:huangkevin-apr type:pr is:merged (A11YRepair upstream PRs, 65 merged); pinned to first parent of each merge commit"
+  },
+  "a11ybench": [
+    {
+      "repository": "microsoft/TypeScript-Website",
+      "sha": "1019cfc8f96ded4729e8ccd342742534a9826a9d",
+      "license": "CC-BY-4.0",
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "golang/website",
+      "sha": "813bcd91713ebf34e38cecaef4ec6d436ba63dbc",
+      "license": "BSD-3-Clause",
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "carbon-design-system/carbon-website",
+      "sha": "345f76143b6dc11a88bd5b9996fa02d34f91f424",
+      "license": "Apache-2.0",
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "gatsby,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "tailwindlabs/tailwindcss.com",
+      "sha": "bb820e4e8be53f0b134dbb33d533a4f62f6155d2",
+      "license": null,
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": "15.3.4",
+      "framework": "next,react",
+      "nextMajor": 15,
+      "eligible": false
+    },
+    {
+      "repository": "pnpm/pnpm.io",
+      "sha": "f09dc5166928d6f13bb3ae02b564eb0007c954b0",
+      "license": "MIT",
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": null,
+      "framework": "@docusaurus/core,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "TheAlgorithms/website",
+      "sha": "3269e4f27ff4ee73b98c43175db0be1ae08b8450",
+      "license": "MIT",
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": "^12.1.0",
+      "framework": "next,react",
+      "nextMajor": 12,
+      "eligible": false
+    },
+    {
+      "repository": "electron/website",
+      "sha": "73179989b3333abbc7b1eb430fceee12ff83a2bc",
+      "license": "Apache-2.0",
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "@docusaurus/core,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "lynx-family/lynx-website",
+      "sha": "85d35dba2f854ac54586d0dfeeddc7d9984265bc",
+      "license": "Apache-2.0",
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": null,
+      "framework": "react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "asyncapi/conference-website",
+      "sha": "cbcdef8623f71a7a95463ab35371da3b279e2b1a",
+      "license": "Apache-2.0",
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": "^15.2.4",
+      "framework": "next,react",
+      "nextMajor": 15,
+      "eligible": true
+    },
+    {
+      "repository": "PostHog/posthog.com",
+      "sha": "e7987eacd4fafddd43e4fa115794816d9d1e774a",
+      "license": "NOASSERTION",
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "gatsby,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "PaperMC/website",
+      "sha": "02ef2e73d509b5b5d19b5d7b90bb1e71adca96e3",
+      "license": "MIT",
+      "lockfiles": [
+        "bun.lock"
+      ],
+      "next": "15.3.5",
+      "framework": "next,react",
+      "nextMajor": 15,
+      "eligible": false
+    },
+    {
+      "repository": "jhipster/jhipster.github.io",
+      "sha": "1b0bbf455f671c8339efbca0363bf3ff8027541f",
+      "license": null,
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "@docusaurus/core,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "open-feature/openfeature.dev",
+      "sha": "2d8195329f6ddebe3f8f2a213c17d23eddebb86b",
+      "license": "CC-BY-4.0",
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "@docusaurus/core,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "jetkvm/website",
+      "sha": "13da75cbcfd9a64d3687de4a278a2f6772babc9d",
+      "license": "GPL-2.0",
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "vite,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "ethereum/esp-website",
+      "sha": "dec7b10a9b6b4c198d9864f6e1608a427247414f",
+      "license": "MIT",
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": "^14.1.0",
+      "framework": "next,react",
+      "nextMajor": 14,
+      "eligible": false
+    },
+    {
+      "repository": "opentofu/opentofu.org",
+      "sha": "0d897761bd1630a591af563209fcf5120d462487",
+      "license": "Apache-2.0",
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "@docusaurus/core,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "usememos/dotcom",
+      "sha": "cd258a5e6e348f8240d3e2a0d04bcf91a265114c",
+      "license": null,
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": "^15.2.1",
+      "framework": "next,react",
+      "nextMajor": 15,
+      "eligible": false
+    },
+    {
+      "repository": "shorebirdtech/website",
+      "sha": "6b74ec9b2ac67b93868c20d62ff4f08ab4bd5bca",
+      "license": "MIT",
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "astro,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "ethereum/nxbn-website",
+      "sha": "51a4d2e415216ea1ac48cdc8b0faeac912454f67",
+      "license": "NOASSERTION",
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": "14.1.0",
+      "framework": "next,react",
+      "nextMajor": 14,
+      "eligible": false
+    },
+    {
+      "repository": "mlflow/mlflow-website",
+      "sha": "c4a3215caac89fbdfff4af7d8ad22a7b87ad51e1",
+      "license": null,
+      "lockfiles": [],
+      "framework": "no root package.json",
+      "eligible": false
+    },
+    {
+      "repository": "facebook/docusaurus",
+      "sha": "0306d182407bb98f140cd5ec7481fa9608fe0297",
+      "license": "MIT",
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "chaos-mesh/website",
+      "sha": "75e1119d4bad73ef00183bfbd38369bd3c0498c4",
+      "license": null,
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": null,
+      "framework": "@docusaurus/core,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "recodehive/recode-website",
+      "sha": "700cf93f076ffd94e500c5cb06ff727ba3bd6821",
+      "license": "MIT",
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "@docusaurus/core,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "reactjs/react.dev",
+      "sha": "84a56968d92b9a9e9bbac1ca13011e159e815dc1",
+      "license": "CC-BY-4.0",
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": "15.1.0",
+      "framework": "next,react",
+      "nextMajor": 15,
+      "eligible": false
+    },
+    {
+      "repository": "babel/website",
+      "sha": "950d49bc78e3bb39af13926f97c046a8aa60e597",
+      "license": "MIT",
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "@docusaurus/core,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "algolia/docsearch",
+      "sha": "85568ce0952007f94e0649d752c25e1c61c36d99",
+      "license": "MIT",
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "jestjs/jest",
+      "sha": "6c6edd894921eb627ded8cae754d91174d1645aa",
+      "license": "MIT",
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "workspaces",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "facebook/react-native-website",
+      "sha": "67ee8dd5eae4bcd2ff9eb43461b6c4a5a44a9211",
+      "license": "MIT",
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "workspaces",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "facebook/relay",
+      "sha": "349f161ff052de21fd0d4e247c93e375eceb6ecc",
+      "license": "MIT",
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "autodesk-platform-services/aps-tutorials-website",
+      "sha": "928b09fb3f38e0e1e20ee5ed841d44c6fc7efd55",
+      "license": "MIT",
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "@docusaurus/core,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "conda/conda-dot-org",
+      "sha": "34055568792ca4b46321c65cc8f479a4c346dfc6",
+      "license": "BSD-3-Clause",
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "@docusaurus/core,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "mui/material-ui",
+      "sha": "3fdcb916348633b8fa15e472391575c165ec2d40",
+      "license": "MIT",
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": null,
+      "framework": "vite",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "ant-design/ant-design",
+      "sha": "14af06c614cc2ebd0d54e9af4d0235a7298ccfcb",
+      "license": "MIT",
+      "lockfiles": [],
+      "next": null,
+      "framework": "react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "prettier/prettier",
+      "sha": "65ad428bcadc68f6975f0f595236fb3455ff7ab8",
+      "license": "MIT",
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "docsifyjs/docsify",
+      "sha": "375c058e3e1b12f3507d97a41b3fd8d6c4e904b0",
+      "license": "MIT",
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "AykutSarac/jsoncrack.com",
+      "sha": "637edb86c04bba0d8a07eec50a0a7ff3a6cd487f",
+      "license": "Apache-2.0",
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": "14.2.28",
+      "framework": "next,react",
+      "nextMajor": 14,
+      "eligible": false
+    },
+    {
+      "repository": "t3-oss/create-t3-app",
+      "sha": "c7bf64fe2169096b2833358331da9cdba72fbbb3",
+      "license": "MIT",
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "CopilotKit/CopilotKit",
+      "sha": "0fb9c76b921f4ca2ccb5a3a681075c4a73e357b0",
+      "license": "MIT",
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "magicuidesign/magicui",
+      "sha": "38aa1901967d0b8d9eb3d4d01c3c49fc5b4779b1",
+      "license": "MIT",
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": "^14",
+      "framework": "next,react",
+      "nextMajor": 14,
+      "eligible": false
+    },
+    {
+      "repository": "JetBrains/kotlin-web-site",
+      "sha": "383f2378bf35011856a740e677135c6935ed43d3",
+      "license": "Apache-2.0",
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": "^13.5.6",
+      "framework": "next,react",
+      "nextMajor": 13,
+      "eligible": false
+    },
+    {
+      "repository": "eden-emulator/eden-emulator.github.io",
+      "sha": "96350bde234b51fa1bba6f0a600b0d6d95243966",
+      "error": "gh: Repository access blocked (HTTP 451)",
+      "eligible": false
+    },
+    {
+      "repository": "neondatabase/website",
+      "sha": "5ad276c593a8a36be10806b5cb999b19299325fb",
+      "license": null,
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": "^14.2.26",
+      "framework": "next,react",
+      "nextMajor": 14,
+      "eligible": false
+    },
+    {
+      "repository": "jscraftcamp/website",
+      "sha": "9b52e2f0f26bd130dcb54f7d81386fb8fa6a9eaa",
+      "license": null,
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": null,
+      "framework": "vite",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "twitter/opensource-website",
+      "sha": "3cbaab4ce35326f10e2e5177f900027d6630fbc9",
+      "license": "Apache-2.0",
+      "lockfiles": [],
+      "framework": "no root package.json",
+      "eligible": false
+    },
+    {
+      "repository": "getredash/website",
+      "sha": "76cd1d1690bfe5418c290e1c7b01b19460e95a27",
+      "license": "BSD-2-Clause",
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "gatsby,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "nf-core/website",
+      "sha": "1ca2bd3dcb87bb678ba41adfe25852793bce17d6",
+      "license": "MIT",
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "workspaces",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "umami-software/website",
+      "sha": "e91273707ce9dc4f3156e5b277f7efabfc1b7948",
+      "error": "gh: Not Found (HTTP 404)",
+      "eligible": false
+    },
+    {
+      "repository": "Milkdown/website",
+      "sha": "6bf22dd9f50be08b8e644deadc5bdd974e35f5a8",
+      "license": "MIT",
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": "15.5.5",
+      "framework": "next,react",
+      "nextMajor": 15,
+      "eligible": true
+    },
+    {
+      "repository": "mldangelo/personal-site",
+      "sha": "7dd01870d57f1561445b588dd29105ceb9b2ee4a",
+      "license": "MIT",
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": "^15.5.2",
+      "framework": "next,react",
+      "nextMajor": 15,
+      "eligible": true
+    },
+    {
+      "repository": "soumyajit4419/Portfolio",
+      "sha": "24d955cf6cd4ce5ff8a9a8071f0c87dfa4aaacec",
+      "license": null,
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "livecoders/website",
+      "sha": "3bcf19024fb7bc31090a34aa2e08295cc1d05878",
+      "license": "MIT",
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "gatsby,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "spring-ai-alibaba/website",
+      "sha": "4928824bd662c5bed75fc404e6d8a0a407d1120f",
+      "license": "Apache-2.0",
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "astro,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "decaporg/decap-website",
+      "sha": "e2894e883386cea617f839d4fdb1a005bc3bf886",
+      "license": null,
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "apache/incubator-seata-website",
+      "sha": "aacd08bd54fb275f2d58d805a1d73a015022d4ce",
+      "license": "Apache-2.0",
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "@docusaurus/core,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "damus-io/website",
+      "sha": "f3f93c2a99b31d95c5984227695ade8478be8c6a",
+      "license": "NOASSERTION",
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": "13.5.4",
+      "framework": "next,react",
+      "nextMajor": 13,
+      "eligible": false
+    },
+    {
+      "repository": "processing/processing-website",
+      "sha": "4bc0ef7b8241d1029bb184944dae0fc8a2463c60",
+      "license": "GPL-2.0",
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "gatsby,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "vuejs/docs",
+      "sha": "31b4521ad0607a74e284fa7c62502b56a7710e86",
+      "license": "NOASSERTION",
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": null,
+      "framework": "vitepress",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "vercel/hyper-site",
+      "sha": "fa4fd463de191d17a1f2e72f86c5adc49ad46160",
+      "license": "MIT",
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": "^13.0.5",
+      "framework": "next,react",
+      "nextMajor": 13,
+      "eligible": false
+    },
+    {
+      "repository": "adobe/adobe-design-website",
+      "sha": "92f9c04e4af8beedccab1aa342b637014802a051",
+      "license": "Apache-2.0",
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "AOSSIE-Org/website",
+      "sha": "dfb866835010885e3f16ad2d955da008e4dfc5ab",
+      "license": "NOASSERTION",
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": "^14.1.3",
+      "framework": "next,react",
+      "nextMajor": 14,
+      "eligible": false
+    }
+  ],
+  "mergedPullRequests": [
+    {
+      "repository": "mitre-attack/attack-website",
+      "pr": 564,
+      "license": "Apache-2.0",
+      "stars": 591,
+      "mergeCommit": "6d31c17a801f8928aabd6eb5742d3e4be2c73c9d",
+      "preMerge": "82830105d7021b25eebe6588a84891c59a1d3ada",
+      "files": [
+        "attack-theme/templates/macros/navigation_menu.html"
+      ],
+      "lockfiles": [],
+      "framework": "no root package.json",
+      "eligible": false
+    },
+    {
+      "repository": "the-programmers-hangout/website",
+      "pr": 472,
+      "license": "MIT",
+      "stars": 108,
+      "mergeCommit": "6402189c48c038d1a49ee4454722dcc79e8e12c9",
+      "preMerge": "892f325c0e985480bbdf487cf411f93cbcc1bc37",
+      "files": [
+        "src/images/jetbrains-logo.tsx"
+      ],
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "gatsby,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "lutris/website",
+      "pr": 750,
+      "license": "AGPL-3.0",
+      "stars": 159,
+      "mergeCommit": "933c56cfeb958f8103be972e884e64a43bc5ab38",
+      "preMerge": "b008cde3f8d2dd2bdb61334cededb4e73a9bc0bd",
+      "files": [
+        "templates/includes/_footer.html"
+      ],
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "caddyserver/website",
+      "pr": 522,
+      "license": null,
+      "stars": 227,
+      "mergeCommit": "d6ba65fe8747490b7af23785c835e21f4ee7bb54",
+      "preMerge": "378d6d0ace34f8647d93f7e135b7c000898ef6bc",
+      "files": [
+        "src/index.html"
+      ],
+      "lockfiles": [],
+      "framework": "no root package.json",
+      "eligible": false
+    },
+    {
+      "repository": "OpenHands/OpenHands",
+      "pr": 12728,
+      "license": "MIT",
+      "stars": 90607,
+      "mergeCommit": "8cd8c011b25f69c2a1554afc93d81fae91787061",
+      "preMerge": "5c68b1098390d79d4ad2188adefcef747f468dd9",
+      "files": [
+        "frontend/src/components/features/sidebar/sidebar.tsx",
+        "frontend/src/i18n/declaration.ts",
+        "frontend/src/i18n/translation.json"
+      ],
+      "lockfiles": [],
+      "framework": "no root package.json",
+      "eligible": false
+    },
+    {
+      "repository": "apache/apisix-website",
+      "pr": 1985,
+      "license": "Apache-2.0",
+      "stars": 146,
+      "mergeCommit": "608a2eb647f3d74d4d5680edea2597b1e4b57496",
+      "preMerge": "f2c8a6bbf3360a680c2a8e20b8b262507bec5706",
+      "files": [
+        "website/src/components/sections/Comparison.tsx"
+      ],
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "apache/doris-website",
+      "pr": 3327,
+      "license": "Apache-2.0",
+      "stars": 135,
+      "mergeCommit": "7728e7046417935e34541b16c5cafa1e65fee415",
+      "preMerge": "ed8504d071ccbb55ac1742e135cc93aa41c9a872",
+      "files": [
+        "src/components/Icons/github.tsx",
+        "src/components/Icons/linkedin.tsx",
+        "src/components/Icons/mail.tsx",
+        "src/components/Icons/medium.tsx",
+        "src/components/Icons/slack.tsx",
+        "src/components/Icons/twitter.tsx",
+        "src/components/Icons/youtube.tsx"
+      ],
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "@docusaurus/core,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "bytedance/deer-flow",
+      "pr": 844,
+      "license": "MIT",
+      "stars": 83696,
+      "mergeCommit": "fab1d39323ec77179d77e1358c9e54b11ae77927",
+      "preMerge": "e3e7a83f40ac852e6b5befc93466d2d4b0cf3821",
+      "files": [
+        "web/src/app/landing/components/multi-agent-visualization.tsx"
+      ],
+      "lockfiles": [],
+      "framework": "no root package.json",
+      "eligible": false
+    },
+    {
+      "repository": "spiffe/spiffe.io",
+      "pr": 368,
+      "license": "NOASSERTION",
+      "stars": 34,
+      "mergeCommit": "80914b592824c4e0eeb32dbd59cac72d4db388d2",
+      "preMerge": "9e45bfe2e3d419a517325c743b835f56de858e05",
+      "files": [
+        "layouts/partials/navbar.html"
+      ],
+      "lockfiles": [
+        "package-lock.json",
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "rook/rook.github.io",
+      "pr": 177,
+      "license": "Apache-2.0",
+      "stars": 25,
+      "mergeCommit": "1bad888f6310147a5c3403492d884ddc2e29a2b2",
+      "preMerge": "d2fc1dfb659205228d655401277fc2369595a9d3",
+      "files": [
+        "_includes/navigation.html"
+      ],
+      "lockfiles": [],
+      "framework": "no root package.json",
+      "eligible": false
+    },
+    {
+      "repository": "kubeedge/website",
+      "pr": 758,
+      "license": "Apache-2.0",
+      "stars": 63,
+      "mergeCommit": "52861c52595db53560ec722f350c2635420d6977",
+      "preMerge": "0a8de4cc95649c2adbc94319523a47e90c279894",
+      "files": [
+        "docusaurus.config.js"
+      ],
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "@docusaurus/core,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "kedacore/keda-docs",
+      "pr": 1700,
+      "license": "Apache-2.0",
+      "stars": 155,
+      "mergeCommit": "b8f4b315d06f0eddd734cb3447a890a5b99a84c1",
+      "preMerge": "e0008e4b60c571ea16de4bb3c4e2f0a268d29fd9",
+      "files": [
+        "layouts/partials/social-buttons.html"
+      ],
+      "lockfiles": [],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "goharbor/website",
+      "pr": 700,
+      "license": "Apache-2.0",
+      "stars": 46,
+      "mergeCommit": "0b13c89c2645c61548ac7e9daa6a14be9aec6e23",
+      "preMerge": "1fdc859b0eb457b2a595ccd72ec81a6496e95ea8",
+      "files": [
+        "layouts/partials/social-buttons.html"
+      ],
+      "lockfiles": [
+        "package-lock.json",
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "dragonflyoss/d7y.io",
+      "pr": 384,
+      "license": "Apache-2.0",
+      "stars": 12,
+      "mergeCommit": "a40296bd6505ac14fbaf92440358d4230dad80c6",
+      "preMerge": "4439f798e82461a550035a284d54386a72e5d207",
+      "files": [
+        "src/pages/components/Contact.jsx",
+        "src/pages/index.js"
+      ],
+      "lockfiles": [],
+      "next": null,
+      "framework": "@docusaurus/core,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "containerd/containerd.io",
+      "pr": 254,
+      "license": "CC-BY-4.0",
+      "stars": 39,
+      "mergeCommit": "b574b7c8d1f20e916e8c218ba54dd7bbefdbe0c3",
+      "preMerge": "d0342315ca6a01e0254f2b5504c56068f786a621",
+      "files": [
+        "themes/containerd/layouts/partials/navbar.html"
+      ],
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "cloudevents/cloudevents-web",
+      "pr": 93,
+      "license": "Apache-2.0",
+      "stars": 17,
+      "mergeCommit": "d8df6f25a4fe913a32154411476e9a18f580064d",
+      "preMerge": "893e3332648ea4835d6d172153d97e62958b4e5e",
+      "files": [
+        "layouts/partials/footer.html"
+      ],
+      "lockfiles": [],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "cert-manager/website",
+      "pr": 1945,
+      "license": "Apache-2.0",
+      "stars": 67,
+      "mergeCommit": "0fd27ef5bc12d4e0b5426dde686d988ceb6b3bed",
+      "preMerge": "49b9c25c38c62748b57804a6a54bd5035267ef43",
+      "files": [
+        "components/Header.jsx"
+      ],
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": "^16.0.0",
+      "framework": "next,react",
+      "nextMajor": 16,
+      "eligible": true
+    },
+    {
+      "repository": "argoproj/argo-site",
+      "pr": 192,
+      "license": "MIT",
+      "stars": 20,
+      "mergeCommit": "ff4d8a3b09546527b0db63487daa124be15ce401",
+      "preMerge": "2f32890bf3d88e131d1082f4f54d15038fe10495",
+      "files": [
+        "src/components/contribute.js"
+      ],
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "gatsby,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "github/opensource.guide",
+      "pr": 3597,
+      "license": "CC-BY-4.0",
+      "stars": 15724,
+      "mergeCommit": "5fd11fd278d3182d46a7b4f6308bf50f12321f2c",
+      "preMerge": "14321fd0954cd70990638ec875f6744f8ef677fb",
+      "files": [
+        "_includes/nav.html"
+      ],
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "vitessio/website",
+      "pr": 2064,
+      "license": "Apache-2.0",
+      "stars": 70,
+      "mergeCommit": "fdb1c86fad440b20947dd57dab43114537b68019",
+      "preMerge": "801da1fe704b6dee495011b93a49f99696572f52",
+      "files": [
+        "layouts/partials/home/video.html",
+        "layouts/partials/social-buttons.html"
+      ],
+      "lockfiles": [],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "docker/docs",
+      "pr": 24013,
+      "license": "Apache-2.0",
+      "stars": 4666,
+      "mergeCommit": "f782bfc1fd162154ea45ae7e3f2013577642db8d",
+      "preMerge": "7acf80713a1c1500ef3455597ce7cdc1ad2f614a",
+      "files": [
+        "layouts/partials/footer.html"
+      ],
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "TryGhost/Ghost",
+      "pr": 25975,
+      "license": "MIT",
+      "stars": 55517,
+      "mergeCommit": "cab523ed9ab4e0df2fc7b98d05716282af5cff38",
+      "preMerge": "870e51098ba1d821fa97d7bae0302b38eb8da870",
+      "files": [
+        "ghost/admin/app/templates/setup.hbs",
+        "ghost/admin/app/templates/signup.hbs"
+      ],
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "google/trillian-website",
+      "pr": 129,
+      "license": "Apache-2.0",
+      "stars": 15,
+      "mergeCommit": "0c9fca16b248796732e8054b6e275f3715ba1f3a",
+      "preMerge": "9676ec980b08c611a94cd32551a1e3653d13f254",
+      "files": [
+        "layouts/partials/nav.html"
+      ],
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "microsoft/aspire.dev",
+      "pr": 299,
+      "license": "MIT",
+      "stars": 196,
+      "mergeCommit": "9c8121d8e0be9927e9f7bcd582037189966ad882",
+      "preMerge": "155462dee152e892bd889e2c74b5a16c2d8d6afd",
+      "files": [
+        "src/frontend/src/components/LanguagesSupported.astro"
+      ],
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "angular/angular",
+      "pr": 66723,
+      "license": "MIT",
+      "stars": 101029,
+      "mergeCommit": "b3f2bad5938b2568c072d77582398ba0d6b405a9",
+      "preMerge": "aeb4b419af550c3dd98e0681cfd784ee74f1ab1d",
+      "files": [
+        "adev/src/app/core/layout/navigation/navigation.component.html"
+      ],
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": null,
+      "framework": "@angular/core",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "php/web-php",
+      "pr": 1787,
+      "license": null,
+      "stars": 1103,
+      "mergeCommit": "f1b3e771f4143b8f217af0b54b2c67ec0483f740",
+      "preMerge": "5d9af2102ff696c32d2a431011dda5d8b04d00e6",
+      "files": [
+        "include/header.inc"
+      ],
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "ipld/ipld",
+      "pr": 363,
+      "license": "NOASSERTION",
+      "stars": 1348,
+      "mergeCommit": "347c3bb8a572b1efd50f13217d7f1ddabd86e691",
+      "preMerge": "cebb39f26cc507b0c3ca275936accd19d422f674",
+      "files": [
+        ".site/_layouts/main.njk",
+        "index.njk"
+      ],
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "rescript-lang/rescript-lang.org",
+      "pr": 1172,
+      "license": "MIT",
+      "stars": 1853,
+      "mergeCommit": "23f5b5a9a104c67eefe351f0f6c9dc342639152a",
+      "preMerge": "da18afafcbc667747aba8dd958deee68e6ff229f",
+      "files": [
+        "app/root.res"
+      ],
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "vite,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "rescript-lang/rescript-lang.org",
+      "pr": 1171,
+      "license": "MIT",
+      "stars": 1853,
+      "mergeCommit": "da18afafcbc667747aba8dd958deee68e6ff229f",
+      "preMerge": "5499aa8cf69b0a086d3caf8006bf2361bc51e192",
+      "files": [
+        "src/layouts/LandingPageLayout.res"
+      ],
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "vite,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "rescript-lang/rescript-lang.org",
+      "pr": 1170,
+      "license": "MIT",
+      "stars": 1853,
+      "mergeCommit": "a853ad00e9eb052617791b27ce7d49aa419fe629",
+      "preMerge": "c1a600a6e7a33e8f5d54f5fb3d8db1b0d572e034",
+      "files": [
+        "src/components/Navigation.res",
+        "src/components/Search.res"
+      ],
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "vite,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "OverTheWireOrg/OverTheWire-website",
+      "pr": 173,
+      "license": "MIT",
+      "stars": 1183,
+      "mergeCommit": "3f727d9d49d28d7f3de6ddee77edf7c999cde246",
+      "preMerge": "decb861171eeb80533af728ce8c8d60bed4f96a5",
+      "files": [
+        "_layouts/default.html"
+      ],
+      "lockfiles": [],
+      "framework": "no root package.json",
+      "eligible": false
+    },
+    {
+      "repository": "istio/istio.io",
+      "pr": 17108,
+      "license": "Apache-2.0",
+      "stars": 820,
+      "mergeCommit": "9cf36b6fdf5cc341acc454c350f0585d186f19a1",
+      "preMerge": "9ea9509b1a0bd14c0161b273c6511939729c3bf2",
+      "files": [
+        "layouts/partials/header.html"
+      ],
+      "lockfiles": [],
+      "framework": "no root package.json",
+      "eligible": false
+    },
+    {
+      "repository": "ethereum/ethereum-org-website",
+      "pr": 17139,
+      "license": "MIT",
+      "stars": 5981,
+      "mergeCommit": "57374712ca079ccc180aea9296a8c18760287de6",
+      "preMerge": "46fd1a32e216e09f2d80a971e5a08c27bc486c92",
+      "files": [
+        "src/components/Footer.tsx"
+      ],
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": "^14.2.35",
+      "framework": "next,react",
+      "nextMajor": 14,
+      "eligible": false
+    },
+    {
+      "repository": "elementary/website",
+      "pr": 3966,
+      "license": "MIT",
+      "stars": 1266,
+      "mergeCommit": "50a165670cf6c2e56fdd066222deabbc9bf95eda",
+      "preMerge": "1459531bffac5e27aea8d667c19ee5b2cc67b79b",
+      "files": [
+        "_templates/header.php"
+      ],
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "kubernetes/website",
+      "pr": 54097,
+      "license": "CC-BY-4.0",
+      "stars": 5404,
+      "mergeCommit": "f1af6cfa4d708a6b604802a3cf4ac4683edc098e",
+      "preMerge": "0d5891647f0b8dbdc7aa2adfa46756a9ce5e2570",
+      "files": [
+        "layouts/partials/cncf.html",
+        "layouts/partials/footer.html"
+      ],
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "socketio/socket.io-website",
+      "pr": 520,
+      "license": null,
+      "stars": 342,
+      "mergeCommit": "c97bb6b357c5361cee6cd81fd51d7bd874f98b1b",
+      "preMerge": "a09b040158617e5dde641a0c7d2e373c98088966",
+      "files": [
+        "docusaurus.config.js"
+      ],
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "@docusaurus/core,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "vergecurrency/vergecurrency.com",
+      "pr": 1265,
+      "license": "MIT",
+      "stars": 109,
+      "mergeCommit": "25efc403acc95cb09a523ed304396a63675a288b",
+      "preMerge": "497dadfe9f3f73b02a79d07718f194a4132cdfde",
+      "files": [
+        "components/Wallets.js"
+      ],
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": "6.1.0",
+      "framework": "next,react",
+      "nextMajor": 6,
+      "eligible": false
+    },
+    {
+      "repository": "pnpm/pnpm.io",
+      "pr": 743,
+      "license": "MIT",
+      "stars": 313,
+      "mergeCommit": "393ae4500dedf9bf707cbf85f42c7ce9b1c9b4ea",
+      "preMerge": "d6278349ef98baf644f67fe198663e14ecf8af67",
+      "files": [
+        "src/pages/index.js"
+      ],
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": null,
+      "framework": "@docusaurus/core,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "OpenRefine/openrefine.org",
+      "pr": 507,
+      "license": "NOASSERTION",
+      "stars": 161,
+      "mergeCommit": "5a32a80f8bfb688e9d480cb3e2c4e52653131361",
+      "preMerge": "95cae4703de4c51cd0d94c0402781d575bef5270",
+      "files": [
+        "src/css/custom.css"
+      ],
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "@docusaurus/core,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "remix-run/remix-v2-website",
+      "pr": 16,
+      "license": null,
+      "stars": 4,
+      "mergeCommit": "8976235fed515bccb92daafb7baeb1743b72955e",
+      "preMerge": "1dbf014d3905db5555b0fc6c7e604f64b45fa056",
+      "files": [
+        "app/ui/icons.tsx"
+      ],
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "vite,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "remix-run/react-router-website",
+      "pr": 222,
+      "license": "MIT",
+      "stars": 201,
+      "mergeCommit": "321083945e34a531147a3b4f107415481a2bdf00",
+      "preMerge": "f16a51d8c02e3731c45dcbe56bcd593d6880b564",
+      "files": [
+        "app/pages/splash.tsx"
+      ],
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "vite,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "recharts/recharts",
+      "pr": 6872,
+      "license": "MIT",
+      "stars": 27626,
+      "mergeCommit": "8e14b3a8ff38f091ca3b016702e5aff7248900b0",
+      "preMerge": "d7d4f6767f80b83b7d96e559165c04d57a60cd87",
+      "files": [
+        "www/src/views/IndexView/index.tsx"
+      ],
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "remix-run/remix-website",
+      "pr": 373,
+      "license": null,
+      "stars": 54,
+      "mergeCommit": "c9f9c43555d1bf6b668ad599afa3af12936c8114",
+      "preMerge": "f6163fe949daaab28341462eff7d4c737684a318",
+      "files": [
+        "app/ui/icons.tsx"
+      ],
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "vite,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "nativewind/website",
+      "pr": 69,
+      "license": null,
+      "stars": 30,
+      "mergeCommit": "fb0f8c7bcf81fac2cbe71f4a9fe1bbd73438a7ff",
+      "preMerge": "bbfe152f9b849232b934f074a9c9907cd633641c",
+      "files": [
+        "app/(home)/UIKitCard.tsx"
+      ],
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": "15.3.8",
+      "framework": "next,react",
+      "nextMajor": 15,
+      "eligible": false
+    },
+    {
+      "repository": "files-community/Website",
+      "pr": 826,
+      "license": "MIT",
+      "stars": 466,
+      "mergeCommit": "d5338fa9771a9060821cf8768ddec37ac616e369",
+      "preMerge": "a95220e82b9001f4ec5179ce8d5756cd63266b25",
+      "files": [
+        "src/layout/Navbar/Navbar.svelte"
+      ],
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": null,
+      "framework": "vite",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "adobe/adobe-design-website",
+      "pr": 226,
+      "license": "Apache-2.0",
+      "stars": 8,
+      "mergeCommit": "1c5e35bedc78290e753440fe76177bf02fac024a",
+      "preMerge": "727e8deabb3630345df50161f2e483c2e8943774",
+      "files": [
+        "blocks/footer-heading/footer-heading.js",
+        "blocks/header/navHomeLink.js"
+      ],
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "apache/incubator-seata-website",
+      "pr": 1061,
+      "license": "Apache-2.0",
+      "stars": 110,
+      "mergeCommit": "27e2696169402e1f467a9fed148909ba5c142f50",
+      "preMerge": "bca87d53af8c964c1dc833b9687d47270c30a948",
+      "files": [
+        "src/pages/home/feature/index.tsx"
+      ],
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "@docusaurus/core,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "spring-ai-alibaba/website",
+      "pr": 259,
+      "license": "Apache-2.0",
+      "stars": 69,
+      "mergeCommit": "a3dd68136131566b7a1483bdaf5316feb786d8d5",
+      "preMerge": "c902faf0da25e58ec0560b6b88a28a52187a2513",
+      "files": [
+        "src/components/EcosystemShowcase/index.tsx",
+        "src/components/PineconeFloatingSearch/index.tsx",
+        "src/pages/index.tsx"
+      ],
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "@docusaurus/core,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "Milkdown/website",
+      "pr": 250,
+      "license": "MIT",
+      "stars": 49,
+      "mergeCommit": "c227e0e76b138c96a02472cf08975d8563fcc4ee",
+      "preMerge": "e80fb308e2a97ad70451a8d21c5617213f97608e",
+      "files": [
+        "src/components/svg-icon/index.tsx"
+      ],
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": "16.1.1",
+      "framework": "next,react",
+      "nextMajor": 16,
+      "eligible": true
+    },
+    {
+      "repository": "mlflow/mlflow-website",
+      "pr": 429,
+      "license": null,
+      "stars": 22,
+      "mergeCommit": "98ebb9a2e283219e0ec07f1dc751fdb012a295fa",
+      "preMerge": "746ac0a746c390c8be3d26a7ec6d82ec86a53051",
+      "files": [
+        "website/src/components/Header/Header.tsx"
+      ],
+      "lockfiles": [],
+      "framework": "no root package.json",
+      "eligible": false
+    },
+    {
+      "repository": "shorebirdtech/website",
+      "pr": 402,
+      "license": "MIT",
+      "stars": 19,
+      "mergeCommit": "2c51f6078ef2ba8904c2129f4acf86f1385b664e",
+      "preMerge": "111dbdc358fb6565bde1d5e99217763d6cc876dd",
+      "files": [
+        "src/components/logos/discord-logo.tsx",
+        "src/components/logos/github-logo.tsx",
+        "src/components/logos/linkedin-logo.tsx",
+        "src/components/logos/logo-full.tsx",
+        "src/components/logos/twitter-logo.tsx",
+        "src/components/ui/footer.astro"
+      ],
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "astro,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "open-feature/openfeature.dev",
+      "pr": 1329,
+      "license": "CC-BY-4.0",
+      "stars": 65,
+      "mergeCommit": "d5c7d65e60b0475256509242925880f6dda88516",
+      "preMerge": "0bc367e610dfeac14e6852632ecd5c15949dc51f",
+      "files": [
+        "src/css/custom.css",
+        "src/partials/features-zigzag.tsx",
+        "src/partials/question-blocks.tsx"
+      ],
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "@docusaurus/core,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "SWE-bench/swe-bench.github.io",
+      "pr": 44,
+      "license": "NOASSERTION",
+      "stars": 15,
+      "mergeCommit": "de68e44def61fec62d4ef06ac3fc3094acbb9d0c",
+      "preMerge": "b06d2c28b01b13ba6ddb596002980a2501c92775",
+      "files": [
+        "templates/_sidebar.html"
+      ],
+      "lockfiles": [],
+      "framework": "no root package.json",
+      "eligible": false
+    },
+    {
+      "repository": "umijs/qiankun",
+      "pr": 3101,
+      "license": "MIT",
+      "stars": 16691,
+      "mergeCommit": "ea436cb4eb4dfdb96176cb052b3f46c7568ca7fb",
+      "preMerge": "058166b6b5abe0d15777b991b78d1230e662ab32",
+      "files": [
+        "docs/index.md",
+        "docs/zh-CN/index.md"
+      ],
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": null,
+      "framework": "vitepress",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "alibaba/hooks",
+      "pr": 2892,
+      "license": "MIT",
+      "stars": 14973,
+      "mergeCommit": "9a8bc45f8b3bbd3998769bc95702b1fe3500f054",
+      "preMerge": "5f54d21de51a9b94545d2dcfb8a48bf946eed37f",
+      "files": [
+        "README.md",
+        "docs/index.en-US.md",
+        "docs/index.zh-CN.md"
+      ],
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": null,
+      "framework": "react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "react/react-native-website",
+      "pr": 4956,
+      "license": "MIT",
+      "stars": 2165,
+      "mergeCommit": "eeefda6f16b271de3c33761e30626526e1573da3",
+      "preMerge": "cf988cc732dc6c34b4c918a1fdc3cc24940bdc4e",
+      "files": [
+        "website/src/css/showcase.scss"
+      ],
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "carbon-design-system/carbon-website",
+      "pr": 4784,
+      "license": "Apache-2.0",
+      "stars": 330,
+      "mergeCommit": "49333ce3143153fb60c689a08cf4ca6c80b74b31",
+      "preMerge": "cf600514b15dda3b16273e58c7ffe10f1ccccd93",
+      "files": [
+        "src/pages/index.mdx"
+      ],
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "gatsby,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "umijs/dumi",
+      "pr": 2307,
+      "license": "MIT",
+      "stars": 3797,
+      "mergeCommit": "3f786c9f33f2869fb0a6e69cde10849d0170ce4b",
+      "preMerge": "d0b7372e6da88f4211d9e7d5cd307ef06210e3bd",
+      "files": [
+        "src/client/theme-default/slots/ColorSwitch/index.tsx",
+        "src/client/theme-default/slots/RtlSwitch/index.tsx",
+        "src/client/theme-default/slots/SearchBar/index.tsx",
+        "src/client/theme-default/slots/SocialIcon/index.tsx"
+      ],
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": null,
+      "framework": "react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "ant-design/ant-design",
+      "pr": 56521,
+      "license": "MIT",
+      "stars": 99736,
+      "mergeCommit": "41a5b2fe9e915c961a4db620fd7c95a5c70c0ee5",
+      "preMerge": "08f23516a0080dc978238cfbe88f8db41be7b7f9",
+      "files": [
+        "package.json"
+      ],
+      "lockfiles": [],
+      "next": null,
+      "framework": "react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "ant-design/ant-design",
+      "pr": 56510,
+      "license": "MIT",
+      "stars": 99736,
+      "mergeCommit": "ae9fc640c6889f61357f228228719ad80c03285a",
+      "preMerge": "8ac5c5fde4ef39f7971b5b3fd42cd1993671f123",
+      "files": [
+        ".dumi/theme/builtins/ComponentOverview/index.tsx"
+      ],
+      "lockfiles": [],
+      "next": null,
+      "framework": "react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "vuejs/docs",
+      "pr": 3327,
+      "license": "NOASSERTION",
+      "stars": 3241,
+      "mergeCommit": "4610ff099114e7a75d3b1b7f4aa3b2ceed5d9d15",
+      "preMerge": "62f92b7092126be6b7b1ae8d2e60340d3fdf7976",
+      "files": [
+        ".vitepress/theme/components/SiteMap.vue"
+      ],
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ],
+      "next": null,
+      "framework": "vitepress",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "react/react-native-website",
+      "pr": 4950,
+      "license": "MIT",
+      "stars": 2165,
+      "mergeCommit": "89322e0ba229c3d94a00e0992e17f3c5084c8211",
+      "preMerge": "9ae17b1c362994a9ccede88a7614cf244c5633d0",
+      "files": [
+        "website/docusaurus.config.ts"
+      ],
+      "lockfiles": [
+        "yarn.lock"
+      ],
+      "next": null,
+      "framework": "",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "jhipster/jhipster.github.io",
+      "pr": 1550,
+      "license": null,
+      "stars": 347,
+      "mergeCommit": "5a6b3cdb44abdf6a22763fe24205b5bdb7c6271e",
+      "preMerge": "0e5d296ca575d4409eb2cc1069a8923b33bebfd2",
+      "files": [
+        "src/components/EmbeddedVideo/Poster/index.tsx"
+      ],
+      "lockfiles": [
+        "package-lock.json"
+      ],
+      "next": null,
+      "framework": "@docusaurus/core,react",
+      "nextMajor": null,
+      "eligible": false
+    },
+    {
+      "repository": "SWE-bench/experiments",
+      "pr": 288,
+      "license": null,
+      "stars": 284,
+      "mergeCommit": "76db58ea4c5b8d335dd68ab45c5ab27008ea176a",
+      "preMerge": "650cb69028b00b338f3cb94ef3070c7c03681072",
+      "files": [
+        "evaluation/multimodal/20250701_GUIRepair_o3/README.md",
+        "evaluation/multimodal/20250701_GUIRepair_o3/metadata.yaml",
+        "evaluation/multimodal/20250701_GUIRepair_o3/results/resolved_by_repo.json",
+        "evaluation/multimodal/20250701_GUIRepair_o3/results/results.json"
+      ],
+      "lockfiles": [],
+      "framework": "no root package.json",
+      "eligible": false
+    },
+    {
+      "repository": "SWE-bench/experiments",
+      "pr": 244,
+      "license": null,
+      "stars": 284,
+      "mergeCommit": "0dea494c860079db1a867aa23a550f6bc78e92d2",
+      "preMerge": "b8c42c72ad9da69ea2660f79d4a3216a633b396f",
+      "files": [
+        "evaluation/multimodal/20250531_GUIRepair_gpt41/README.md",
+        "evaluation/multimodal/20250531_GUIRepair_gpt41/metadata.yaml",
+        "evaluation/multimodal/20250531_GUIRepair_gpt41/results/resolved_by_repo.json",
+        "evaluation/multimodal/20250531_GUIRepair_gpt41/results/results.json",
+        "evaluation/multimodal/20250531_GUIRepair_gpt4o/README.md",
+        "evaluation/multimodal/20250531_GUIRepair_gpt4o/metadata.yaml",
+        "evaluation/multimodal/20250531_GUIRepair_gpt4o/results/resolved_by_repo.json",
+        "evaluation/multimodal/20250531_GUIRepair_gpt4o/results/results.json",
+        "evaluation/multimodal/20250531_GUIRepair_o4mini/README.md",
+        "evaluation/multimodal/20250531_GUIRepair_o4mini/metadata.yaml"
+      ],
+      "lockfiles": [],
+      "framework": "no root package.json",
+      "eligible": false
+    }
+  ]
+}
