@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { RunReportSchema } from "../reporter/report.js";
 import type { RunReport } from "../reporter/report.js";
+import { HostedCandidateSchema, hostedCandidateDigest } from "./agent-protocol.js";
+import type { HostedCandidate } from "./agent-protocol.js";
 
 const shaSchema = z.string().regex(/^[a-f0-9]{40}$/);
 const runSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
@@ -81,6 +83,8 @@ export interface HostedRunWorkflowDependencies {
   } | Promise<{ runId: string; repository: string; installationId: number }>;
   /** Must run in the *trusted* coordinator boundary, not in target repo code. */
   verifyTrustedResult: (runId: string, reportDigest: string) => Promise<TrustedRunReceipt | null>;
+  /** Private, immutable, run-scoped staging. Reject conflicting candidates; erase source after verification or expiry. */
+  receiveCandidate?: (runId: string, candidate: HostedCandidate) => Promise<void>;
 }
 
 export function hostedReportDigest(report: RunReport): string {
@@ -157,6 +161,19 @@ export class HostedRunWorkflow {
     // The raw report, original target reasons and snippets are never retained.
     // A durable store can retain this minimal metadata safely.
     return { runId, status: stored.status };
+  }
+
+  async submitCandidate(runId: string, token: string, raw: unknown) {
+    const identity = await this.authenticate(runId, token);
+    const candidate = HostedCandidateSchema.parse(raw);
+    if (!this.dependencies.receiveCandidate) throw new Error("Private candidate staging is not configured");
+    const existing = await this.dependencies.store.get(identity.runId);
+    if (existing && (existing.reportDigest !== hostedReportDigest(candidate.report) || existing.repository !== identity.repository ||
+      existing.installationId !== identity.installationId)) throw new Error("Conflicting candidate report");
+    if (existing && existing.status !== "recorded") throw new Error("Candidate submission conflicts with claimed or terminal verification");
+    await this.dependencies.receiveCandidate(identity.runId, candidate);
+    await this.submitResults(runId, token, candidate.report);
+    return { status: "recorded" as const, runId: identity.runId, candidateDigest: hostedCandidateDigest(candidate) };
   }
 
   async inspect(runId: string, token: string): Promise<StoredRunResult | undefined> {

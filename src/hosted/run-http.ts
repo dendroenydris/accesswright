@@ -2,8 +2,9 @@ import type { IncomingMessage, RequestListener, ServerResponse } from "node:http
 import { z } from "zod";
 
 import type { HostedRunWorkflow } from "./run-workflow.js";
+import { defaults } from "../config.js";
 
-const pathSchema = /^\/runs\/([A-Za-z0-9_-]{1,64})\/(results|finish|status)$/;
+const pathSchema = /^\/runs\/([A-Za-z0-9_-]{1,64})\/(results|candidate|finish|status)$/;
 const maxBodyBytes = 128 * 1024;
 class OversizedReport extends Error {
   constructor() { super("Run submission exceeds byte limit"); }
@@ -79,7 +80,11 @@ export function createHostedRunHandler(workflow: HostedRunWorkflow): RequestList
         return;
       }
       try {
-        const body = await readBody(request);
+        const body = await readBody(request, action === "candidate" ? defaults.hostedMaxCandidateBodyBytes : maxBodyBytes);
+        if (action === "candidate") {
+          send(response, 202, await workflow.submitCandidate(runId, token, body));
+          return;
+        }
         if (action === "results") {
           const result = await workflow.submitResults(runId, token, body);
           send(response, 202, result);

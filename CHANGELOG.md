@@ -12,6 +12,7 @@
 
 ### Added
 
+- Authenticated bounded candidate HTTP transfer, exact-digest acknowledgments, a secretless executable worker entrypoint and local private staging with expiry, trusted usage sealing and independent replay.
 - Hosted worker repair loop with bounded remote proposals, retained rejected-call usage, unknown-response blocking and candidate transfer only after private-source cleanup.
 - Secretless non-root ephemeral repair sessions that reuse existing browser/production gates, refuse unsupported offline mode and duplicate job attempts, and require independent trusted verification.
 - Bounded Hosted worker patch transport with PNG evidence, verifier feedback, scoped authentication and fail-closed response/path validation.

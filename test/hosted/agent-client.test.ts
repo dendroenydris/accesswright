@@ -2,6 +2,8 @@ import { expect, it, vi } from "vitest";
 import { defaults } from "../../src/config.js";
 import { HostedAgentClient } from "../../src/hosted/agent-client.js";
 import type { FixTask } from "../../src/types/schemas.js";
+import { hostedCandidateDigest } from "../../src/hosted/agent-protocol.js";
+import { hostedCandidateFixture } from "../helpers/hosted-candidate.js";
 
 const task: FixTask = { id: "button-name:save", ruleId: "button-name", criterion: "4.1.2", kind: "semantic", route: "llm",
   source: { file: "Button.tsx", line: 1, column: 1 }, routes: ["/"],
@@ -69,5 +71,38 @@ it("refuses malformed images and feedback before making a request", async () => 
   const client = new HostedAgentClient({ ...options, fetcher });
   await expect(client.patch(task, context, [{ data: new Uint8Array([1, 2, 3]), mediaType: "image/png" }])).rejects.toThrow();
   await expect(client.patch(task, context, [], "x".repeat(defaults.hostedMaxFeedbackChars + 1))).rejects.toThrow();
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
+it("sends one private candidate and requires an acknowledgment of its exact digest", async () => {
+  const candidate = hostedCandidateFixture();
+  const fetcher = vi.fn<typeof fetch>(() => Promise.resolve(Response.json({ status: "recorded", runId: options.runId, candidateDigest: hostedCandidateDigest(candidate) }, { status: 202 })));
+  await new HostedAgentClient({ ...options, fetcher }).submitCandidate(candidate);
+  expect(fetcher).toHaveBeenCalledOnce();
+  const [url, init] = fetcher.mock.calls[0];
+  expect(url).toBe("https://agent.example/runs/run-1/candidate");
+  expect(init).toMatchObject({ redirect: "error", credentials: "omit", headers: { authorization: "Bearer " + options.token } });
+  expect(init?.body).toBe(JSON.stringify(candidate));
+});
+
+it.each(["run", "digest", "status", "header", "stream", "json", "lost"])("rejects an unconfirmed %s candidate transfer without retry or source disclosure", async kind => {
+  const candidate = hostedCandidateFixture();
+  const ack = { status: "recorded", runId: options.runId, candidateDigest: hostedCandidateDigest(candidate) };
+  if (kind === "run") ack.runId = "other-run";
+  if (kind === "digest") ack.candidateDigest = "0".repeat(64);
+  if (kind === "status") ack.status = "ready-for-review";
+  const fetcher = vi.fn<typeof fetch>(() => kind === "lost" ? Promise.reject(new Error("private-source-marker " + options.token)) : Promise.resolve(
+    kind === "header" ? new Response("private-source-marker", { status: 202, headers: { "content-length": String(defaults.hostedMaxCandidateResponseBytes + 1) } }) :
+      kind === "stream" ? new Response("x".repeat(defaults.hostedMaxCandidateResponseBytes + 1), { status: 202 }) :
+        kind === "json" ? new Response("private-source-marker", { status: 202 }) : Response.json(ack, { status: 202 })));
+  await expect(new HostedAgentClient({ ...options, fetcher }).submitCandidate(candidate)).rejects.toThrow("transfer is unconfirmed");
+  expect(fetcher).toHaveBeenCalledOnce();
+});
+
+it("rejects oversized candidates before transfer", async () => {
+  const candidate = hostedCandidateFixture();
+  candidate.patches[0].changes[0].after = "x".repeat(defaults.hostedMaxCandidateBodyBytes);
+  const fetcher = vi.fn<typeof fetch>();
+  await expect(new HostedAgentClient({ ...options, fetcher }).submitCandidate(candidate)).rejects.toThrow();
   expect(fetcher).not.toHaveBeenCalled();
 });

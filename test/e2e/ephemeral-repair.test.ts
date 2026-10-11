@@ -5,8 +5,9 @@ import { join } from "node:path";
 import { execa } from "execa";
 import { expect, it } from "vitest";
 import { defaults } from "../../src/config.js";
-import { verifyHostedCandidate } from "../../src/hosted/trusted-verifier.js";
-import { hostedReportDigest } from "../../src/hosted/run-workflow.js";
+import { createLocalHostedCandidateCoordinator } from "../../src/hosted/local-candidate-coordinator.js";
+import { HostedCandidateSchema } from "../../src/hosted/agent-protocol.js";
+import { HostedRunWorkflow, InMemoryHostedRunStore } from "../../src/hosted/run-workflow.js";
 import { RunReportSchema } from "../../src/reporter/report.js";
 import { listSnapshotFiles } from "../../src/runner/patch-journal.js";
 import { createDetachedContainer, dockerControl } from "../../src/sandbox/docker-control.js";
@@ -53,12 +54,21 @@ it("runs a non-root worker through a fake HTTP model service and independently r
     const parsed = RunReportSchema.parse(typeof candidate === "object" && candidate !== null && "report" in candidate ? candidate.report : null);
     expect(parsed).toMatchObject({ fixed: 3, providerVerification: "fake-provider", usage: { inputTokens: 300, outputTokens: 100, spentUsd: 0.0005 } });
     await removePlatformMetadata(repoPath);
-    const receipt = await verifyHostedCandidate({ repoPath, verifiedBaseSha: baseSha, tempRoot: join(root, "trusted-runs"), runtimeRoot: process.cwd(),
-      reconciled: { usage: { inputTokens: 300, outputTokens: 100, spentUsd: 0.0005 }, unknownUsage: false, providerVerification: "fake-provider" } }, candidate);
-    expect(receipt).toEqual({ reportDigest: hostedReportDigest(parsed), verifiedBaseSha: baseSha });
-    expect(await git(["status", "--porcelain", "--untracked-files=all"])).toBe("");
     const evidence = await mkdtemp(join(tempRoot, "ephemeral-worker-evidence-"));
-    await writeFile(join(evidence, "result.json"), JSON.stringify({ kind: "owned-secretless-worker-and-independent-docker-verifier", ...receipt,
+    const coordinator = createLocalHostedCandidateCoordinator({ evidenceRoot: evidence,
+      // Known usage from the owned fake fixture; production must use the external trusted agent store.
+      agent: { sealForVerification: () => Promise.resolve({ usage: { inputTokens: 300, outputTokens: 100, spentUsd: 0.0005 }, unknownUsage: false, providerVerification: "fake-provider" }) },
+      resolveCheckout: () => Promise.resolve({ repoPath, verifiedBaseSha: baseSha, tempRoot: join(root, "trusted-runs"), runtimeRoot: process.cwd() }) });
+    const store = new InMemoryHostedRunStore();
+    const workflow = new HostedRunWorkflow({ store, ...coordinator,
+      authenticate: runId => ({ runId, repository: "owned/fixture", installationId: 42 }) });
+    await workflow.submitCandidate("worker-fixture", "fixture-token", HostedCandidateSchema.parse(candidate));
+    expect(store.get("worker-fixture")?.status).toBe("recorded");
+    const receipt = await workflow.finish("worker-fixture", "fixture-token");
+    expect(receipt).toEqual({ runId: "worker-fixture", status: "ready-for-review", verifiedBaseSha: baseSha });
+    expect(await coordinator.verifyTrustedResult("worker-fixture", store.get("worker-fixture")?.reportDigest ?? "")).toBeNull();
+    expect(await git(["status", "--porcelain", "--untracked-files=all"])).toBe("");
+    await writeFile(join(evidence, "result.json"), JSON.stringify({ kind: "owned-secretless-worker-and-independent-docker-verifier", ...receipt, reportDigest: store.get("worker-fixture")?.reportDigest,
       acceptedFixes: parsed.fixed, privateSourceRemoved: true, paidCalls: 0, fakeProviderCalls: 1 }), { flag: "wx", mode: 0o600 });
     console.log("Secretless worker and independent verifier evidence:", evidence);
   } finally {

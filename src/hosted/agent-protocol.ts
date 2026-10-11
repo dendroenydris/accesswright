@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { defaults } from "../config.js";
 import { isSourcePath, PatchSchema } from "../types/schemas.js";
@@ -5,6 +6,12 @@ import { RunReportSchema } from "../reporter/report.js";
 
 export const HostedCandidateSchema = z.object({ report: RunReportSchema, patches: z.array(PatchSchema).max(defaults.maxTasks) }).strict();
 export type HostedCandidate = z.infer<typeof HostedCandidateSchema>;
+export const HostedCandidateReceiptSchema = z.object({ status: z.literal("recorded"), runId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/), candidateDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
+
+/** Transfer identity only; this digest is never a trusted verification receipt. */
+export function hostedCandidateDigest(candidate: HostedCandidate): string {
+  return createHash("sha256").update(JSON.stringify(HostedCandidateSchema.parse(candidate))).digest("hex");
+}
 
 export const HostedRepairContextSchema = z.object({
   component: z.object({ file: z.string().refine(isSourcePath), line: z.number().int().positive(), column: z.number().int().positive(), sourceExcerpt: z.string().max(12_000) }).strict(),

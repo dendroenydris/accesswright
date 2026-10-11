@@ -4,7 +4,8 @@ import type { RepairContext } from "../llm/context.js";
 import type { LlmImage } from "../llm/types.js";
 import { FixTaskSchema } from "../types/schemas.js";
 import type { FixTask } from "../types/schemas.js";
-import { HostedPatchEvidenceSchema, HostedPatchResponseSchema, HostedRepairContextSchema } from "./agent-protocol.js";
+import { HostedCandidateSchema, HostedCandidateReceiptSchema, hostedCandidateDigest, HostedPatchEvidenceSchema, HostedPatchResponseSchema, HostedRepairContextSchema } from "./agent-protocol.js";
+import type { HostedCandidate } from "./agent-protocol.js";
 import type { HostedPatchResponse } from "./agent-api.js";
 
 /** Worker transport holds only a scoped run token. Lost responses are never retried here. */
@@ -34,27 +35,8 @@ export class HostedAgentClient {
     const body = JSON.stringify({ task, context, ...evidence });
     if (Buffer.byteLength(body) > defaults.hostedMaxPatchBodyBytes) throw new Error("Hosted request exceeds its byte limit");
     try {
-      const response = await this.fetcher(this.origin + "/runs/" + this.runId + "/tasks/" + encodeURIComponent(task.id) + "/patch", {
-        method: "POST", headers: { authorization: "Bearer " + this.token, "content-type": "application/json" }, body,
-        redirect: "error", credentials: "omit", cache: "no-store", signal: AbortSignal.timeout(defaults.providerTimeoutMs + defaults.hostedHttpHeadersTimeoutMs),
-      });
-      if (![200, 422].includes(response.status) || !response.body || Number(response.headers.get("content-length")) > defaults.hostedMaxPatchResponseBytes) {
-        await response.body?.cancel();
-        return { status: "rejected", reason: "agent-unavailable", usage: null };
-      }
-      const reader = response.body.getReader();
-      const chunks: Uint8Array[] = [];
-      let length = 0;
-      try {
-        for (;;) {
-          const next = await reader.read();
-          if (next.done) break;
-          length += next.value.length;
-          if (length > defaults.hostedMaxPatchResponseBytes) throw new Error("Agent response exceeds its byte limit");
-          chunks.push(next.value);
-        }
-      } finally { try { await reader.cancel(); } finally { reader.releaseLock(); } }
-      const result = HostedPatchResponseSchema.safeParse(JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown);
+      const response = await this.post("tasks/" + encodeURIComponent(task.id) + "/patch", body, [200, 422], defaults.hostedMaxPatchResponseBytes);
+      const result = HostedPatchResponseSchema.safeParse(response.data);
       if (!result.success || (response.status === 200) !== (result.data.status === "accepted")) return { status: "rejected", reason: "invalid-agent-response", usage: null };
       if (result.data.status === "accepted") {
         const paths = new Set([context.component.file, ...context.callSites.map(site => site.file)]);
@@ -64,5 +46,41 @@ export class HostedAgentClient {
     } catch {
       return { status: "rejected", reason: "agent-response-unreconciled", usage: null };
     }
+  }
+
+  /** One attempt; a lost acknowledgment needs coordinator reconciliation, never automatic resubmission. */
+  async submitCandidate(input: HostedCandidate): Promise<void> {
+    const candidate = HostedCandidateSchema.parse(input);
+    const body = JSON.stringify(candidate);
+    if (Buffer.byteLength(body) > defaults.hostedMaxCandidateBodyBytes) throw new Error("Hosted candidate exceeds its byte limit");
+    try {
+      const response = await this.post("candidate", body, [202], defaults.hostedMaxCandidateResponseBytes);
+      const receipt = HostedCandidateReceiptSchema.parse(response.data);
+      if (receipt.runId !== this.runId || receipt.candidateDigest !== hostedCandidateDigest(candidate)) throw new Error("Candidate acknowledgment mismatch");
+    } catch { throw new Error("Hosted candidate transfer is unconfirmed; trusted reconciliation is required"); }
+  }
+
+  private async post(path: string, body: string, statuses: number[], maxBytes: number): Promise<{ status: number; data: unknown }> {
+      const response = await this.fetcher(this.origin + "/runs/" + this.runId + "/" + path, {
+        method: "POST", headers: { authorization: "Bearer " + this.token, "content-type": "application/json" }, body,
+        redirect: "error", credentials: "omit", cache: "no-store", signal: AbortSignal.timeout(defaults.providerTimeoutMs + defaults.hostedHttpHeadersTimeoutMs),
+      });
+      if (!statuses.includes(response.status) || !response.body || Number(response.headers.get("content-length")) > maxBytes) {
+        await response.body?.cancel();
+        throw new Error("Agent response unavailable");
+      }
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let length = 0;
+      try {
+        for (;;) {
+          const next = await reader.read();
+          if (next.done) break;
+          length += next.value.length;
+          if (length > maxBytes) throw new Error("Agent response exceeds its byte limit");
+          chunks.push(next.value);
+        }
+      } finally { try { await reader.cancel(); } finally { reader.releaseLock(); } }
+      return { status: response.status, data: JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown };
   }
 }
