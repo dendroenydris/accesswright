@@ -1,7 +1,12 @@
+import { createServer } from "node:http";
 import type { IncomingMessage, RequestListener, ServerResponse } from "node:http";
 import { z } from "zod";
 
+import { defaults } from "../config.js";
 import type { HostedPatchAgent } from "./agent-api.js";
+import { createHostedRunHandler } from "./run-http.js";
+import { HostedRunWorkflow } from "./run-workflow.js";
+import type { HostedRunWorkflowDependencies } from "./run-workflow.js";
 
 const maxBodyBytes = 64 * 1024;
 const patchPath = /^\/runs\/([A-Za-z0-9_-]{1,64})\/tasks\/([^/?]+)\/patch$/;
@@ -103,4 +108,21 @@ export function createHostedAgentHandler(agent: HostedPatchAgent): RequestListen
       if (!response.writableEnded) send(response, 503, { status: "unavailable" });
     });
   };
+}
+
+/** Private coordinator only; public webhooks use their separate receiver. */
+export function createHostedAgentServer(options: Pick<HostedRunWorkflowDependencies, "store" | "verifyTrustedResult"> & { agent: HostedPatchAgent }) {
+  const patches = createHostedAgentHandler(options.agent);
+  const runs = createHostedRunHandler(new HostedRunWorkflow({
+    store: options.store,
+    authenticate: (runId, token) => options.agent.inspectRun(runId, token),
+    verifyTrustedResult: options.verifyTrustedResult,
+  }));
+  const server = createServer((request, response) => {
+    const path = (request.url ?? "").split("?")[0] ?? "";
+    (patchPath.test(path) ? patches : runs)(request, response);
+  });
+  server.requestTimeout = defaults.hostedHttpRequestTimeoutMs;
+  server.headersTimeout = defaults.hostedHttpHeadersTimeoutMs;
+  return server;
 }

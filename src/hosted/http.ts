@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { ZodError } from "zod";
 
+import { defaults } from "../config.js";
 import { dispatchGitHubWebhook } from "./webhook.js";
 import type { WebhookDispatchDependencies, WebhookHeaders } from "./webhook.js";
 
@@ -85,7 +86,7 @@ export function createHostedWebhookServer(dependencies: WebhookDispatchDependenc
       if (!response.writableEnded) sendJson(response, 503, { status: "unavailable" });
     });
   });
-  server.requestTimeout = 30_000;
-  server.headersTimeout = 15_000;
+  server.requestTimeout = defaults.hostedHttpRequestTimeoutMs;
+  server.headersTimeout = defaults.hostedHttpHeadersTimeoutMs;
   return server;
 }

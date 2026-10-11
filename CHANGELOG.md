@@ -10,6 +10,7 @@
 
 ### Added
 
+- Private Hosted HTTP service composition with shared scoped run authentication for patches, results, finish and status, retaining the independent trusted-verifier gate.
 - Atomic global and per-installation spending claims, with explicit UTC monthly policy selection and no automatic allowance creation.
 - Firestore cumulative spending ledger with atomic budget/reservation claims, persistent unknown usage, and fail-closed settlement across service replicas.
 - Firestore-backed Hosted run authorization with hashed tokens, atomic request claims, and persistent model, request and cost limits.

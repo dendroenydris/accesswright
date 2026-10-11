@@ -34,6 +34,8 @@ export const defaults = Object.freeze({
   hostedMinTtlSeconds: 30,
   hostedMaxTtlSeconds: 3600,
   hostedMaxOutputTokens: 8192,
+  hostedHttpRequestTimeoutMs: 30000,
+  hostedHttpHeadersTimeoutMs: 15000,
   hostedGlobalBudgetPrefix: "global-",
   hostedInstallationBudgetPrefix: "installation-",
   firestoreRecordMaxBytes: 8192,
