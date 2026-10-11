@@ -18,9 +18,14 @@ it("downloads a fixed public GitHub commit without hooks, submodules, credential
   expect(plan.checkout).toEqual(["checkout", "--detach", "a".repeat(40)]);
   expect(plan.config).toContain("core.hooksPath=/dev/null");
   expect(plan.config).toContain("protocol.file.allow=never");
+  expect(plan.config).toContain("http.followRedirects=false");
+  expect(plan.config).toContain("credential.helper=");
+  expect(plan.config).toContain("filter.lfs.process=");
 });
 it("rejects arbitrary origins and moving refs before network access", () => {
   expect(() => pinnedClonePlan("https://evil.invalid/repo", "a".repeat(40))).toThrow();
   expect(() => pinnedClonePlan("owner/repo", "main")).toThrow();
   expect(() => pinnedClonePlan("owner/../repo", "a".repeat(40))).toThrow();
+  expect(() => pinnedClonePlan("../repo", "a".repeat(40))).toThrow();
+  expect(() => pinnedClonePlan("owner/..", "a".repeat(40))).toThrow();
 });

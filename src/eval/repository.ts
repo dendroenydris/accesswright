@@ -4,12 +4,13 @@ import { lstat, mkdir, mkdtemp, open, readdir, realpath, rename, rm } from "node
 import { basename, join, sep } from "node:path";
 import { execa } from "execa";
 import { z } from "zod";
+import { defaults } from "../config.js";
 
 export function pinnedClonePlan(repository: string, sha: string) {
-  z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/).parse(repository);
+  z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/).refine(value => value.split("/").every(part => part !== "." && part !== ".."), "Invalid repository path").parse(repository);
   z.string().regex(/^[a-f0-9]{40}$/).parse(sha);
   return {
-    config: ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "submodule.recurse=false", "-c", "protocol.file.allow=never", "-c", "filter.lfs.smudge=", "-c", "filter.lfs.required=false"],
+    config: ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "submodule.recurse=false", "-c", "protocol.file.allow=never", "-c", "filter.lfs.smudge=", "-c", "filter.lfs.process=", "-c", "filter.lfs.required=false", "-c", "credential.helper=", "-c", "http.followRedirects=false"],
     fetch: ["fetch", "--depth=1", "--no-tags", "--no-recurse-submodules", `https://github.com/${repository}.git`, sha],
     checkout: ["checkout", "--detach", sha],
   };
@@ -51,28 +52,40 @@ export async function hasSourceChanges(cwd: string, status: string, describeTrac
 }
 
 /** One immutable source cache per SHA. Never install or execute downloaded project code on the host. */
-export async function fetchPinnedRepository(cacheRoot: string, repository: string, sha: string): Promise<string> {
+export async function fetchPinnedRepository(cacheRoot: string, repository: string, sha: string, installationToken?: string): Promise<string> {
   const plan = pinnedClonePlan(repository, sha);
+  const credential = installationToken === undefined ? undefined : z.string().min(1).max(4096).regex(/^[^\r\n]+$/).parse(installationToken);
   const key = createHash("sha256").update(`${repository.toLowerCase()}@${sha}`).digest("hex");
   await mkdir(cacheRoot, { recursive: true });
   const path = join(cacheRoot, key);
-  const environment = { PATH: process.env.PATH ?? "/usr/bin:/bin", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_TERMINAL_PROMPT: "0", GIT_LFS_SKIP_SMUDGE: "1", GIT_ALLOW_PROTOCOL: "https" };
-  const git = async (cwd: string, args: string[]) => (await execa("git", [...plan.config, ...args], { cwd, env: environment, extendEnv: false, timeout: 180000, maxBuffer: 4000000 })).stdout;
-  const verify = async (cwd: string) => {
+  const environment: Record<string, string> = { PATH: process.env.PATH ?? "/usr/bin:/bin", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_TERMINAL_PROMPT: "0", GIT_LFS_SKIP_SMUDGE: "1", GIT_ALLOW_PROTOCOL: "https", GIT_NO_REPLACE_OBJECTS: "1" };
+  if (credential !== undefined) {
+    environment.GIT_CONFIG_COUNT = "1";
+    environment.GIT_CONFIG_KEY_0 = "http.https://github.com/.extraheader";
+    environment.GIT_CONFIG_VALUE_0 = "AUTHORIZATION: basic " + Buffer.from("x-access-token:" + credential).toString("base64");
+  }
+  const git = async (cwd: string, args: string[]) => (await execa("git", ["--no-optional-locks", ...plan.config, ...args], { cwd, env: environment, extendEnv: false, timeout: defaults.sourceCheckoutTimeoutMs, maxBuffer: defaults.sourceCheckoutDiagnosticBytes })).stdout;
+  const verify = async (cwd: string, removeOwnedTransportMetadata = false) => {
     const info = await lstat(cwd);
     if (!info.isDirectory() || info.isSymbolicLink()) throw new Error("Repository cache must be a regular directory");
     const status = await git(cwd, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]);
     if ((await git(cwd, ["rev-parse", "HEAD"])).trim() !== sha || await hasSourceChanges(cwd, status,
       path => git(cwd, ["diff", "--raw", "-z", "--no-abbrev", "--no-ext-diff", "--no-textconv", sha, "--", path]))) throw new Error("Frozen repository cache changed; existing files were preserved");
+    if (removeOwnedTransportMetadata) {
+      // hasSourceChanges validated every untracked entry as regular AppleDouble bytes; only this new fetch is owned.
+      for (const record of status.split("\0").filter(Boolean)) {
+        if (record.startsWith("?? ")) await rm(join(cwd, record.slice(3)));
+      }
+    }
   };
   try { await lstat(path); await verify(path); return path; }
   catch (error) { if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error; }
   const temporary = await mkdtemp(join(cacheRoot, ".fetch-"));
   try {
-    await git(temporary, ["init", "--initial-branch=accesswright-eval"]);
+    await git(temporary, ["init", "--template=", "--initial-branch=accesswright-eval"]);
     await git(temporary, plan.fetch);
     await git(temporary, plan.checkout);
-    await verify(temporary);
+    await verify(temporary, true);
     let bytes = 0, files = 0;
     const inspect = async (directory: string): Promise<void> => {
       for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -80,7 +93,7 @@ export async function fetchPinnedRepository(cacheRoot: string, repository: strin
         const target = join(directory, entry.name);
         if (entry.isDirectory()) await inspect(target);
         else if (entry.isFile()) { files += 1; bytes += (await lstat(target)).size; }
-        if (files > 50000 || bytes > 250 * 1024 * 1024) throw new Error("Repository exceeds the bounded source-corpus size");
+        if (files > defaults.sourceCheckoutMaxFiles || bytes > defaults.sourceCheckoutMaxBytes) throw new Error("Repository exceeds the bounded source-corpus size");
       }
     };
     await inspect(temporary);

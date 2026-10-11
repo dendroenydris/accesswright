@@ -33,6 +33,11 @@ export interface HostedVerificationOptions {
   reconciled: Pick<RunReport, "usage" | "unknownUsage" | "providerVerification">;
 }
 
+/** Coordinator owns this temporary checkout and must erase it before issuing a receipt. */
+export interface HostedVerificationCheckout extends Omit<HostedVerificationOptions, "reconciled"> {
+  release(): Promise<void>;
+}
+
 /** Replays only claimed patches in a fresh Docker verifier; never calls a provider or publishes. */
 export async function verifyHostedCandidate(
   options: HostedVerificationOptions,

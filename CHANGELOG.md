@@ -16,6 +16,7 @@
 
 ### Added
 
+- Temporary trusted checkouts with pinned HTTPS Git fetches, scrubbed installation-token runtime configuration, metadata-only records and explicit source erasure.
 - Run-scoped, one-time source download using bounded pinned Git blobs, shared credential exclusions, exclusive materialization and cleanup before candidate transfer.
 - Private candidate task HTTP ingress with distinct OIDC authentication, digest-bound trusted finish, interrupted-upload cleanup and metadata-only step records.
 - Firestore candidate cleanup receipts with immutable object identity and deletion confirmation recoverable across service restarts.
@@ -52,6 +53,7 @@
 
 ### Fixed
 
+- Excluded macOS transport sidecars from lint discovery and removed only verified untracked AppleDouble bytes in a newly owned pinned fetch.
 - Withheld private cleanup when its registered object identity conflicts, without deleting a different generation.
 - Erased corrupted private candidate objects at their trusted expiry without parsing source; missing current objects no longer imply confirmed cleanup.
 - Prevented repeated completed candidate transfers from restaging expired private source or replacing patches with the same report.
