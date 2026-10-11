@@ -7,6 +7,8 @@ import type { FixTask } from "../types/schemas.js";
 import { HostedCandidateSchema, HostedCandidateReceiptSchema, hostedCandidateDigest, HostedPatchEvidenceSchema, HostedPatchResponseSchema, HostedRepairContextSchema } from "./agent-protocol.js";
 import type { HostedCandidate } from "./agent-protocol.js";
 import type { HostedPatchResponse } from "./agent-api.js";
+import { HostedInputBundleSchema } from "./input-bundle.js";
+import type { HostedInputBundle } from "./input-bundle.js";
 
 /** Worker transport holds only a scoped run token. Lost responses are never retried here. */
 export class HostedAgentClient {
@@ -46,6 +48,16 @@ export class HostedAgentClient {
     } catch {
       return { status: "rejected", reason: "agent-response-unreconciled", usage: null };
     }
+  }
+
+  /** One attempt; a lost acknowledgment needs coordinator reconciliation, never automatic resubmission. */
+  async downloadInput(): Promise<HostedInputBundle> {
+    try {
+      const response = await this.post("input", "{}", [200], defaults.hostedMaxInputBodyBytes);
+      const bundle = HostedInputBundleSchema.parse(response.data);
+      if (bundle.runId !== this.runId) throw new Error("Input identity mismatch");
+      return bundle;
+    } catch { throw new Error("Hosted input transfer is unconfirmed; trusted reconciliation is required"); }
   }
 
   /** One attempt; a lost acknowledgment needs coordinator reconciliation, never automatic resubmission. */

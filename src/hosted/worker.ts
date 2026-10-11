@@ -69,11 +69,12 @@ export async function runHostedWorker(options: {
   client?: Pick<HostedAgentClient, "patch">;
   providerVerification: Exclude<RunReport["providerVerification"], "not-run">;
   config?: z.input<typeof AccesswrightConfigSchema>;
+  repoPath?: string;
   submitCandidate: (candidate: HostedCandidate) => Promise<void>;
 }): Promise<RunReport> {
   z.enum(["fake-provider", "provider-api"]).parse(options.providerVerification);
   const startedAt = new Date().toISOString();
-  const session = await EphemeralRepairSession.prepare({ repoPath: workerLayout.input, ...(options.config === undefined ? {} : { config: options.config }) });
+  const session = await EphemeralRepairSession.prepare({ repoPath: options.repoPath ?? workerLayout.input, ...(options.config === undefined ? {} : { config: options.config }) });
   let candidate: HostedCandidate;
   try {
     const remote = options.client ? createHostedSemanticRepair({ session, client: options.client, providerVerification: options.providerVerification }) : undefined;

@@ -1,8 +1,9 @@
 import { once } from "node:events";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
+import { execa } from "execa";
 
 import { HostedPatchAgent } from "../../src/hosted/agent-api.js";
 import { InMemoryHostedAgentRunStore } from "../../src/hosted/agent-run-store.js";
@@ -32,7 +33,7 @@ const context = {
   screenshotPath: null,
 };
 
-async function fixture(providerOverride?: LlmProvider) {
+async function fixture(providerOverride?: LlmProvider, inputEnabled = false) {
   const root = await mkdtemp(join(tmpdir(), "aw-hosted-http-"));
   roots.push(root);
   const ledger = await DurableSpendLedger.initialize(join(root, "spend.json"), { maxUsd: 1, history: [] });
@@ -51,20 +52,70 @@ async function fixture(providerOverride?: LlmProvider) {
   const token = await service.registerRun({ runId: "run-9", repository: "owner/repo", installationId: 42, maxRequests: 1 });
   const runStore = new InMemoryHostedRunStore();
   let trustedCalls = 0;
+  let inputReads = 0, inputReleases = 0;
+  const inputRepoPath = join(root, "repo"); let verifiedBaseSha = "";
+  if (inputEnabled) {
+    await mkdir(inputRepoPath); await writeFile(join(inputRepoPath, "package.json"), "{}\n");
+    await writeFile(join(inputRepoPath, "View.tsx"), "private fixture source\n");
+    await writeFile(join(inputRepoPath, ".env.local"), "fixture excluded credential");
+    const git = async (args: string[]) => (await execa("git", ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgSign=false", "-c", "user.name=fixture", "-c", "user.email=fixture@localhost", ...args], {
+      cwd: inputRepoPath, env: { PATH: process.env.PATH ?? "/usr/bin:/bin", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" }, extendEnv: false,
+    })).stdout.trim();
+    await git(["init"]); await git(["add", "--", "package.json", "View.tsx", ".env.local"]); await git(["commit", "-m", "fixture"]);
+    verifiedBaseSha = await git(["rev-parse", "HEAD"]);
+  }
   const server = createHostedAgentServer({ agent: service, store: runStore,
+    ...(inputEnabled ? { input: { evidenceRoot: root, resolveCheckout: (run: { runId: string; repository: string; installationId: number }) => {
+      expect(run).toMatchObject({ runId: "run-9", repository: "owner/repo", installationId: 42 }); inputReads++;
+      return Promise.resolve({ repoPath: inputRepoPath, verifiedBaseSha, release: () => { inputReleases++; return Promise.resolve(); } });
+    } } } : {}),
     verifyTrustedResult: () => { trustedCalls++; return Promise.resolve(null); } });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Agent server missing TCP port");
   return {
-    service, token, ledger, server, runStore, providerRequests: fake.requests, get calls() { return fake.requests.length; }, get trustedCalls() { return trustedCalls; },
+    service, token, ledger, server, runStore, inputRepoPath, verifiedBaseSha, root, get inputReads() { return inputReads; }, get inputReleases() { return inputReleases; },
+    providerRequests: fake.requests, get calls() { return fake.requests.length; }, get trustedCalls() { return trustedCalls; },
     origin: "http://127.0.0.1:" + address.port,
     endpoint: "http://127.0.0.1:" + address.port + "/runs/run-9/tasks/" + encodeURIComponent(task.id) + "/patch",
   };
 }
 afterEach(async () => {
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
+});
+
+it("authenticates before reading source, rejects client checkout selectors and claims one HTTP transfer", async () => {
+  const f = await fixture(undefined, true);
+  try {
+    const endpoint = f.origin + "/runs/run-9/input", headers = { authorization: "Bearer " + f.token, "content-type": "application/json" };
+    const unauthorized = await fetch(endpoint, { method: "POST", headers: { ...headers, authorization: "Bearer " + "0".repeat(64) }, body: "invalid json" });
+    expect(unauthorized.status).toBe(401); await unauthorized.arrayBuffer(); expect(f.inputReads).toBe(0);
+    const selector = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify({ repoPath: "/private", baseSha: "0".repeat(40) }) });
+    expect(selector.status).toBe(400); await selector.arrayBuffer(); expect(f.inputReads).toBe(0);
+    const client = new HostedAgentClient({ origin: f.origin, runId: "run-9", token: f.token });
+    const transfers = await Promise.allSettled([client.downloadInput(), client.downloadInput()]);
+    expect(transfers.filter(result => result.status === "fulfilled")).toHaveLength(1);
+    const received = transfers.find(result => result.status === "fulfilled");
+    if (!received || received.status !== "fulfilled") throw new Error("Missing owned source response");
+    expect(received.value.baseSha).toBe(f.verifiedBaseSha);
+    expect(received.value.files.map(file => file.path)).toEqual(["View.tsx", "package.json"]);
+    expect(f.inputReads).toBe(1); expect(f.inputReleases).toBe(1); expect(f.calls).toBe(0);
+    const metadata = await readFile(join(f.root, "run-9/run.jsonl"), "utf8");
+    expect(metadata).toContain("hosted-input-response"); expect(metadata).not.toContain("private fixture source"); expect(metadata).not.toContain(f.token);
+  } finally { await new Promise<void>(resolve => f.server.close(() => resolve())); }
+});
+
+it("retains the input claim after a failed pinned read and still releases the trusted checkout", async () => {
+  const f = await fixture(undefined, true);
+  try {
+    await writeFile(join(f.inputRepoPath, "View.tsx"), "dirty source");
+    const client = new HostedAgentClient({ origin: f.origin, runId: "run-9", token: f.token });
+    await expect(client.downloadInput()).rejects.toThrow("transfer is unconfirmed");
+    await writeFile(join(f.inputRepoPath, "View.tsx"), "private fixture source\n");
+    await expect(client.downloadInput()).rejects.toThrow("transfer is unconfirmed");
+    expect(f.inputReads).toBe(1); expect(f.inputReleases).toBe(1); expect(f.calls).toBe(0);
+  } finally { await new Promise<void>(resolve => f.server.close(() => resolve())); }
 });
 
 it("transfers actual PNG bytes and bounded verifier feedback through the private worker client", async () => {

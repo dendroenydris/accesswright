@@ -4,6 +4,7 @@
 
 ### Breaking Changes
 
+- Hosted authorization metadata requires an irreversible private-input claim; earlier incomplete records fail validation.
 - Durable candidate coordination requires an explicit trusted cleanup receipt store.
 - Private candidate expiry requires the authenticated task's original deadline; absent objects require a prior trusted cleanup receipt.
 - Hosted run metadata requires a nullable immutable candidate digest; earlier incomplete records fail validation.
@@ -15,6 +16,7 @@
 
 ### Added
 
+- Run-scoped, one-time source download using bounded pinned Git blobs, shared credential exclusions, exclusive materialization and cleanup before candidate transfer.
 - Private candidate task HTTP ingress with distinct OIDC authentication, digest-bound trusted finish, interrupted-upload cleanup and metadata-only step records.
 - Firestore candidate cleanup receipts with immutable object identity and deletion confirmation recoverable across service restarts.
 - Metadata-only candidate verification/expiry Cloud Tasks with exact OIDC task confirmation and rejection of reserved deleted task names.

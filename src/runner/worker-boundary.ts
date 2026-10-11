@@ -2,7 +2,7 @@ import { constants } from "node:fs";
 import { access, lstat, readFile } from "node:fs/promises";
 import { z } from "zod";
 
-export const workerLayout = Object.freeze({ runtime: "/accesswright", input: "/input", temporary: "/tmp/accesswright", marker: "/accesswright/.isolated-worker" });
+export const workerLayout = Object.freeze({ runtime: "/accesswright", input: "/input", downloadedInput: "/input/source", temporary: "/tmp/accesswright", marker: "/accesswright/.isolated-worker" });
 const markerText = "accesswright-secretless-worker-v1\n";
 const allowedEnvironment = new Set([
   "PATH", "HOME", "HOSTNAME", "LANG", "LC_ALL", "PLAYWRIGHT_BROWSERS_PATH", "CI", "NEXT_TELEMETRY_DISABLED", "NODE_ENV",

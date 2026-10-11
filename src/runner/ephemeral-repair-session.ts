@@ -6,7 +6,7 @@ import type { RepairSessionOptions } from "./repair-runtime.js";
 export class EphemeralRepairSession extends RepairSession<EphemeralRepairTransport> {
   static async prepare(options: Pick<RepairSessionOptions, "repoPath" | "config">): Promise<EphemeralRepairSession> {
     await assertSecretlessWorker();
-    if (options.repoPath !== workerLayout.input) throw new Error("Worker source must be a preloaded sanitized snapshot");
+    if (options.repoPath !== workerLayout.input && options.repoPath !== workerLayout.downloadedInput) throw new Error("Worker source must be an owned sanitized input snapshot");
     return EphemeralRepairSession.prepareWithSandbox({ ...options, tempRoot: workerLayout.temporary, runtimeRoot: workerLayout.runtime,
       retainEvidence: false, privateDiagnostics: false }, (evidenceDir, config) => {
       if (config.offline) throw new UnsupportedRepositoryError("The ephemeral worker cannot enforce offline networking; use the Docker driver", evidenceDir);

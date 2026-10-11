@@ -1,4 +1,6 @@
 import { createServer } from "node:http";
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import type { IncomingMessage, RequestListener, ServerResponse } from "node:http";
 import { z } from "zod";
 
@@ -8,9 +10,17 @@ import { createHostedRunHandler } from "./run-http.js";
 import { HostedRunWorkflow } from "./run-workflow.js";
 import type { HostedRunWorkflowDependencies } from "./run-workflow.js";
 import { HostedPatchRequestSchema } from "./agent-protocol.js";
+import { createHostedInputBundle } from "./input-bundle.js";
+import type { HostedRunRecord } from "./agent-api.js";
+import { appendRunRecord } from "../tracer/run-record.js";
 
 const maxBodyBytes = defaults.hostedMaxPatchBodyBytes;
 const patchPath = /^\/runs\/([A-Za-z0-9_-]{1,64})\/tasks\/([^/?]+)\/patch$/;
+const inputPath = /^\/runs\/([A-Za-z0-9_-]{1,64})\/input$/;
+interface HostedInputOptions {
+  resolveCheckout: (run: HostedRunRecord) => Promise<{ repoPath: string; verifiedBaseSha: string; release: () => Promise<void> }>;
+  evidenceRoot: string;
+}
 
 class LargePayloadError extends Error {
   constructor() { super("Internal agent request exceeds byte limit"); }
@@ -113,7 +123,7 @@ export function createHostedAgentHandler(agent: HostedPatchAgent): RequestListen
 }
 
 /** Private coordinator only; public webhooks use their separate receiver. */
-export function createHostedAgentServer(options: Pick<HostedRunWorkflowDependencies, "store" | "verifyTrustedResult" | "receiveCandidate"> & { agent: HostedPatchAgent }) {
+export function createHostedAgentServer(options: Pick<HostedRunWorkflowDependencies, "store" | "verifyTrustedResult" | "receiveCandidate"> & { agent: HostedPatchAgent; input?: HostedInputOptions }) {
   const patches = createHostedAgentHandler(options.agent);
   const runs = createHostedRunHandler(new HostedRunWorkflow({
     store: options.store,
@@ -123,6 +133,41 @@ export function createHostedAgentServer(options: Pick<HostedRunWorkflowDependenc
   }));
   const server = createServer((request, response) => {
     const path = (request.url ?? "").split("?")[0] ?? "";
+    const input = inputPath.exec(request.url ?? "");
+    const inputOptions = options.input;
+    if (input && inputOptions) {
+      const runId = input[1];
+      void (async () => {
+        if (request.method !== "POST") { send(response, 405, { status: "method-not-allowed" }); return; }
+        const token = request.headers.authorization?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
+        try {
+          if (!token) throw new Error("Missing authorization");
+          await options.agent.inspectRun(runId, token);
+        } catch { request.resume(); send(response, 401, { status: "unauthorized" }); return; }
+        if (request.headers["content-type"]?.split(";")[0]?.trim().toLowerCase() !== "application/json") {
+          request.resume(); send(response, 415, { status: "unsupported-media-type" }); return;
+        }
+        try { z.object({}).strict().parse(await boundedJson(request)); }
+        catch (error) { send(response, error instanceof LargePayloadError ? 413 : 400, { status: "invalid-request" }); return; }
+        const directory = join(inputOptions.evidenceRoot, runId);
+        await mkdir(directory, { recursive: true, mode: 0o700 });
+        await appendRunRecord(join(directory, "run.jsonl"), { timestamp: new Date().toISOString(), step: "hosted-input-claim", status: "ok" });
+        try {
+          const run = await options.agent.claimInput(runId, token);
+          const checkout = await inputOptions.resolveCheckout(run);
+          let bundle: Awaited<ReturnType<typeof createHostedInputBundle>>;
+          try { bundle = await createHostedInputBundle({ runId, ...checkout }); }
+          finally { await checkout.release(); }
+          await appendRunRecord(join(directory, "run.jsonl"), { timestamp: new Date().toISOString(), step: "hosted-input-response", status: "ok",
+            metadata: { baseSha: bundle.baseSha, files: bundle.files.length } });
+          send(response, 200, bundle);
+        } catch (error) {
+          try { await appendRunRecord(join(directory, "run.jsonl"), { timestamp: new Date().toISOString(), step: "hosted-input-response", status: "error" }); } catch { /* Hold an uncertain claim. */ }
+          send(response, error instanceof Error && /already claimed|run is closed/.test(error.message) ? 409 : 503, { status: "requires-reconciliation" });
+        }
+      })().catch(() => { if (!response.writableEnded) send(response, 503, { status: "requires-reconciliation" }); });
+      return;
+    }
     (patchPath.test(path) ? patches : runs)(request, response);
   });
   server.requestTimeout = defaults.hostedHttpRequestTimeoutMs;

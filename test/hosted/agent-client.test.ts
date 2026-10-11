@@ -1,4 +1,5 @@
 import { expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 import { defaults } from "../../src/config.js";
 import { HostedAgentClient } from "../../src/hosted/agent-client.js";
 import type { FixTask } from "../../src/types/schemas.js";
@@ -105,4 +106,23 @@ it("rejects oversized candidates before transfer", async () => {
   const fetcher = vi.fn<typeof fetch>();
   await expect(new HostedAgentClient({ ...options, fetcher }).submitCandidate(candidate)).rejects.toThrow();
   expect(fetcher).not.toHaveBeenCalled();
+});
+
+it("downloads a run-bound source bundle with bounded authenticated transport", async () => {
+  const bytes = Buffer.from("private fixture source");
+  const bundle = { runId: options.runId, baseSha: "a".repeat(40), files: [{ path: "app/page.tsx", mode: "100644",
+    blobSha: createHash("sha1").update("blob " + bytes.length + "\0").update(bytes).digest("hex"), data: bytes.toString("base64") }] };
+  const fetcher = vi.fn<typeof fetch>(() => Promise.resolve(Response.json(bundle)));
+  expect(await new HostedAgentClient({ ...options, fetcher }).downloadInput()).toEqual(bundle);
+  expect(fetcher.mock.calls[0]).toMatchObject(["https://agent.example/runs/run-1/input", { redirect: "error", credentials: "omit", body: "{}" }]);
+});
+
+it.each(["run", "hash", "size", "lost"])("rejects %s source transfers without retry", async kind => {
+  const bytes = Buffer.from("private fixture source");
+  const body = { runId: kind === "run" ? "other" : options.runId, baseSha: "a".repeat(40), files: [{ path: "app/page.tsx", mode: "100644",
+    blobSha: kind === "hash" ? "0".repeat(40) : createHash("sha1").update("blob " + bytes.length + "\0").update(bytes).digest("hex"), data: bytes.toString("base64") }] };
+  const fetcher = vi.fn<typeof fetch>(() => kind === "lost" ? Promise.reject(new Error("private fixture source")) : Promise.resolve(
+    kind === "size" ? new Response("private fixture source", { headers: { "content-length": String(defaults.hostedMaxInputBodyBytes + 1) } }) : Response.json(body)));
+  await expect(new HostedAgentClient({ ...options, fetcher }).downloadInput()).rejects.toThrow("Hosted input transfer is unconfirmed");
+  expect(fetcher).toHaveBeenCalledOnce();
 });

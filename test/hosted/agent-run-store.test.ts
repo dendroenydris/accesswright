@@ -78,6 +78,30 @@ it("claims a provider request once across two independent service replicas", asy
   expect(await f.open().inspectRun("run-2", token)).toMatchObject({ requestCount: 1, spentUsd: 0.0005 });
 });
 
+it("consumes private input once across replicas and retains the claim after restart", async () => {
+  const f = await fixture(), first = f.open();
+  const token = await first.registerRun({ runId: "run-input", repository: "owner/repo", installationId: 42 });
+  await expect(first.claimInput("run-input", "0".repeat(64))).rejects.toThrow(/authorization/);
+  const results = await Promise.allSettled([first.claimInput("run-input", token), f.open().claimInput("run-input", token)]);
+  expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
+  expect(results.filter(result => result.status === "rejected")).toHaveLength(1);
+  await expect(f.open().claimInput("run-input", token)).rejects.toThrow(/claimed/);
+  await expect(f.openStore().update("run-input", run => ({ ...run, inputClaimed: false }))).rejects.toThrow(/authorization/);
+  expect(f.provider.requests).toHaveLength(0);
+  const persisted = JSON.stringify([...f.cloud.records.values()]);
+  expect(persisted).not.toContain(token); expect(persisted).not.toContain("private fixture marker");
+});
+
+it("does not release source after sealing or after a provider request has started", async () => {
+  const f = await fixture(), first = f.open();
+  const token = await first.registerRun({ runId: "run-input-sealed", repository: "owner/repo", installationId: 42 });
+  await first.sealForVerification("run-input-sealed");
+  await expect(f.open().claimInput("run-input-sealed", token)).rejects.toThrow(/closed/);
+  const called = await first.registerRun({ runId: "run-input-called", repository: "owner/repo", installationId: 42 });
+  await first.patch("run-input-called", called, task, context);
+  await expect(f.open().claimInput("run-input-called", called)).rejects.toThrow(/closed/);
+});
+
 it("preserves cumulative per-task token caps across restarts, larger operator limits and changed task IDs", async () => {
   const f = await fixture(0.1, 12000);
   f.options.maxInputTokens = 20000;

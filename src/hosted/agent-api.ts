@@ -89,6 +89,7 @@ export class HostedPatchAgent {
       modelFingerprint: this.modelFingerprint,
       inFlight: false,
       sealed: false,
+      inputClaimed: false,
       taskTokens: {},
       record: {
         runId, repository, installationId, createdAt: new Date(now).toISOString(),
@@ -118,6 +119,19 @@ export class HostedPatchAgent {
 
   async inspectRun(runId: string, token: string): Promise<HostedRunRecord> {
     return { ...(await this.authenticate(runId, token)).record };
+  }
+
+  /** Consume before reading private source; uncertain transfers never renew across restarts. */
+  async claimInput(runId: string, token: string): Promise<HostedRunRecord> {
+    await this.authenticate(runId, token);
+    const run = await this.options.runStore.update(runId, current => {
+      this.validateToken(current, token);
+      if (current.modelFingerprint !== this.modelFingerprint || current.inputClaimed || current.sealed || current.record.requestCount !== 0) {
+        throw new Error("Private input is already claimed or the run is closed");
+      }
+      return { ...current, inputClaimed: true };
+    });
+    return { ...run.record };
   }
 
   async records(): Promise<HostedRunRecord[]> {

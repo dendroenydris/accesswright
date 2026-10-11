@@ -8,6 +8,11 @@ const excludedDirectories = new Set([".git", ".next", "node_modules", ".accesswr
 const privateFile = /^(?:\.env(?:\..*)?|\.npmrc|\.yarnrc(?:\.yml)?|\.netrc|\.pypirc|\.DS_Store|\._.*|AGENTS\.md)$/i;
 const credentialFile = /(?:\.(?:pem|key|p12|pfx|keystore)$|(?:^|[-_.])(?:credentials?|secrets?)(?:[-_.]|$))/i;
 
+export function isSnapshotPath(path: string): boolean {
+  return path.length > 0 && !/[\\:\p{Cc}]/u.test(path) && path.split("/").every(part =>
+    part.length > 0 && part !== "." && part !== ".." && !excludedDirectories.has(part) && !privateFile.test(part) && !credentialFile.test(part));
+}
+
 /** Copies inputs only; neither executes repository code nor follows symbolic links. */
 export async function copyTargetSnapshot(source: string, destination: string): Promise<void> {
   const root = await realpath(source);
@@ -19,7 +24,7 @@ export async function copyTargetSnapshot(source: string, destination: string): P
     await mkdir(to, { recursive: true });
     const entries = (await readdir(from, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name));
     for (const entry of entries) {
-      if (entry.isSymbolicLink() || excludedDirectories.has(entry.name) || privateFile.test(entry.name) || credentialFile.test(entry.name)) continue;
+      if (entry.isSymbolicLink() || !isSnapshotPath(entry.name)) continue;
       const input = join(from, entry.name), output = join(to, entry.name);
       if (entry.isDirectory()) await copyDirectory(input, output);
       else if (entry.isFile()) {
