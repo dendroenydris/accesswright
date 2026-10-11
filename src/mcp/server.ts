@@ -2,13 +2,14 @@
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
 import { McpAgentVerifier } from "./session.js";
+import { isMainModule } from "../entrypoint.js";
 
 type Verifier = Pick<McpAgentVerifier, "scan" | "verify" | "close">;
 
@@ -111,7 +112,7 @@ async function main(): Promise<void> {
   await server.connect(new StdioServerTransport());
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (await isMainModule(import.meta.url)) {
   main().catch(error => {
     const diagnostic = createHash("sha256")
       .update(error instanceof Error ? error.message : "unknown")

@@ -16,6 +16,7 @@
 
 ### Added
 
+- CLI help without repository access, Docker or model credentials, and a typed library entry for installed packages.
 - Read-only GitHub App source access with installation/owner/repository checks, bounded signed requests and metadata-only revision records.
 - Create-only Firestore original-revision pins shared by source provisioning and independent verification across service restarts.
 - Temporary trusted checkouts with pinned HTTPS Git fetches, scrubbed installation-token runtime configuration, metadata-only records and explicit source erasure.
@@ -51,10 +52,12 @@
 
 ### Changed
 
+- npm tarballs contain the compiled runtime and public package documents, excluding development checkouts, fixtures and internal files.
 - Opt-in OpenAI live validation uses the standard local `OPENAI_API_KEY` environment variable instead of the temporary GitHub secret name.
 
 ### Fixed
 
+- Recognized installed npm command symlinks and mounted complete hoisted runtime dependencies without substituting module versions.
 - Excluded macOS transport sidecars from lint discovery and removed only verified untracked AppleDouble bytes in a newly owned pinned fetch.
 - Withheld private cleanup when its registered object identity conflicts, without deleting a different generation.
 - Erased corrupted private candidate objects at their trusted expiry without parsing source; missing current objects no longer imply confirmed cleanup.

@@ -40,6 +40,18 @@ npm run build
 node dist/src/cli.js fix /absolute/path/to/next-project --no-llm --offline
 ```
 
+To install a locally built package, run `npm run build` and `npm pack --ignore-scripts`. Install the resulting tarball in a separate consumer directory:
+
+```sh
+npm install --ignore-scripts /absolute/path/to/accesswright-0.0.0.tgz
+npx accesswright --help
+npx accesswright fix /absolute/path/to/next-project --no-llm --dry-run
+```
+
+The tarball contains the compiled runtime, type declarations, README, license and changelog. Development checkouts, tests, evaluation fixtures, dashboard sources and internal documents are excluded. The library entry exports `repairRepository` from `accesswright`. Help works without Docker or a model key; repairs require Docker. This installation uses a local tarball and does not publish the package.
+
+The Docker runtime uses one complete dependency tree matching the installed coordinator. Split layouts or dependencies linked outside that tree are rejected; install the tool in a separate npm directory if an existing project's dependency layout conflicts.
+
 Add `--dry-run` to leave the original source unchanged. `--retain-evidence` explicitly retains private screenshots and rendered page facts in the temporary run directory. The default retains only structured run metadata. A changed original repository is never overwritten after the verification snapshot has gone stale. A blocked final verification produces a nonzero CLI exit status.
 
 Configuration is optional `.accesswright.yml`:

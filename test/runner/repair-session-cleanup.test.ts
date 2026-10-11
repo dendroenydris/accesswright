@@ -20,6 +20,10 @@ it.each(["invalid-manifest", "not-next", "no-routes", "missing-runtime", "failed
     if (failure !== "no-routes") await writeFile(join(repoPath, "app/page.tsx"), "export default function Page() { return null; }\n");
     if (failure === "failed-close") {
       await mkdir(join(runtimeRoot, "node_modules"), { recursive: true });
+      await writeFile(join(runtimeRoot, "package.json"), JSON.stringify({ dependencies: { fixture: "1.0.0" } }));
+      await mkdir(join(runtimeRoot, "node_modules/fixture"));
+      await writeFile(join(runtimeRoot, "node_modules/fixture/package.json"), JSON.stringify({ name: "fixture", version: "1.0.0", main: "index.js" }));
+      await writeFile(join(runtimeRoot, "node_modules/fixture/index.js"), "");
       await mkdir(join(runtimeRoot, "dist/src/runner"), { recursive: true });
       await writeFile(join(runtimeRoot, "dist/src/runner/target-entry.js"), "");
       create.mockImplementation(async source => {

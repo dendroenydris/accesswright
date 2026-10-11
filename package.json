@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "license": "MIT",
+  "files": ["dist/src", "CHANGELOG.md"],
+  "main": "dist/src/core/repository.js",
+  "types": "dist/src/core/repository.d.ts",
   "bin": {
     "accesswright": "dist/src/cli.js",
     "accesswright-mcp": "dist/src/mcp/server.js"

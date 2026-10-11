@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 import { parseCliArgs } from "./cli-options.js";
 import type { CliArgs } from "./cli-options.js";
 import { repairRepository } from "./core/repository.js";
 import type { RunReport } from "./reporter/report.js";
+import { defaults } from "./config.js";
+import { isMainModule } from "./entrypoint.js";
 
 export { parseCliArgs };
 export type { CliArgs };
@@ -63,18 +65,19 @@ export function cliExitCode(report: Pick<RunReport, "status">): number {
   return report.status === "blocked" ? 1 : 0;
 }
 
-async function main(): Promise<void> {
-  const result = await runCli(process.argv.slice(2));
+export async function runCliMain(): Promise<void> {
+  const args = process.argv.slice(2);
+  if (args.includes("--help") || args.includes("-h")) {
+    process.stdout.write(`Usage: accesswright fix <repo> [options]\n\nRequires Node.js, Git and a running Docker engine.\n\n  --no-llm                   Use deterministic repairs without a model key\n  --dry-run                  Verify without changing the original source\n  --offline                  Disable target network after installation\n  --retain-evidence          Retain private screenshots and page facts\n  --trust-provider-config    Allow repository provider configuration\n  --max-tasks <count>         Limit repair tasks (default ${defaults.maxTasks})\n  --max-cost-usd <amount>     Authorize model spending (default ${defaults.maxRunCostUsd})\n  --input-usd-per-million <amount>\n  --output-usd-per-million <amount>\n                             Provide both verified model prices\n  -h, --help                 Show this help without running repairs\n`);
+    return;
+  }
+  const result = await runCli(args);
   process.stdout.write(`${JSON.stringify(result)}\n`);
   process.exitCode = cliExitCode(result);
 }
 
-const invokedPath = process.argv[1];
-if (
-  invokedPath !== undefined &&
-  import.meta.url === pathToFileURL(resolve(invokedPath)).href
-) {
-  main().catch((error: unknown) => {
+if (await isMainModule(import.meta.url)) {
+  runCliMain().catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`accesswright: ${message}\n`);
     process.exitCode = 1;
