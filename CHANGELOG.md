@@ -4,6 +4,7 @@
 
 ### Breaking Changes
 
+- Hosted authorization records require a fixed per-task token ceiling and hashed cumulative task usage; earlier incomplete records fail validation.
 - `HostedPatchAgent` requires an explicit provider-evidence classification. Durable authorization records now require settled request and token counters plus a verification seal; earlier records fail validation rather than inferring missing usage.
 - LLM `promptHash` now covers a versioned encoding of text, system instructions, image bytes, media types and image order, rather than text alone.
 - `HostedPatchAgent` requires an explicit run store; run registration, inspection and metadata listing are asynchronous.
@@ -39,6 +40,7 @@
 
 ### Fixed
 
+- Enforced cumulative Hosted task-token limits across restarts and changed worker task IDs, including image expansion and known actual overshoots.
 - Claimed Hosted finish verification atomically across service replicas; interrupted claims remain pending and terminal decisions cannot be overwritten.
 - Rejected contradictory Hosted production check flags and inconsistent verified-fix counts before requesting trusted verification.
 - Rejected concurrent MCP operations before they can replace or close an active verification session.

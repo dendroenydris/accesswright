@@ -123,3 +123,13 @@ it("refuses source-sized untrusted payloads before provider invocation", async (
   })).rejects.toThrow(/context|size|limit/i);
   expect(harness.calls).toBe(0);
 });
+
+it("counts image expansion before authorizing a task's provider call", async () => {
+  const harness = await agent();
+  const token = await harness.service.registerRun({ runId: "run-image-cap", repository: "owner/private-app", installationId: 42 });
+  const image = Buffer.alloc(64000);
+  Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(image);
+  await expect(harness.service.patch("run-image-cap", token, task, context, { images: [{ mediaType: "image/png", data: image.toString("base64") }] })).rejects.toThrow(/token limit/);
+  expect(harness.calls).toBe(0);
+  expect(await harness.service.inspectRun("run-image-cap", token)).toMatchObject({ requestCount: 0, inputTokens: 0, outputTokens: 0 });
+});

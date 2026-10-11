@@ -24,6 +24,7 @@ export interface HostedPatchAgentOptions {
   pricing: ModelPricing;
   maxInputTokens: number;
   maxOutputTokens: number;
+  maxTaskTokens?: number;
   maxCostUsdPerRun: number;
   ledgerForRun: (run: HostedRunRecord) => Promise<SpendLedger>;
   provider: LlmProvider;
@@ -54,6 +55,7 @@ export class HostedPatchAgent {
   private readonly maxReservationUsd: number;
   private readonly options: HostedPatchAgentOptions;
   private readonly modelFingerprint: string;
+  private readonly maxTaskTokens: number;
 
   constructor(options: HostedPatchAgentOptions) {
     this.options = Object.freeze({ ...options,
@@ -62,6 +64,7 @@ export class HostedPatchAgent {
       pricing: Object.freeze({ ...options.pricing }),
     });
     this.modelFingerprint = createHash("sha256").update(JSON.stringify({ model: this.options.model, providerVerification: this.options.providerVerification })).digest("hex");
+    this.maxTaskTokens = z.number().int().positive().parse(options.maxTaskTokens ?? defaults.maxTaskTokens);
     if (!Number.isSafeInteger(options.maxInputTokens) || options.maxInputTokens < 1) throw new Error("Verified model input bound is required");
     if (!Number.isSafeInteger(options.maxOutputTokens) || options.maxOutputTokens < 1 || options.maxOutputTokens > defaults.hostedMaxOutputTokens) throw new Error("Bounded output tokens are required");
     if (!Number.isFinite(options.maxCostUsdPerRun) || options.maxCostUsdPerRun <= 0) throw new Error("Positive operator run allowance is required");
@@ -86,10 +89,11 @@ export class HostedPatchAgent {
       modelFingerprint: this.modelFingerprint,
       inFlight: false,
       sealed: false,
+      taskTokens: {},
       record: {
         runId, repository, installationId, createdAt: new Date(now).toISOString(),
         expiresAt: new Date(now + ttl * 1000).toISOString(),
-        requestCount: 0, settledRequests: 0, inputTokens: 0, outputTokens: 0, maxRequests, spentUsd: 0,
+        requestCount: 0, settledRequests: 0, inputTokens: 0, outputTokens: 0, maxRequests, maxTaskTokens: this.maxTaskTokens, spentUsd: 0,
         maxCostUsd: this.options.maxCostUsdPerRun,
         usageUnknown: false, lastStatus: "registered",
       },
@@ -168,6 +172,10 @@ export class HostedPatchAgent {
       "Guidance: " + getRepairGuidance(task.ruleId),
       untrusted,
     ].join("\n");
+    // A changed worker-supplied task ID must not reset the same source task's allowance.
+    const taskKey = createHash("sha256").update(JSON.stringify({ ruleId: task.ruleId, source: task.source })).digest("hex");
+    const estimatedTokens = Buffer.byteLength(prompt) + evidence.images.reduce((sum, image) => sum + Buffer.byteLength(image.data), 0) +
+      defaults.hostedTokenEstimateOverhead + this.options.maxOutputTokens;
 
     const claimed = await this.options.runStore.update(runId, run => {
       this.validateToken(run, token);
@@ -175,11 +183,13 @@ export class HostedPatchAgent {
       if (run.sealed) throw new Error("Run is sealed for independent verification");
       if (run.inFlight) throw new Error("Run already has a provider request in flight");
       if (run.record.usageUnknown) throw new Error("Unknown usage blocks further run calls");
+      if ((run.taskTokens[taskKey] ?? 0) + estimatedTokens > Math.min(run.record.maxTaskTokens, this.maxTaskTokens)) throw new Error("Per-task token limit exceeded");
+      if (run.taskTokens[taskKey] === undefined && Object.keys(run.taskTokens).length >= defaults.maxTasks) throw new Error("Per-run task limit exceeded");
       if (run.record.requestCount >= run.record.maxRequests ||
         run.record.spentUsd + this.maxReservationUsd > Math.min(run.record.maxCostUsd, this.options.maxCostUsdPerRun)) {
         throw new Error("Per-run model request or cost limit exceeded");
       }
-      return { ...run, inFlight: true, record: { ...run.record, requestCount: run.record.requestCount + 1 } };
+      return { ...run, inFlight: true, taskTokens: { ...run.taskTokens, [taskKey]: run.taskTokens[taskKey] ?? 0 }, record: { ...run.record, requestCount: run.record.requestCount + 1 } };
     });
     let clientStarted = false;
     try {
@@ -199,8 +209,9 @@ export class HostedPatchAgent {
       const completed = await this.options.runStore.update(runId, run => {
         if (!run.inFlight || run.record.requestCount !== claimed.record.requestCount) throw new Error("Run request claim changed");
         const spentUsd = run.record.spentUsd + (result.usage?.costUsd ?? 0);
-        const blocked = !result.usage || spentUsd > Math.min(run.record.maxCostUsd, this.options.maxCostUsdPerRun);
-        return { ...run, inFlight: false, record: {
+        const taskTokens = (run.taskTokens[taskKey] ?? 0) + (result.usage ? result.usage.inputTokens + result.usage.outputTokens : 0);
+        const blocked = !result.usage || spentUsd > Math.min(run.record.maxCostUsd, this.options.maxCostUsdPerRun) || taskTokens > Math.min(run.record.maxTaskTokens, this.maxTaskTokens);
+        return { ...run, inFlight: false, taskTokens: { ...run.taskTokens, [taskKey]: taskTokens }, record: {
           ...run.record, spentUsd, usageUnknown: !result.usage,
           settledRequests: run.record.settledRequests + (result.usage ? 1 : 0),
           inputTokens: run.record.inputTokens + (result.usage?.inputTokens ?? 0),
@@ -210,7 +221,7 @@ export class HostedPatchAgent {
       });
       if (!result.usage) return { status: "rejected", reason: "Provider usage is unknown; run blocked", usage: null };
       if (completed.record.lastStatus === "blocked") {
-        return { status: "rejected", reason: "Actual usage exceeded the per-run allowance", usage: result.usage };
+        return { status: "rejected", reason: "Actual usage exceeded the cost or task-token allowance", usage: result.usage };
       }
       if (result.status === "rejected") {
         return { status: "rejected", reason: result.reason === "schema" ? "patch-validation-failed" : "provider-failed", usage: result.usage };

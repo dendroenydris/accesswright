@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
+import { defaults } from "../../src/config.js";
 
 import { HostedPatchAgent } from "../../src/hosted/agent-api.js";
 import { FirestoreHostedAgentRunStore } from "../../src/hosted/agent-run-store.js";
@@ -23,7 +24,7 @@ const context = {
   callSites: [], page: { title: "Settings", surroundingText: "Save changes", caption: null, linkTarget: null },
   screenshotPath: null,
 };
-async function fixture(maxCostUsdPerRun = 0.02) {
+async function fixture(maxCostUsdPerRun = 0.02, maxTaskTokens: number = defaults.maxTaskTokens) {
   const root = await mkdtemp(join(tmpdir(), "aw-durable-auth-"));
   roots.push(root);
   const ledger = await DurableSpendLedger.initialize(join(root, "spend.json"), { maxUsd: 1, history: [] });
@@ -35,7 +36,7 @@ async function fixture(maxCostUsdPerRun = 0.02) {
   const options = {
     model: { provider: "openai" as const, id: "fixture-only", reasoningEffort: "high" as const },
     pricing: { inputUsdPerMillion: 1, outputUsdPerMillion: 2 }, maxInputTokens: 1000,
-    maxOutputTokens: 256, maxCostUsdPerRun, ledgerForRun: () => Promise.resolve(ledger), provider, providerVerification: "fake-provider" as const,
+    maxOutputTokens: 256, maxCostUsdPerRun, maxTaskTokens, ledgerForRun: () => Promise.resolve(ledger), provider, providerVerification: "fake-provider" as const,
   };
   const openStore = () => new FirestoreHostedAgentRunStore(cloud.options);
   const open = () => new HostedPatchAgent({ ...options, runStore: openStore() });
@@ -75,6 +76,41 @@ it("claims a provider request once across two independent service replicas", asy
   expect(results.filter(result => result.status === "rejected")).toHaveLength(1);
   expect(f.provider.requests).toHaveLength(1);
   expect(await f.open().inspectRun("run-2", token)).toMatchObject({ requestCount: 1, spentUsd: 0.0005 });
+});
+
+it("preserves cumulative per-task token caps across restarts, larger operator limits and changed task IDs", async () => {
+  const f = await fixture(0.1, 12000);
+  f.options.maxInputTokens = 20000;
+  const provider = new FakeLlmProvider([{ object: { taskId: task.id, changes: [{ path: context.component.file, before: context.component.sourceExcerpt, after: '<button id="save" aria-label="Save"></button>' }] },
+    usage: { inputTokens: 8000, outputTokens: 100, costUsd: 0.0082 } }]);
+  const first = new HostedPatchAgent({ ...f.options, provider, runStore: f.openStore() });
+  const token = await first.registerRun({ runId: "run-task-cap", repository: "owner/repo", installationId: 42 });
+  expect((await first.patch("run-task-cap", token, task, context)).status).toBe("accepted");
+  const restarted = new HostedPatchAgent({ ...f.options, maxTaskTokens: 100000, provider, runStore: f.openStore() });
+  await expect(restarted.patch("run-task-cap", token, { ...task, id: "changed-worker-task-id" }, context)).rejects.toThrow(/token limit/);
+  expect(provider.requests).toHaveLength(1);
+  const stored = await f.openStore().get("run-task-cap");
+  expect(stored?.record).toMatchObject({ inputTokens: 8000, outputTokens: 100, maxTaskTokens: 12000 });
+  const text = JSON.stringify(stored);
+  expect(text).not.toContain(task.id);
+  expect(text).not.toContain(context.component.file);
+  await expect(f.openStore().update("run-task-cap", run => ({ ...run, taskTokens: {} }))).rejects.toThrow(/usage/);
+  await expect(f.openStore().update("run-task-cap", run => ({ ...run, record: { ...run.record, maxTaskTokens: 100000 } }))).rejects.toThrow(/authorization/);
+});
+
+it("rejects an actual token-cap overshoot while retaining its known service usage", async () => {
+  const f = await fixture(0.1, 18000);
+  f.options.maxInputTokens = 20000;
+  const provider = new FakeLlmProvider([{ object: { taskId: task.id, changes: [{ path: context.component.file, before: context.component.sourceExcerpt, after: '<button id="save" aria-label="Save"></button>' }] },
+    usage: { inputTokens: 18000, outputTokens: 100, costUsd: 0.0182 } }]);
+  const service = new HostedPatchAgent({ ...f.options, provider, runStore: f.openStore() });
+  const token = await service.registerRun({ runId: "run-task-overshoot", repository: "owner/repo", installationId: 42 });
+  const response = await service.patch("run-task-overshoot", token, task, context);
+  expect(response).toMatchObject({ status: "rejected", usage: { inputTokens: 18000 } });
+  expect(response.status === "rejected" ? response.reason : "").toMatch(/token/);
+  await expect(service.patch("run-task-overshoot", token, task, context)).rejects.toThrow(/token limit/);
+  expect(await service.sealForVerification("run-task-overshoot")).toEqual({ usage: { inputTokens: 18000, outputTokens: 100, spentUsd: 0.0182 }, unknownUsage: false, providerVerification: "fake-provider" });
+  expect(provider.requests).toHaveLength(1);
 });
 
 it("seals cumulative service usage across restarts before independent verification", async () => {

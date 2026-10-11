@@ -44,6 +44,7 @@ export const defaults = Object.freeze({
   hostedMaxPatchResponseBytes: 512 * 1024,
   hostedMaxFeedbackChars: 4096,
   hostedMaxImages: 1,
+  hostedTokenEstimateOverhead: 8192,
   hostedGlobalBudgetPrefix: "global-",
   hostedInstallationBudgetPrefix: "installation-",
   firestoreRecordMaxBytes: 8192,
