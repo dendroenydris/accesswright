@@ -34,10 +34,13 @@ export const defaults = Object.freeze({
   hostedMinTtlSeconds: 30,
   hostedMaxTtlSeconds: 3600,
   hostedMaxOutputTokens: 8192,
+  hostedGlobalBudgetPrefix: "global-",
+  hostedInstallationBudgetPrefix: "installation-",
   firestoreRecordMaxBytes: 8192,
   firestoreResponseMaxBytes: 256 * 1024,
   firestorePageSize: 25,
   firestoreMaxListPages: 40,
+  firestoreMaxAtomicRecords: 3,
 });
 
 export async function loadConfig(

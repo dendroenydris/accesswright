@@ -35,7 +35,7 @@ async function fixture(maxCostUsdPerRun = 0.02) {
   const options = {
     model: { provider: "openai" as const, id: "fixture-only", reasoningEffort: "high" as const },
     pricing: { inputUsdPerMillion: 1, outputUsdPerMillion: 2 }, maxInputTokens: 1000,
-    maxOutputTokens: 256, maxCostUsdPerRun, ledger, provider,
+    maxOutputTokens: 256, maxCostUsdPerRun, ledgerForRun: () => Promise.resolve(ledger), provider,
   };
   const openStore = () => new FirestoreHostedAgentRunStore(cloud.options);
   const open = () => new HostedPatchAgent({ ...options, runStore: openStore() });

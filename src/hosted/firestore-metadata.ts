@@ -114,9 +114,10 @@ export class FirestoreMetadataStore<T extends { runId: string }> {
     return structuredClone(await this.read(runId));
   }
 
-  /** Both records change together, or neither does; null versions are create-only. */
-  async commitPair(changes: readonly [FirestoreWrite<T>, FirestoreWrite<T>]): Promise<void> {
-    if (changes.length !== 2 || changes[0].record.runId === changes[1].record.runId) throw new Error("Atomic metadata writes require two distinct records");
+  /** All records change together, or none does; null versions are create-only. */
+  async commit(changes: readonly FirestoreWrite<T>[]): Promise<void> {
+    if (changes.length < 2 || changes.length > defaults.firestoreMaxAtomicRecords ||
+      new Set(changes.map(change => change.record.runId)).size !== changes.length) throw new Error("Atomic metadata writes require bounded distinct records");
     const writes = changes.map(change => {
       const record = this.schema.parse(change.record);
       const id = runIdSchema.parse(record.runId);
@@ -142,7 +143,7 @@ export class FirestoreMetadataStore<T extends { runId: string }> {
       throw new Error("Firestore atomic metadata commit failed (HTTP " + response.status + ")");
     }
     const written = z.object({ updateTime: documentSchema.shape.updateTime }).passthrough();
-    z.object({ writeResults: z.tuple([written, written]), commitTime: documentSchema.shape.updateTime }).passthrough()
+    z.object({ writeResults: z.array(written).length(changes.length), commitTime: documentSchema.shape.updateTime }).passthrough()
       .parse(await boundedJson(response));
   }
 

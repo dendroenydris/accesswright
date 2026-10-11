@@ -46,7 +46,7 @@ async function fixture(providerOverride?: LlmProvider) {
     model: { provider: "openai", id: "fixture-only", reasoningEffort: "high" },
     pricing: { inputUsdPerMillion: 1, outputUsdPerMillion: 2 },
     maxInputTokens: 1200, maxOutputTokens: 256, maxCostUsdPerRun: 0.02,
-    ledger, provider, runStore: new InMemoryHostedAgentRunStore(),
+    ledgerForRun: () => Promise.resolve(ledger), provider, runStore: new InMemoryHostedAgentRunStore(),
   });
   const token = await service.registerRun({ runId: "run-9", repository: "owner/repo", installationId: 42, maxRequests: 1 });
   const server = createServer(createHostedAgentHandler(service));

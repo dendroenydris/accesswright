@@ -5,9 +5,11 @@
 ### Breaking Changes
 
 - `HostedPatchAgent` requires an explicit run store; run registration, inspection and metadata listing are asynchronous.
+- `HostedPatchAgent` selects its spending ledger through an asynchronous `ledgerForRun` callback using authenticated run metadata.
 
 ### Added
 
+- Atomic global and per-installation spending claims, with explicit UTC monthly policy selection and no automatic allowance creation.
 - Firestore cumulative spending ledger with atomic budget/reservation claims, persistent unknown usage, and fail-closed settlement across service replicas.
 - Firestore-backed Hosted run authorization with hashed tokens, atomic request claims, and persistent model, request and cost limits.
 - Backlog product Action with isolated target checkout, zero-cost/no-LLM defaults, verified-group publication, and read-only checkout provenance validation.

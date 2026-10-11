@@ -6,7 +6,7 @@ const commitSchema = z.object({ writes: z.array(z.object({
   update: z.object({ name: z.string(), fields: bodySchema.shape.fields }),
   currentDocument: z.union([z.object({ exists: z.literal(false) }), z.object({ updateTime: z.string() })]),
   updateMask: z.object({ fieldPaths: z.array(z.literal("payload")) }).optional(),
-})).length(2) });
+})).min(2).max(3) });
 
 export function createFakeFirestore(collectionId: string, pageSize?: number) {
   const records = new Map<string, { payload: string; rev: number }>();

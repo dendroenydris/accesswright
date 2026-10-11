@@ -45,7 +45,7 @@ export interface HostedPatchAgentOptions {
   maxInputTokens: number;
   maxOutputTokens: number;
   maxCostUsdPerRun: number;
-  ledger: SpendLedger;
+  ledgerForRun: (run: HostedRunRecord) => Promise<SpendLedger>;
   provider: LlmProvider;
   runStore: HostedAgentRunStore;
 }
@@ -72,7 +72,6 @@ function digestToken(token: string): Buffer {
  * and durable spend ledger contain metadata, not source snippets or screenshots.
  */
 export class HostedPatchAgent {
-  private readonly client: LlmClient;
   private readonly maxReservationUsd: number;
   private readonly options: HostedPatchAgentOptions;
   private readonly modelFingerprint: string;
@@ -91,12 +90,6 @@ export class HostedPatchAgent {
       outputTokens: options.maxOutputTokens,
     }, options.pricing);
     if (this.maxReservationUsd <= 0) throw new Error("Verified positive model pricing is required");
-    this.client = new LlmClient(new DurableBudgetProvider(options.provider, {
-      ledger: options.ledger,
-      model: this.options.model,
-      pricing: this.options.pricing,
-      maxInputTokens: options.maxInputTokens,
-    }));
   }
 
   async registerRun(input: RunRegistration): Promise<string> {
@@ -191,7 +184,12 @@ export class HostedPatchAgent {
       return { ...run, inFlight: true, record: { ...run.record, requestCount: run.record.requestCount + 1 } };
     });
     try {
-      const result = await this.client.callStructured({
+      const client = new LlmClient(new DurableBudgetProvider(this.options.provider, {
+        ledger: await this.options.ledgerForRun(claimed.record),
+        model: this.options.model, pricing: this.options.pricing,
+        maxInputTokens: this.options.maxInputTokens,
+      }));
+      const result = await client.callStructured({
         taskType: "hosted-semantic-repair",
         model: this.options.model,
         prompt,

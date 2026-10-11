@@ -60,7 +60,7 @@ async function agent(override?: LlmProvider) {
     maxInputTokens: 1000,
     maxOutputTokens: 256,
     maxCostUsdPerRun: 0.02,
-    ledger,
+    ledgerForRun: () => Promise.resolve(ledger),
     provider,
     runStore: new InMemoryHostedAgentRunStore(),
   });
