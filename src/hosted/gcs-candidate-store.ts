@@ -129,8 +129,16 @@ export class GcsHostedCandidateStore {
       if (remaining.status !== 404) throw new Error("Private candidate remains recoverable after cleanup");
     }
   }
-  /** Scheduled checks never erase an object before its stored, immutable expiry. */
-  async expire(runId: string): Promise<void> {
-    if (await this.get(runId)) throw new Error("Private candidate expiry is not due; retry the authenticated cleanup check");
+  /** Expiry comes from the authenticated pre-write task, never from corrupted private source. */
+  async expire(rawRunId: string, expectedExpiresAt: string): Promise<void> {
+    const runId = runSchema.parse(rawRunId), expiry = z.iso.datetime().parse(expectedExpiresAt);
+    if (Date.parse(expiry) > Date.now()) throw new Error("Private candidate expiry is not due; retry the authenticated cleanup check");
+    const response = await this.request(this.objectUrl(runId));
+    if (response.status === 404) {
+      await response.body?.cancel();
+      throw new Error("Private candidate is absent; a prior trusted cleanup receipt is required");
+    }
+    const metadata = this.checkedMetadata(await this.successful(response, defaults.firestoreRecordMaxBytes), runId);
+    await this.remove(runId, metadata.generation);
   }
 }

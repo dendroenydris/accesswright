@@ -4,6 +4,7 @@
 
 ### Breaking Changes
 
+- Private candidate expiry requires the authenticated task's original deadline; absent objects require a prior trusted cleanup receipt.
 - Hosted run metadata requires a nullable immutable candidate digest; earlier incomplete records fail validation.
 - Hosted authorization records require a fixed per-task token ceiling and hashed cumulative task usage; earlier incomplete records fail validation.
 - `HostedPatchAgent` requires an explicit provider-evidence classification. Durable authorization records now require settled request and token counters plus a verification seal; earlier records fail validation rather than inferring missing usage.
@@ -44,6 +45,7 @@
 
 ### Fixed
 
+- Erased corrupted private candidate objects at their trusted expiry without parsing source; missing current objects no longer imply confirmed cleanup.
 - Prevented repeated completed candidate transfers from restaging expired private source or replacing patches with the same report.
 - Claimed candidate staging atomically before private writes, preventing finish races and retaining uncertain staging claims across restarts.
 - Rejected semantic patches whose settled cost or task tokens exceed the configured cap, including the last allowed attempt, while retaining known usage.

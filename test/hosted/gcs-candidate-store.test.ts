@@ -83,10 +83,11 @@ it("withholds storage if cleanup cannot be durably scheduled and never blindly r
 
 it("never expires early and removes expired source with generation-bound confirmation", async () => {
   vi.useFakeTimers(); vi.setSystemTime(new Date("2026-10-11T19:00:00Z"));
-  const f = fixture(); await f.open().put("run1", hostedCandidateFixture(), 30);
-  await expect(f.open().expire("run1")).rejects.toThrow("not due"); expect(f.rows.size).toBe(1);
+  const f = fixture(), saved = await f.open().put("run1", hostedCandidateFixture(), 30);
+  await expect(f.open().expire("run1", saved.expiresAt)).rejects.toThrow("not due"); expect(f.rows.size).toBe(1);
   vi.setSystemTime(new Date("2026-10-11T19:00:30Z"));
-  await f.open().expire("run1"); expect(f.rows.size).toBe(0); expect(await f.open().get("run1")).toBeNull();
+  await f.open().expire("run1", saved.expiresAt); expect(f.rows.size).toBe(0); expect(await f.open().get("run1")).toBeNull();
+  await expect(f.open().expire("run1", saved.expiresAt)).rejects.toThrow("prior trusted cleanup receipt");
 });
 
 it("withholds cleanup confirmation if a deleted object remains soft-recoverable", async () => {
@@ -102,4 +103,17 @@ it("rejects corrupted candidate bytes and bounds streamed private responses", as
   await expect(f.open().get("run1")).rejects.toThrow("identity or expiry");
   const oversized: typeof fetch = () => Promise.resolve(new Response("x".repeat(defaults.hostedMaxCandidateObjectBytes + 1)));
   await expect(new GcsHostedCandidateStore({ ...f.options, fetcher: oversized }).verifyBucket()).rejects.toThrow("bound");
+});
+
+it("erases corrupted private objects at the authenticated scheduled expiry without parsing their source", async () => {
+  vi.useFakeTimers(); vi.setSystemTime(new Date("2026-10-11T19:00:00Z"));
+  const f = fixture(), saved = await f.open().put("run1", hostedCandidateFixture(), 30);
+  const row = f.rows.get("accesswright-candidates/run1"); if (!row) throw new Error("Missing fixture object");
+  row.body = "corrupted-private-source-marker";
+  await expect(f.open().expire("run1", saved.expiresAt)).rejects.toThrow("not due");
+  expect(f.rows.size).toBe(1);
+  vi.setSystemTime(new Date(saved.expiresAt));
+  await f.open().expire("run1", saved.expiresAt);
+  expect(f.rows.size).toBe(0);
+  expect(f.calls.some(call => new URL(call.url).searchParams.get("alt") === "media")).toBe(false);
 });
