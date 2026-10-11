@@ -8,6 +8,54 @@ import type { McpAgentVerifier } from "../../src/mcp/session.js";
 
 const sessionId = "aaaabbbb-cccc-4ddd-8eee-111122223333";
 
+it.each([false, true])("keeps active verification intact and releases the MCP lock after completion (failure=%s)", async failure => {
+  let signalStarted: () => void;
+  let allowComplete: () => void;
+  const started = new Promise<void>(resolve => { signalStarted = resolve; });
+  const release = new Promise<void>(resolve => { allowComplete = resolve; });
+  const calls: string[] = [];
+  const verifier = {
+    scan: () => {
+      calls.push("scan");
+      return Promise.resolve({ sessionId, routes: ["/"], tasks: [], baselineChecks: [] });
+    },
+    verify: async () => {
+      calls.push("verify");
+      signalStarted();
+      await release;
+      if (failure) throw new Error("private-source");
+      return { accepted: true, stage: "complete" as const, check: "ok", reason: null, evidenceDir: null };
+    },
+    close: () => { calls.push("close"); return Promise.resolve(); },
+  } satisfies Pick<McpAgentVerifier, "scan" | "verify" | "close">;
+  const server = createAccesswrightMcpServer(verifier);
+  const client = new Client({ name: "concurrent-agent", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  let pending: ReturnType<typeof client.callTool> | undefined;
+  try {
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    await client.callTool({ name: "scan", arguments: {} });
+    pending = client.callTool({ name: "verify", arguments: { sessionId, taskId: "task-1" } });
+    await started;
+    const busy = await Promise.all([
+      client.callTool({ name: "scan", arguments: {} }),
+      client.callTool({ name: "close", arguments: { sessionId } }),
+    ]);
+    expect(busy.every(result => result.isError === true)).toBe(true);
+    expect(calls).toEqual(["scan", "verify"]);
+    allowComplete!();
+    expect((await pending).isError === true).toBe(failure);
+    expect((await client.callTool({ name: "close", arguments: { sessionId } })).isError).not.toBe(true);
+    expect(calls).toEqual(["scan", "verify", "close"]);
+  } finally {
+    allowComplete!();
+    if (pending) await pending;
+    await client.close();
+    await server.close();
+  }
+});
+
 it("exposes real MCP scan/verify/close protocol calls, rejecting stale session IDs", async () => {
   const calls: string[] = [];
   const verifier = {

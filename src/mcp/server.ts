@@ -31,11 +31,21 @@ function failed(error: unknown) {
 export function createAccesswrightMcpServer(verifier: Verifier): McpServer {
   const server = new McpServer({ name: "accesswright", version: "0.0.0" }, { maxToolInputElements: 40 });
   let currentSessionId: string | null = null;
+  let busy = false;
+
+  async function exclusive(operation: () => Promise<ReturnType<typeof respond> & { isError?: boolean }>) {
+    if (busy) {
+      return { isError: true, content: [{ type: "text" as const, text: "MCP verification is busy; retry after the current operation completes" }] };
+    }
+    busy = true;
+    try { return await operation(); }
+    finally { busy = false; }
+  }
 
   server.registerTool("scan", {
     description: "Start an isolated accessibility scan and freeze source + browser + production baselines for this repository. No model calls.",
     inputSchema: {},
-  }, async () => {
+  }, async () => exclusive(async () => {
     try {
       const result = await verifier.scan();
       currentSessionId = result.sessionId;
@@ -44,7 +54,7 @@ export function createAccesswrightMcpServer(verifier: Verifier): McpServer {
       currentSessionId = null;
       return failed(error);
     }
-  });
+  }));
 
   server.registerTool("verify", {
     description: "After editing project source, verify one task against the frozen scan using real browser and final production checks. Never writes host source.",
@@ -52,7 +62,7 @@ export function createAccesswrightMcpServer(verifier: Verifier): McpServer {
       sessionId: z.string().uuid(),
       taskId: z.string().min(1).max(1024),
     },
-  }, async ({ sessionId, taskId }) => {
+  }, async ({ sessionId, taskId }) => exclusive(async () => {
     if (sessionId !== currentSessionId) {
       return { isError: true, content: [{ type: "text" as const, text: "MCP scan session is stale or unknown" }] };
     }
@@ -61,12 +71,12 @@ export function createAccesswrightMcpServer(verifier: Verifier): McpServer {
     } catch (error) {
       return failed(error);
     }
-  });
+  }));
 
   server.registerTool("close", {
     description: "Clean up the owned MCP scanner session, its Docker containers and temporary source snapshots.",
     inputSchema: { sessionId: z.string().uuid() },
-  }, async ({ sessionId }) => {
+  }, async ({ sessionId }) => exclusive(async () => {
     if (sessionId !== currentSessionId) {
       return { isError: true, content: [{ type: "text" as const, text: "MCP scan session is stale or unknown" }] };
     }
@@ -77,7 +87,7 @@ export function createAccesswrightMcpServer(verifier: Verifier): McpServer {
     } catch (error) {
       return failed(error);
     }
-  });
+  }));
 
   return server;
 }
