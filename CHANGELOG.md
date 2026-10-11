@@ -14,6 +14,7 @@
 
 ### Added
 
+- Metadata-only candidate verification/expiry Cloud Tasks with exact OIDC task confirmation and rejection of reserved deleted task names.
 - Durable candidate coordination with trusted usage sealing, pre-write verification scheduling, independent replay and cleanup-before-receipt enforcement.
 - Private Cloud Storage candidate adapter with create-only writes, immutable expiry, pre-write cleanup scheduling, generation-bound reads and recoverable-object deletion checks.
 - Authenticated bounded candidate HTTP transfer, exact-digest acknowledgments, a secretless executable worker entrypoint and local private staging with expiry, trusted usage sealing and independent replay.
