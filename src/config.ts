@@ -43,6 +43,7 @@ export const defaults = Object.freeze({
   hostedMaxPatchBodyBytes: 6 * 1024 * 1024,
   hostedMaxPatchResponseBytes: 512 * 1024,
   hostedMaxCandidateBodyBytes: 6 * 1024 * 1024,
+  hostedMaxCandidateObjectBytes: 6 * 1024 * 1024 + 4096,
   hostedMaxCandidateResponseBytes: 4096,
   hostedMaxStagedCandidates: 20,
   hostedMaxFeedbackChars: 4096,
