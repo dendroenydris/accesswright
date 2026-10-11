@@ -183,12 +183,14 @@ export class HostedPatchAgent {
       }
       return { ...run, inFlight: true, record: { ...run.record, requestCount: run.record.requestCount + 1 } };
     });
+    let clientStarted = false;
     try {
       const client = new LlmClient(new DurableBudgetProvider(this.options.provider, {
         ledger: await this.options.ledgerForRun(claimed.record),
         model: this.options.model, pricing: this.options.pricing,
         maxInputTokens: this.options.maxInputTokens,
       }));
+      clientStarted = true;
       const result = await client.callStructured({
         taskType: "hosted-semantic-repair",
         model: this.options.model,
@@ -213,9 +215,9 @@ export class HostedPatchAgent {
       }
       return { status: "accepted", patch: result.value, usage: result.usage };
     } catch (error) {
-      // A crash or failed settlement keeps the claim/unknown usage blocked across restarts.
+      // Only client-phase failures can leave provider usage unknown.
       await this.options.runStore.update(runId, run => ({
-        ...run, inFlight: false, record: { ...run.record, usageUnknown: true, lastStatus: "blocked" },
+        ...run, inFlight: false, record: { ...run.record, usageUnknown: run.record.usageUnknown || clientStarted, lastStatus: "blocked" },
       }));
       throw error;
     }

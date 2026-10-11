@@ -32,6 +32,7 @@
 
 ### Fixed
 
+- Kept missing Hosted budget policies recoverable without recording unknown provider usage before a client call.
 - Verified raw frozen Git blobs before rejecting checkout normalization artifacts, while retaining content, mode and path checks.
 - Excluded macOS metadata from compiled evaluation snapshots and test discovery on external filesystems.
 - Waited for affected development routes to recover after source patches before fresh browser verification; persistent route failures remain rejected.

@@ -107,7 +107,7 @@ it("uses the authenticated installation for Hosted calls and denies absent month
       source: { file: "components/Controls.tsx", line: 1, column: 1 } }] };
   const context = { component: { ...task.source, sourceExcerpt: '<button id="save" />' }, callSites: [],
     page: { title: "Settings", surroundingText: "Save changes", caption: null, linkTarget: null }, screenshotPath: null };
-  const provider = new FakeLlmProvider([{ object: { taskId: task.id, changes: [{ path: task.source.file, before: '<button id="save" />', after: '<button id="save" aria-label="Save changes" />' }] }, usage }]);
+  const provider = new FakeLlmProvider(Array.from({ length: 2 }, () => ({ object: { taskId: task.id, changes: [{ path: task.source.file, before: '<button id="save" />', after: '<button id="save" aria-label="Save changes" />' }] }, usage })));
   const agent = new HostedPatchAgent({ model, pricing, maxInputTokens: 100000, maxOutputTokens: 100,
     maxCostUsdPerRun: 0.2, provider, runStore: new InMemoryHostedAgentRunStore(),
     ledgerForRun: run => openMonthlyHostedSpend(cloud.options, run.installationId) });
@@ -117,6 +117,11 @@ it("uses the authenticated installation for Hosted calls and denies absent month
   const other = await agent.registerRun({ runId: "unconfigured", repository: "owner/repo", installationId: 43 });
   await expect(agent.patch("unconfigured", other, task, context)).rejects.toThrow(/absent/);
   expect(provider.requests).toHaveLength(1);
+  expect(await agent.inspectRun("unconfigured", other)).toMatchObject({ usageUnknown: false, requestCount: 1 });
+  await FirestoreSpendLedger.initialize({ ...cloud.options, budgetId: "installation-43-2026-10" }, { maxUsd: 0.3, history: [] });
+  expect((await agent.patch("unconfigured", other, task, context)).status).toBe("accepted");
+  expect(provider.requests).toHaveLength(2);
+  expect(await agent.inspectRun("unconfigured", other)).toMatchObject({ usageUnknown: false, requestCount: 2 });
 });
 
 it("requires explicitly initialized UTC monthly caps and preserves claims across rollover", async () => {
