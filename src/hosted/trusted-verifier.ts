@@ -2,7 +2,6 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 
-import { defaults } from "../config.js";
 import { runRepair } from "../core/repair.js";
 import type { RepairRuntime } from "../core/repair.js";
 import { compareSourceSnapshots } from "../mcp/source-diff.js";
@@ -14,7 +13,7 @@ import { RunReportSchema } from "../reporter/report.js";
 import type { RunReport } from "../reporter/report.js";
 import { copyTargetSnapshot } from "../sandbox/source-boundary.js";
 import { appendRunRecord } from "../tracer/run-record.js";
-import { PatchSchema } from "../types/schemas.js";
+import { HostedCandidateSchema } from "./agent-protocol.js";
 import { eligibleForTrustedVerification, hostedReportDigest } from "./run-workflow.js";
 import type { TrustedRunReceipt } from "./run-workflow.js";
 
@@ -40,7 +39,7 @@ export async function verifyHostedCandidate(
   input: unknown,
   dependencies: { prepare?: (options: RepairSessionOptions) => Promise<VerificationRuntime> } = {},
 ): Promise<TrustedRunReceipt | null> {
-  const parsed = z.object({ report: RunReportSchema, patches: z.array(PatchSchema).max(defaults.maxTasks) }).strict().safeParse(input);
+  const parsed = HostedCandidateSchema.safeParse(input);
   const reconciled = RunReportSchema.pick({ usage: true, unknownUsage: true, providerVerification: true }).parse(options.reconciled);
   if (!parsed.success) return null;
   const { report, patches } = parsed.data;

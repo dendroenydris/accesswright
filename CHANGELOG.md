@@ -12,6 +12,7 @@
 
 ### Added
 
+- Hosted worker repair loop with bounded remote proposals, retained rejected-call usage, unknown-response blocking and candidate transfer only after private-source cleanup.
 - Secretless non-root ephemeral repair sessions that reuse existing browser/production gates, refuse unsupported offline mode and duplicate job attempts, and require independent trusted verification.
 - Bounded Hosted worker patch transport with PNG evidence, verifier feedback, scoped authentication and fail-closed response/path validation.
 - Trusted Hosted per-run token settlements and an irreversible seal that blocks further model calls before independent verification.

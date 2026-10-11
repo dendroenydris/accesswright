@@ -15,7 +15,7 @@ import { removePlatformMetadata } from "../../src/sandbox/platform-metadata.js";
 import { copyTargetSnapshot } from "../../src/sandbox/source-boundary.js";
 import { createNextIntegrationFixture } from "../fixtures/next-integration.js";
 
-it("runs a key-free non-root candidate job and independently replays its patches in a fresh Docker verifier", async () => {
+it("runs a non-root worker through a fake HTTP model service and independently replays its patches in Docker", async () => {
   const tempRoot = process.env.ACCESSWRIGHT_TMP_ROOT ?? join(tmpdir(), "accesswright-integration");
   await mkdir(tempRoot, { recursive: true });
   const root = await mkdtemp(join(tempRoot, "ephemeral-worker-fixture-"));
@@ -46,19 +46,20 @@ it("runs a key-free non-root candidate job and independently replays its patches
     });
     expect(job.stderr, "Owned fixture worker diagnostic").toBe("");
     expect(job.exitCode).toBe(0);
-    expect(JSON.parse(job.stdout)).toMatchObject({ privateSourceRemoved: true, paidCalls: 0 });
+    expect(JSON.parse(job.stdout)).toMatchObject({ privateSourceRemoved: true, paidCalls: 0, fakeProviderCalls: 1 });
     const transfer = join(root, "candidate.json");
     await dockerCopyToHost(name, "/tmp/owned-candidate.json", transfer);
     const candidate: unknown = JSON.parse(await readFile(transfer, "utf8"));
     const parsed = RunReportSchema.parse(typeof candidate === "object" && candidate !== null && "report" in candidate ? candidate.report : null);
+    expect(parsed).toMatchObject({ fixed: 3, providerVerification: "fake-provider", usage: { inputTokens: 300, outputTokens: 100, spentUsd: 0.0005 } });
     await removePlatformMetadata(repoPath);
     const receipt = await verifyHostedCandidate({ repoPath, verifiedBaseSha: baseSha, tempRoot: join(root, "trusted-runs"), runtimeRoot: process.cwd(),
-      reconciled: { usage: { inputTokens: 0, outputTokens: 0, spentUsd: 0 }, unknownUsage: false, providerVerification: "not-run" } }, candidate);
+      reconciled: { usage: { inputTokens: 300, outputTokens: 100, spentUsd: 0.0005 }, unknownUsage: false, providerVerification: "fake-provider" } }, candidate);
     expect(receipt).toEqual({ reportDigest: hostedReportDigest(parsed), verifiedBaseSha: baseSha });
     expect(await git(["status", "--porcelain", "--untracked-files=all"])).toBe("");
     const evidence = await mkdtemp(join(tempRoot, "ephemeral-worker-evidence-"));
     await writeFile(join(evidence, "result.json"), JSON.stringify({ kind: "owned-secretless-worker-and-independent-docker-verifier", ...receipt,
-      acceptedFixes: parsed.fixed, privateSourceRemoved: true, paidCalls: 0 }), { flag: "wx", mode: 0o600 });
+      acceptedFixes: parsed.fixed, privateSourceRemoved: true, paidCalls: 0, fakeProviderCalls: 1 }), { flag: "wx", mode: 0o600 });
     console.log("Secretless worker and independent verifier evidence:", evidence);
   } finally {
     try { if (created) await stopDockerContainer(name); }

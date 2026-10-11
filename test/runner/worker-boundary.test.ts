@@ -19,6 +19,7 @@ it.each(["OPENAI_API_KEY", "GITHUB_TOKEN", "NODE_OPTIONS", "CUSTOM_AUTH", "innoc
   expect(() => validateSecretlessWorkerEnvironment({ ...environment, [name]: "private-marker" })).toThrow("not allowlisted");
 });
 it("allows only a bounded run token and an initial single-task job", () => {
+  expect(() => validateSecretlessWorkerEnvironment({ ...environment, ...cloud, ACCESSWRIGHT_REPOSITORY: "owner/private", ACCESSWRIGHT_INSTALLATION_ID: "42", ACCESSWRIGHT_PR_NUMBER: "" })).not.toThrow();
   expect(() => validateSecretlessWorkerEnvironment({ ...environment, ...cloud, ACCESSWRIGHT_RUN_TOKEN: "a".repeat(64) })).not.toThrow();
   expect(() => validateSecretlessWorkerEnvironment({ ...environment, ACCESSWRIGHT_RUN_TOKEN: "provider-key" })).toThrow("scoped worker token");
 });

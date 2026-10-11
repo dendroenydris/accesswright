@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { defaults } from "../config.js";
 import { isSourcePath, PatchSchema } from "../types/schemas.js";
+import { RunReportSchema } from "../reporter/report.js";
+
+export const HostedCandidateSchema = z.object({ report: RunReportSchema, patches: z.array(PatchSchema).max(defaults.maxTasks) }).strict();
+export type HostedCandidate = z.infer<typeof HostedCandidateSchema>;
 
 export const HostedRepairContextSchema = z.object({
   component: z.object({ file: z.string().refine(isSourcePath), line: z.number().int().positive(), column: z.number().int().positive(), sourceExcerpt: z.string().max(12_000) }).strict(),
