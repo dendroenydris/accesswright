@@ -26,6 +26,8 @@ export interface FirestoreMetadataOptions {
   fetcher?: typeof fetch;
 }
 
+interface FirestoreWrite<T> { record: T; updateTime: string | null }
+
 async function boundedJson(response: Response): Promise<unknown> {
   if (Number(response.headers.get("content-length") ?? 0) > defaults.firestoreResponseMaxBytes) {
     await response.body?.cancel();
@@ -52,6 +54,7 @@ async function boundedJson(response: Response): Promise<unknown> {
 
 /** Bounded metadata documents with create-only insertion and updateTime compare-and-swap. */
 export class FirestoreMetadataStore<T extends { runId: string }> {
+  private readonly documentsUrl: string;
   private readonly collectionUrl: string;
   private readonly schema: z.ZodType<T>;
   private readonly options: FirestoreMetadataOptions;
@@ -62,8 +65,9 @@ export class FirestoreMetadataStore<T extends { runId: string }> {
     const project = projectSchema.parse(options.projectId);
     const database = databaseSchema.parse(options.databaseId ?? "(default)");
     const collection = collectionSchema.parse(options.collectionId);
-    this.collectionUrl = "https://firestore.googleapis.com/v1/projects/" + project +
-      "/databases/" + encodeURIComponent(database) + "/documents/" + collection;
+    this.documentsUrl = "https://firestore.googleapis.com/v1/projects/" + project +
+      "/databases/" + encodeURIComponent(database) + "/documents";
+    this.collectionUrl = this.documentsUrl + "/" + collection;
   }
 
   private decode(input: unknown, expectedId?: string): { record: T; updateTime: string } {
@@ -104,6 +108,42 @@ export class FirestoreMetadataStore<T extends { runId: string }> {
   async get(runId: string): Promise<T | undefined> {
     const doc = await this.read(runId);
     return doc === undefined ? undefined : structuredClone(doc.record);
+  }
+
+  async getVersion(runId: string): Promise<{ record: T; updateTime: string } | undefined> {
+    return structuredClone(await this.read(runId));
+  }
+
+  /** Both records change together, or neither does; null versions are create-only. */
+  async commitPair(changes: readonly [FirestoreWrite<T>, FirestoreWrite<T>]): Promise<void> {
+    if (changes.length !== 2 || changes[0].record.runId === changes[1].record.runId) throw new Error("Atomic metadata writes require two distinct records");
+    const writes = changes.map(change => {
+      const record = this.schema.parse(change.record);
+      const id = runIdSchema.parse(record.runId);
+      const payload = JSON.stringify(record);
+      if (Buffer.byteLength(payload) > defaults.firestoreRecordMaxBytes) throw new Error("Firestore record exceeds metadata size limit");
+      const updateTime = change.updateTime === null ? null : documentSchema.shape.updateTime.parse(change.updateTime);
+      return {
+        update: { name: this.collectionUrl.slice("https://firestore.googleapis.com/v1/".length) + "/" + id,
+          fields: { payload: { stringValue: payload } } },
+        ...(updateTime === null ? {} : { updateMask: { fieldPaths: ["payload"] } }),
+        currentDocument: updateTime === null ? { exists: false } : { updateTime },
+      };
+    });
+    const token = await this.options.getAccessToken();
+    if (!token || token.length > 4096 || /[\r\n]/.test(token)) throw new Error("Firestore workload identity token is unavailable");
+    const response = await (this.options.fetcher ?? fetch)(this.documentsUrl + ":commit", {
+      method: "POST", redirect: "error", signal: AbortSignal.timeout(15000),
+      headers: { Authorization: "Bearer " + token, Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ writes }),
+    });
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new Error("Firestore atomic metadata commit failed (HTTP " + response.status + ")");
+    }
+    const written = z.object({ updateTime: documentSchema.shape.updateTime }).passthrough();
+    z.object({ writeResults: z.tuple([written, written]), commitTime: documentSchema.shape.updateTime }).passthrough()
+      .parse(await boundedJson(response));
   }
 
   async insert(input: T): Promise<T> {

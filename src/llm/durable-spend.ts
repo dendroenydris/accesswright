@@ -20,6 +20,9 @@ const storeSchema = z.object({ schemaVersion: z.literal(1), currency: z.literal(
   );
 type Store = z.infer<typeof storeSchema>;
 export interface SpendInitialization { maxUsd: number; history: Array<z.infer<typeof historySchema>> }
+export const SpendInitializationSchema = z.object({ maxUsd: amount, history: z.array(historySchema) }).strict()
+  .refine(policy => new Set(policy.history.map(item => item.id)).size === policy.history.length, "Budget history must have unique identities");
+export type SpendLedger = Pick<DurableSpendLedger, "reserve" | "settle" | "recordUnknown" | "snapshot">;
 
 function totals(store: Store) {
   const historyUpperBoundUsd = store.history.reduce((sum, item) => sum + item.upperBoundUsd, 0);

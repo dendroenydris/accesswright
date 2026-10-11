@@ -3,11 +3,11 @@ import type { z } from "zod";
 import { calculateUsageCost, normalizeBilledUsage } from "./ai-sdk-provider.js";
 import type { ModelPricing } from "./ai-sdk-provider.js";
 import { LlmStructuredOutputError } from "./errors.js";
-import type { DurableSpendLedger } from "./durable-spend.js";
+import type { SpendLedger } from "./durable-spend.js";
 import type { LlmCallRequest, LlmModelConfig, LlmProvider, LlmProviderResponse } from "./types.js";
 
 export interface DurableProviderOptions {
-  ledger: DurableSpendLedger;
+  ledger: SpendLedger;
   model: LlmModelConfig;
   /** Verified model context-window upper bound, not an optimistic prompt-length estimate. */
   maxInputTokens: number;

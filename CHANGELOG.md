@@ -8,6 +8,7 @@
 
 ### Added
 
+- Firestore cumulative spending ledger with atomic budget/reservation claims, persistent unknown usage, and fail-closed settlement across service replicas.
 - Firestore-backed Hosted run authorization with hashed tokens, atomic request claims, and persistent model, request and cost limits.
 - Backlog product Action with isolated target checkout, zero-cost/no-LLM defaults, verified-group publication, and read-only checkout provenance validation.
 - Real Docker regression coverage for semantic repairs, idempotent compiled CLI runs, production bisect, and browser anti-hiding checks.

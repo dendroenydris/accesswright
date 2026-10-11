@@ -6,7 +6,7 @@ import { calculateUsageCost } from "../llm/ai-sdk-provider.js";
 import type { ModelPricing } from "../llm/ai-sdk-provider.js";
 import { LlmClient } from "../llm/client.js";
 import { DurableBudgetProvider } from "../llm/durable-provider.js";
-import type { DurableSpendLedger } from "../llm/durable-spend.js";
+import type { SpendLedger } from "../llm/durable-spend.js";
 import { getRepairGuidance } from "../llm/guidance.js";
 import type { LlmModelConfig, LlmProvider } from "../llm/types.js";
 import { FixTaskSchema, isSourcePath, LlmModelConfigSchema, PatchSchema } from "../types/schemas.js";
@@ -45,7 +45,7 @@ export interface HostedPatchAgentOptions {
   maxInputTokens: number;
   maxOutputTokens: number;
   maxCostUsdPerRun: number;
-  ledger: DurableSpendLedger;
+  ledger: SpendLedger;
   provider: LlmProvider;
   runStore: HostedAgentRunStore;
 }
