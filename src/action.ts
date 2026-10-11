@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { execa } from "execa";
 import * as core from "@actions/core";
 import { z } from "zod";
 import { defaults } from "./config.js";
@@ -10,6 +9,7 @@ import type { BacklogActionOptions } from "./action/backlog.js";
 import { runPullRequestAction } from "./action/pull-request.js";
 import type { PullRequestActionOptions } from "./action/pull-request.js";
 import { renderPullRequestReport } from "./reporter/report.js";
+import { verifyCheckoutProvenance } from "./runner/checkout-provenance.js";
 
 export type ActionOptions =
   | (BacklogActionOptions & { mode: "backlog" })
@@ -84,14 +84,6 @@ export function parseActionEnvironment(env: Readonly<Record<string, string | und
   };
 }
 
-/** Read-only Git commands with hooks/config helpers disabled. No target code is executed. */
-export async function verifyActionCheckout(repoPath: string, expectedSha: string): Promise<void> {
-  const environment = { PATH: process.env.PATH ?? "/usr/bin:/bin", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_TERMINAL_PROMPT: "0" };
-  const git = async (args: string[]) => (await execa("git", ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", ...args], { cwd: repoPath, env: environment, extendEnv: false })).stdout.trim();
-  if (await git(["rev-parse", "HEAD"]) !== expectedSha) throw new Error("Action checkout does not match its verified base SHA");
-  if (await git(["status", "--porcelain", "--untracked-files=all"])) throw new Error("Action target checkout is not clean; unverified inputs were preserved");
-}
-
 /** Only fixed-shape transport metadata may leave the private error boundary. */
 export function actionFailureMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : "unknown";
@@ -103,7 +95,7 @@ export function actionFailureMessage(error: unknown): string {
 async function main(): Promise<void> {
   const options = parseActionEnvironment(process.env);
   core.setSecret(options.githubToken);
-  await verifyActionCheckout(
+  await verifyCheckoutProvenance(
     options.repoPath,
     options.mode === "pr" ? options.verifiedHeadSha : options.verifiedBaseSha,
   );

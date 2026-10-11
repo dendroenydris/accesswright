@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execa } from "execa";
 import { expect, it } from "vitest";
-import { parseActionEnvironment, verifyActionCheckout } from "../../src/action.js";
+import { parseActionEnvironment } from "../../src/action.js";
+import { verifyCheckoutProvenance } from "../../src/runner/checkout-provenance.js";
 
 it("requires exact clean Git inputs before binding a Docker report to a base SHA", async () => {
   const root = await mkdtemp(join(tmpdir(), "aw-action-checkout-"));
@@ -14,10 +15,10 @@ it("requires exact clean Git inputs before binding a Docker report to a base SHA
     await git(["add", "--", "page.tsx"]);
     await git(["commit", "-m", "fixture"]);
     const sha = await git(["rev-parse", "HEAD"]);
-    await expect(verifyActionCheckout(root, sha)).resolves.toBeUndefined();
-    await expect(verifyActionCheckout(root, "0".repeat(40))).rejects.toThrow(/SHA/);
+    await expect(verifyCheckoutProvenance(root, sha)).resolves.toBeUndefined();
+    await expect(verifyCheckoutProvenance(root, "0".repeat(40))).rejects.toThrow(/SHA/);
     await writeFile(join(root, "page.tsx"), "export const value = 2;\n");
-    await expect(verifyActionCheckout(root, sha)).rejects.toThrow(/clean/);
+    await expect(verifyCheckoutProvenance(root, sha)).rejects.toThrow(/clean/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

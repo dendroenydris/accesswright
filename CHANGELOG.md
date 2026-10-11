@@ -10,6 +10,7 @@
 
 ### Added
 
+- Independent Docker replay of Hosted candidate patches, pinned-checkout and reconciled-usage checks, and digest-bound review receipts.
 - Private Hosted HTTP service composition with shared scoped run authentication for patches, results, finish and status, retaining the independent trusted-verifier gate.
 - Atomic global and per-installation spending claims, with explicit UTC monthly policy selection and no automatic allowance creation.
 - Firestore cumulative spending ledger with atomic budget/reservation claims, persistent unknown usage, and fail-closed settlement across service replicas.
@@ -34,6 +35,8 @@
 
 ### Fixed
 
+- Claimed Hosted finish verification atomically across service replicas; interrupted claims remain pending and terminal decisions cannot be overwritten.
+- Rejected contradictory Hosted production check flags and inconsistent verified-fix counts before requesting trusted verification.
 - Rejected concurrent MCP operations before they can replace or close an active verification session.
 - Collected axe and accessibility facts after the existing screenshot finishes finite page animations.
 - Removed private source snapshots after early preparation failures and sandbox shutdown errors.

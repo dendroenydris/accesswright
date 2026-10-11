@@ -8,7 +8,7 @@ const payloadSchema = z.object({
   repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
   installationId: z.number().int().positive(),
   reportDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  status: z.enum(["recorded", "blocked", "ready-for-review"]),
+  status: z.enum(["recorded", "verifying", "blocked", "ready-for-review"]),
   acceptedFixes: z.number().int().min(0).max(200),
   eligibleForReview: z.boolean(),
   failedChecks: z.array(z.enum(["build", "typecheck", "lint", "tests"])).max(4),

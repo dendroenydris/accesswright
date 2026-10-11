@@ -52,6 +52,8 @@ it("reads only exact run identity and rejects unexpected source payload or wrong
   let body: unknown = doc("run-a");
   const api = reader(() => Promise.resolve(Response.json(body)));
   expect((await api.get("run-a"))?.repository).toBe("owner/private");
+  body = doc("run-a", { status: "verifying" });
+  expect((await api.get("run-a"))?.status).toBe("verifying");
   await expect(api.get("../evil")).rejects.toThrow();
   body = doc("run-other");
   await expect(api.get("run-a")).rejects.toThrow(/identity/);

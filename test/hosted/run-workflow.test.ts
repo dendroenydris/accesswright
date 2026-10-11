@@ -69,6 +69,10 @@ it("never accepts incomplete production checks, unknown provider usage, or a mis
     (x: RunReport) => { x.unknownUsage = true; },
     (x: RunReport) => { x.final.acceptedFixIds = ["ghost"]; },
     (x: RunReport) => { x.final.failures.push({ check: "violations", id: "new-violation" }); },
+    (x: RunReport) => { x.checks[0].exitCode = 1; },
+    (x: RunReport) => { x.checks[0].failureIds = ["contradictory-build-failure"]; },
+    (x: RunReport) => { x.fixed = 2; },
+    (x: RunReport) => { x.outcomes.push({ ...x.outcomes[0] }); },
   ]) {
     const h = harness();
     const report = makeReport();

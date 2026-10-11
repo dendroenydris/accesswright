@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 
 import { FirestoreHostedRunStore } from "../../src/hosted/firestore-run-store.js";
 import { HostedRunWorkflow } from "../../src/hosted/run-workflow.js";
-import type { StoredRunResult } from "../../src/hosted/run-workflow.js";
+import type { StoredRunResult, TrustedRunReceipt } from "../../src/hosted/run-workflow.js";
 import { createFakeFirestore } from "../helpers/fake-firestore.js";
 
 const record: StoredRunResult = {
@@ -100,4 +100,36 @@ it("allows the run submission and trusted finish workflow to survive service res
     status: "ready-for-review", verifiedBaseSha: "b".repeat(40),
   });
   expect((await first.inspect("run-1", "valid-token"))?.status).toBe("ready-for-review");
+});
+
+it("claims independent verification once across service replicas and retains interrupted claims", async () => {
+  const f = fixture();
+  await f.open().insert(record);
+  let checks = 0;
+  let started: () => void = () => undefined;
+  const entered = new Promise<void>(resolve => { started = resolve; });
+  let release: (receipt: TrustedRunReceipt) => void = () => undefined;
+  const pending = new Promise<TrustedRunReceipt>(resolve => { release = resolve; });
+  const proof = { reportDigest: record.reportDigest, verifiedBaseSha: "b".repeat(40) };
+  const dependencies = {
+    authenticate: (runId: string) => ({ runId, repository: record.repository, installationId: record.installationId }),
+    verifyTrustedResult: () => { checks++; started(); return checks === 1 ? pending : Promise.resolve(proof); },
+  };
+  const first = new HostedRunWorkflow({ ...dependencies, store: f.open() }).finish(record.runId, "token");
+  await entered;
+  try {
+    await expect(new HostedRunWorkflow({ ...dependencies, store: f.open() }).finish(record.runId, "token")).rejects.toThrow(/progress|conflict/i);
+    expect(checks).toBe(1);
+    expect((await f.open().get(record.runId))?.status).toBe("verifying");
+  } finally { release(proof); await first; }
+  expect((await new HostedRunWorkflow({ ...dependencies, store: f.open() }).finish(record.runId, "token")).status).toBe("ready-for-review");
+  expect(checks).toBe(1);
+
+  const interrupted = { ...record, runId: "interrupted" };
+  await f.open().insert(interrupted);
+  const fail = { ...dependencies, verifyTrustedResult: () => { checks++; return Promise.reject(new Error("Verifier disconnected")); } };
+  await expect(new HostedRunWorkflow({ ...fail, store: f.open() }).finish(interrupted.runId, "token")).rejects.toThrow("Verifier disconnected");
+  expect((await f.open().get(interrupted.runId))?.status).toBe("verifying");
+  await expect(new HostedRunWorkflow({ ...fail, store: f.open() }).finish(interrupted.runId, "token")).rejects.toThrow(/progress/);
+  expect(checks).toBe(2);
 });
