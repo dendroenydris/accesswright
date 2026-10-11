@@ -1,8 +1,8 @@
-import { createHash } from "node:crypto";
 import type { z } from "zod";
 import { calculateUsageCost, normalizeBilledUsage } from "./ai-sdk-provider.js";
 import type { ModelPricing } from "./ai-sdk-provider.js";
 import { LlmStructuredOutputError } from "./errors.js";
+import { hashLlmInput } from "./input-hash.js";
 import type { SpendLedger } from "./durable-spend.js";
 import type { LlmCallRequest, LlmModelConfig, LlmProvider, LlmProviderResponse } from "./types.js";
 
@@ -34,7 +34,7 @@ export class DurableBudgetProvider implements LlmProvider {
     if (expiresAt && Date.now() >= Date.parse(expiresAt)) throw new Error("Dated model pricing authorization has expired");
     if (!Number.isSafeInteger(request.maxOutputTokens) || request.maxOutputTokens < 1) throw new Error("A bounded model output is required");
     const upperBoundUsd = calculateUsageCost({ inputTokens: maxInputTokens, outputTokens: request.maxOutputTokens }, pricing);
-    const id = await ledger.reserve(`${model.provider}:${model.id}`, upperBoundUsd, createHash("sha256").update(request.prompt).digest("hex"));
+    const id = await ledger.reserve(`${model.provider}:${model.id}`, upperBoundUsd, hashLlmInput(request));
     let response: LlmProviderResponse;
     try { response = await this.inner.generateObject(request, schema); }
     catch (error: unknown) {

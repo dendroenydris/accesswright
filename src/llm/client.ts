@@ -8,6 +8,7 @@ import type {
   LlmUsage,
 } from "./types.js";
 import { LlmStructuredOutputError } from "./errors.js";
+import { hashLlmInput } from "./input-hash.js";
 
 export type StructuredCallResult<T> =
   | {
@@ -52,9 +53,7 @@ export class LlmClient {
     validationSchema: z.ZodType<T>,
     providerSchema: z.ZodType<unknown> = validationSchema,
   ): Promise<StructuredCallResult<T>> {
-    const promptHash = createHash("sha256")
-      .update(request.prompt)
-      .digest("hex");
+    const promptHash = hashLlmInput(request);
     const eventBase = {
       taskType: request.taskType,
       promptHash,

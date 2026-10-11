@@ -4,6 +4,7 @@
 
 ### Breaking Changes
 
+- LLM `promptHash` now covers a versioned encoding of text, system instructions, image bytes, media types and image order, rather than text alone.
 - `HostedPatchAgent` requires an explicit run store; run registration, inspection and metadata listing are asynchronous.
 - `HostedPatchAgent` selects its spending ledger through an asynchronous `ledgerForRun` callback using authenticated run metadata.
 
