@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { partitionRouteScans, validateRouteScanChunk } from "./scan-batches.js";
-import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { defaults, loadConfig } from "../config.js";
@@ -85,25 +85,27 @@ export class DockerRepairSession {
   get applicationContainer(): string { return this.sandbox.application; }
 
   static async prepare(options: RepairSessionOptions): Promise<DockerRepairSession> {
+    const prepareStarted = Date.now();
     const config = options.config === undefined ? await loadConfig(options.repoPath) : AccesswrightConfigSchema.parse(options.config);
     await mkdir(options.tempRoot, { recursive: true });
     const runRoot = await mkdtemp(join(options.tempRoot, "repair-run-"));
     const sourceRoot = join(runRoot, "source"), evidenceDir = join(runRoot, "evidence");
     await mkdir(evidenceDir);
-    await copyTargetSnapshot(options.repoPath, sourceRoot);
-    const files = await listSnapshotFiles(sourceRoot);
-    const manifest = PackageManifestSchema.parse(JSON.parse(await readFile(join(sourceRoot, "package.json"), "utf8")));
-    const install = dependencyInstallPlan(files, manifest);
-    if (!(manifest.dependencies.next ?? manifest.devDependencies.next)) throw new UnsupportedRepositoryError("The source is not an eligible Next.js repository", evidenceDir);
-    const fileRoutes = discoverFileRoutes(files);
-    if (fileRoutes.length === 0) throw new UnsupportedRepositoryError("No eligible application routes were discovered", evidenceDir);
-    const journal = await PatchJournal.create(sourceRoot);
-    const runtimeDistRoot = options.runtimeDistRoot ?? join(options.runtimeRoot, "dist");
-    const sandbox = new IsolatedDockerSession({ name: `accesswright-${randomUUID().slice(0, 12)}`, image: defaults.dockerImage,
-      runtime: runtimeDistRoot, dependencies: await realpath(join(options.runtimeRoot, "node_modules")),
-      packageJson: join(options.runtimeRoot, "package.json"), evidence: evidenceDir, offline: config.offline });
-    const session = new DockerRepairSession(options, config, runRoot, journal, sandbox);
+    let session: DockerRepairSession | undefined;
     try {
+      await copyTargetSnapshot(options.repoPath, sourceRoot);
+      const files = await listSnapshotFiles(sourceRoot);
+      const manifest = PackageManifestSchema.parse(JSON.parse(await readFile(join(sourceRoot, "package.json"), "utf8")));
+      const install = dependencyInstallPlan(files, manifest);
+      if (!(manifest.dependencies.next ?? manifest.devDependencies.next)) throw new UnsupportedRepositoryError("The source is not an eligible Next.js repository", evidenceDir);
+      const fileRoutes = discoverFileRoutes(files);
+      if (fileRoutes.length === 0) throw new UnsupportedRepositoryError("No eligible application routes were discovered", evidenceDir);
+      const journal = await PatchJournal.create(sourceRoot);
+      const runtimeDistRoot = options.runtimeDistRoot ?? join(options.runtimeRoot, "dist");
+      const sandbox = new IsolatedDockerSession({ name: `accesswright-${randomUUID().slice(0, 12)}`, image: defaults.dockerImage,
+        runtime: runtimeDistRoot, dependencies: await realpath(join(options.runtimeRoot, "node_modules")),
+        packageJson: join(options.runtimeRoot, "package.json"), evidence: evidenceDir, offline: config.offline });
+      session = new DockerRepairSession(options, config, runRoot, journal, sandbox);
       await access(join(runtimeDistRoot, "src/runner/target-entry.js"));
       await sandbox.create(sourceRoot);
       const installStarted = Date.now();
@@ -158,14 +160,18 @@ export class DockerRepairSession {
       await session.recordStep("prepare", "ok", installStarted, { routeCount: session.routes.length, baselineViolationCount: observationsToState(session.observations).violations.length });
       return session;
     } catch (error) {
-      await session.recordStep("prepare", "error", Date.now(), { errorClass: error instanceof Error ? error.name : "unknown" });
-      if (session.privateDiagnostics) {
-        try {
-          const diagnostic = await dockerExecResult(sandbox.application, ["tail", "-c", "12000", "/tmp/accesswright/server.log"], { user: "pwuser", environment: targetEnvironment, timeoutMs: 10000 });
-          if (diagnostic.exitCode === 0) await writeFile(join(evidenceDir, "startup-diagnostic.txt"), diagnostic.stdout, { mode: 0o600 });
-        } catch { await session.recordStep("private-diagnostic", "skipped", Date.now()); }
+      try {
+        await appendRunRecord(join(evidenceDir, "run.jsonl"), { timestamp: new Date().toISOString(), step: "prepare", status: "error", durationMs: Date.now() - prepareStarted, metadata: { errorClass: error instanceof Error ? error.name : "unknown" } });
+        if (session?.privateDiagnostics) {
+          try {
+            const diagnostic = await dockerExecResult(session.sandbox.application, ["tail", "-c", "12000", "/tmp/accesswright/server.log"], { user: "pwuser", environment: targetEnvironment, timeoutMs: 10000 });
+            if (diagnostic.exitCode === 0) await writeFile(join(evidenceDir, "startup-diagnostic.txt"), diagnostic.stdout, { mode: 0o600 });
+          } catch { await session.recordStep("private-diagnostic", "skipped", Date.now()); }
+        }
+      } finally {
+        if (session) await session.close();
+        else await rm(sourceRoot, { recursive: true, force: true });
       }
-      await session.close();
       throw error;
     }
   }
@@ -340,9 +346,12 @@ export class DockerRepairSession {
   }
 
   async close(): Promise<void> {
-    await this.sandbox.close();
-    await rm(this.sourceRoot, { recursive: true, force: true });
-    for (const name of configNames) await rm(join(this.runRoot, `instrumented-${name}`), { force: true });
-    await clearPrivateEvidence(this.evidenceDir, this.retainEvidence);
+    try { await this.sandbox.close(); }
+    finally {
+      for (const name of await readdir(this.runRoot)) {
+        if (name !== "evidence") await rm(join(this.runRoot, name), { recursive: true, force: true });
+      }
+      await clearPrivateEvidence(this.evidenceDir, this.retainEvidence);
+    }
   }
 }
