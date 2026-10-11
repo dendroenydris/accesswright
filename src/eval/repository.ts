@@ -20,17 +20,28 @@ export function isVerifiedTransportExtra(status: string, path: string, header: U
     Buffer.from(header.subarray(0, 8)).equals(Buffer.from([0, 5, 22, 7, 0, 2, 0, 0]));
 }
 
-async function hasSourceChanges(cwd: string, status: string): Promise<boolean> {
+export async function hasSourceChanges(cwd: string, status: string, describeTracked: (path: string) => Promise<string>): Promise<boolean> {
   const root = await realpath(cwd);
   for (const record of status.split("\0").filter(Boolean)) {
     const kind = record.slice(0, 2), path = record.slice(3);
-    if (kind !== "??" || !basename(path).startsWith("._")) return true;
+    if ((kind !== " M" && kind !== "??") || !path || path.split("/").some(part => !part || part === "." || part === "..") || path.includes("\\")) return true;
+    if (kind === "??" && !basename(path).startsWith("._")) return true;
     const absolute = await realpath(join(root, path));
     if (!absolute.startsWith(`${root}${sep}`)) return true;
+    if (!(await lstat(join(root, path))).isFile()) return true;
     const file = await open(join(root, path), constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
       const info = await file.stat();
       if (!info.isFile()) return true;
+      if (kind === " M") {
+        const raw = z.string().max(8192).parse(await describeTracked(path));
+        const diff = /^:(100644|100755) (100644|100755) ([a-f0-9]{40}) 0{40} M\0([^\0]+)\0$/.exec(raw);
+        if (!diff || diff[1] !== diff[2] || diff[4] !== path) return true;
+        const hash = createHash("sha1").update(`blob ${info.size}\0`);
+        for await (const chunk of file.createReadStream({ autoClose: false }) as AsyncIterable<Uint8Array>) hash.update(chunk);
+        if (hash.digest("hex") !== diff[3]) return true;
+        continue;
+      }
       const header = Buffer.alloc(8);
       await file.read(header, 0, 8, 0);
       if (!isVerifiedTransportExtra(kind, path, header)) return true;
@@ -46,12 +57,13 @@ export async function fetchPinnedRepository(cacheRoot: string, repository: strin
   await mkdir(cacheRoot, { recursive: true });
   const path = join(cacheRoot, key);
   const environment = { PATH: process.env.PATH ?? "/usr/bin:/bin", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_TERMINAL_PROMPT: "0", GIT_LFS_SKIP_SMUDGE: "1", GIT_ALLOW_PROTOCOL: "https" };
-  const git = async (cwd: string, args: string[]) => (await execa("git", [...plan.config, ...args], { cwd, env: environment, extendEnv: false, timeout: 180000, maxBuffer: 4000000 })).stdout.trim();
+  const git = async (cwd: string, args: string[]) => (await execa("git", [...plan.config, ...args], { cwd, env: environment, extendEnv: false, timeout: 180000, maxBuffer: 4000000 })).stdout;
   const verify = async (cwd: string) => {
     const info = await lstat(cwd);
     if (!info.isDirectory() || info.isSymbolicLink()) throw new Error("Repository cache must be a regular directory");
     const status = await git(cwd, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]);
-    if (await git(cwd, ["rev-parse", "HEAD"]) !== sha || await hasSourceChanges(cwd, status)) throw new Error("Frozen repository cache changed; existing files were preserved");
+    if ((await git(cwd, ["rev-parse", "HEAD"])).trim() !== sha || await hasSourceChanges(cwd, status,
+      path => git(cwd, ["diff", "--raw", "-z", "--no-abbrev", "--no-ext-diff", "--no-textconv", sha, "--", path]))) throw new Error("Frozen repository cache changed; existing files were preserved");
   };
   try { await lstat(path); await verify(path); return path; }
   catch (error) { if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error; }
