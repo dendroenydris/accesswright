@@ -14,6 +14,7 @@
 
 ### Added
 
+- Durable candidate coordination with trusted usage sealing, pre-write verification scheduling, independent replay and cleanup-before-receipt enforcement.
 - Private Cloud Storage candidate adapter with create-only writes, immutable expiry, pre-write cleanup scheduling, generation-bound reads and recoverable-object deletion checks.
 - Authenticated bounded candidate HTTP transfer, exact-digest acknowledgments, a secretless executable worker entrypoint and local private staging with expiry, trusted usage sealing and independent replay.
 - Hosted worker repair loop with bounded remote proposals, retained rejected-call usage, unknown-response blocking and candidate transfer only after private-source cleanup.
