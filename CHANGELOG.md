@@ -30,6 +30,7 @@
 
 ### Fixed
 
+- Excluded macOS metadata from compiled evaluation snapshots and test discovery on external filesystems.
 - Waited for affected development routes to recover after source patches before fresh browser verification; persistent route failures remain rejected.
 - Preserved exactly one default export while instrumenting function-based Next.js configuration and avoided generated-name collisions.
 - Rejected development-only repairs whose original target still fails or is inconclusive after the production build.

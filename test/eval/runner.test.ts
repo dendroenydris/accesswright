@@ -32,9 +32,11 @@ it("freezes compiled evaluation code without copying the dependency tree", async
     await mkdir(join(root, "dist", "src"), { recursive: true });
     await mkdir(join(root, "node_modules", "large-dependency"), { recursive: true });
     await writeFile(join(root, "dist", "src", "main.js"), "export const version=1;\n");
+    await writeFile(join(root, "dist", "src", "._main.js"), "macOS metadata, not executable code\n");
     await writeFile(join(root, "node_modules", "large-dependency", "index.js"), "large dependency placeholder\n");
     const snapshot = await snapshotCompiledRuntime(root, output);
     expect(snapshot.digest).toBe(await implementationDigest(snapshot.path));
+    await expect(readFile(join(snapshot.path, "src", "._main.js"), "utf8")).rejects.toThrow();
     await writeFile(join(root, "dist", "src", "main.js"), "export const version=2;\n");
     expect(await implementationDigest(snapshot.path)).toBe(snapshot.digest);
     await expect(readFile(join(snapshot.path, "node_modules", "large-dependency", "index.js"), "utf8")).rejects.toThrow();

@@ -86,7 +86,7 @@ export async function snapshotCompiledRuntime(runtimeRoot: string, outputDir: st
   const source = join(runtimeRoot, "dist");
   const before = await implementationDigest(source);
   const path = join(outputDir, "runtime");
-  await cp(source, path, { recursive: true, errorOnExist: true, force: false });
+  await cp(source, path, { recursive: true, errorOnExist: true, force: false, filter: file => !basename(file).startsWith("._") });
   const digest = await implementationDigest(path);
   const after = await implementationDigest(source);
   if (before !== after || digest !== before) throw new Error("Compiled implementation changed while creating the evaluation snapshot");
