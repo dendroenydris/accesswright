@@ -32,6 +32,7 @@
 
 ### Fixed
 
+- Collected axe and accessibility facts after the existing screenshot finishes finite page animations.
 - Removed private source snapshots after early preparation failures and sandbox shutdown errors.
 - Kept missing Hosted budget policies recoverable without recording unknown provider usage before a client call.
 - Verified raw frozen Git blobs before rejecting checkout normalization artifacts, while retaining content, mode and path checks.

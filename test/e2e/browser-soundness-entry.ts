@@ -31,6 +31,13 @@ const cases = [
 const browser = await chromium.launch({ headless: true });
 const results: Array<{ name: string; expected: boolean; accepted: boolean; check: string; reason: string | null; beforeFacts: number; afterFacts: number }> = [];
 try {
+  const animatedContext = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: "block" });
+  try {
+    const page = await animatedContext.newPage();
+    await page.setContent(html(content, "@keyframes intro{from{opacity:0}to{opacity:1}}main{animation:intro 3600s steps(1,end) both}"), { waitUntil: "load" });
+    const observation = await scanBrowserPage(page, { route: "/", condition: "desktop-light", generation: "animated", evidenceDir: "/evidence" });
+    assert.equal(observation.aria.some(node => node.id === "/|desktop-light|#content"), true, "Accessibility facts must reflect the settled animation captured in the screenshot");
+  } finally { await animatedContext.close(); }
   for (const [index, sample] of cases.entries()) {
     const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: "block" });
     const page = await context.newPage();
@@ -61,3 +68,4 @@ const report = {
 // Do not also create a root-owned bind-mounted file that Linux CI cannot overwrite.
 console.log(JSON.stringify(report));
 if (report.failures.length > 0) process.exitCode = 1;
+import assert from "node:assert/strict";

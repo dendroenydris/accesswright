@@ -234,6 +234,11 @@ export async function scanBrowserPage(page: Page, options: BrowserScanOptions): 
   if (!/^[a-zA-Z0-9_-]+$/.test(options.generation)) throw new Error("Invalid evidence generation name");
   await mkdir(options.evidenceDir, { recursive: true });
   await page.evaluate(async () => { await document.fonts.ready; await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))); });
+  const hash = createHash("sha256").update(`${options.route}|${options.condition}`).digest("hex").slice(0, 12);
+  const base = `${options.generation}-${hash}`;
+  const screenshot = `${base}-page.png`;
+  // The capture finishes finite animations before axe and accessibility facts observe the page.
+  await page.screenshot({ path: join(options.evidenceDir, screenshot), fullPage: true, animations: "disabled", caret: "hide" });
   const palette = await renderedPalette(page);
   let builder = new AxeBuilder({ page }).exclude("nextjs-portal").exclude("code-inspector-component");
   if (options.condition === "mobile-light") builder = builder.withRules(["target-size"]);
@@ -243,10 +248,6 @@ export async function scanBrowserPage(page: Page, options: BrowserScanOptions): 
   const violations = analyzed.violations.map(item => ({ ...item, condition: options.condition }));
   const incomplete = analyzed.incomplete.map(item => ({ ...item, condition: options.condition }));
   const facts = await collectAccessibleFacts(page, `${options.route}|${options.condition}`, options.interactionProbes ?? true);
-  const hash = createHash("sha256").update(`${options.route}|${options.condition}`).digest("hex").slice(0, 12);
-  const base = `${options.generation}-${hash}`;
-  const screenshot = `${base}-page.png`;
-  await page.screenshot({ path: join(options.evidenceDir, screenshot), fullPage: true, animations: "disabled", caret: "hide" });
   const contexts: RenderedContext[] = [];
   const title = await page.title();
   const documentLanguage = await page.evaluate(() => document.documentElement.lang);
