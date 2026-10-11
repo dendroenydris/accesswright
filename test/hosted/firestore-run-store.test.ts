@@ -1,7 +1,9 @@
 import { expect, it } from "vitest";
 
 import { FirestoreHostedRunStore } from "../../src/hosted/firestore-run-store.js";
+import { HostedRunWorkflow } from "../../src/hosted/run-workflow.js";
 import type { StoredRunResult } from "../../src/hosted/run-workflow.js";
+import { createFakeFirestore } from "../helpers/fake-firestore.js";
 
 const record: StoredRunResult = {
   runId: "run-1",
@@ -19,52 +21,8 @@ const record: StoredRunResult = {
 };
 
 function fixture() {
-  const records = new Map<string, { payload: string; rev: number }>();
-  const calls: Array<{ method: string; path: string; precondition: string | null }> = [];
-  const fetcher: typeof fetch = (input, init) => {
-    const uri = new URL(input instanceof URL ? input.href : typeof input === "string" ? input : input.url);
-    const method = init?.method ?? "GET";
-    const headers = new Headers(init?.headers);
-    expect(uri.origin).toBe("https://firestore.googleapis.com");
-    expect(headers.get("authorization")).toBe("Bearer local-fixture-identity");
-    const name = uri.pathname.split("/").at(-1) ?? "";
-    const key = method === "POST" ? (uri.searchParams.get("documentId") ?? "") : decodeURIComponent(name);
-    const current = records.get(key);
-    calls.push({ method, path: uri.pathname, precondition: uri.searchParams.get("currentDocument.updateTime") });
-    const doc = (data: { payload: string; rev: number }) => ({
-      name: uri.pathname,
-      updateTime: "2026-10-09T12:00:" + String(data.rev).padStart(2, "0") + ".000Z",
-      fields: { payload: { stringValue: data.payload } },
-    });
-    if (method === "GET") {
-      return Promise.resolve(current ? Response.json(doc(current)) : new Response(null, { status: 404 }));
-    }
-    if (method === "POST") {
-      if (current) return Promise.resolve(new Response("private-source-leak", { status: 409 }));
-      const inputRecord = JSON.parse(typeof init?.body === "string" ? init.body : "{}") as { fields: { payload: { stringValue: string } } };
-      const next = { payload: inputRecord.fields.payload.stringValue, rev: 1 };
-      records.set(key, next);
-      return Promise.resolve(Response.json(doc(next)));
-    }
-    if (method === "PATCH") {
-      if (!current) return Promise.resolve(new Response(null, { status: 404 }));
-      if (uri.searchParams.get("currentDocument.updateTime") !== doc(current).updateTime) {
-        return Promise.resolve(new Response("private-source-leak", { status: 412 }));
-      }
-      const inputRecord = JSON.parse(typeof init?.body === "string" ? init.body : "{}") as { fields: { payload: { stringValue: string } } };
-      const next = { payload: inputRecord.fields.payload.stringValue, rev: current.rev + 1 };
-      records.set(key, next);
-      return Promise.resolve(Response.json(doc(next)));
-    }
-    return Promise.resolve(new Response(null, { status: 405 }));
-  };
-  const open = () => new FirestoreHostedRunStore({
-    projectId: "accesswright-dev-123",
-    collectionId: "accesswrightRuns",
-    getAccessToken: () => Promise.resolve("local-fixture-identity"),
-    fetcher,
-  });
-  return { open, calls, records };
+  const f = createFakeFirestore("accesswrightRuns");
+  return { ...f, open: () => new FirestoreHostedRunStore(f.options) };
 }
 
 it("persists metadata across independent service instances using fixed Firestore origin", async () => {
@@ -107,7 +65,6 @@ it("rejects mutated run identities and invalid Firestore project configuration",
 
 it("allows the run submission and trusted finish workflow to survive service restart", async () => {
   const f = fixture();
-  const { HostedRunWorkflow } = await import("../../src/hosted/run-workflow.js");
   const report = {
     schemaVersion: 1,
     startedAt: "2026-10-09T12:00:00.000Z",

@@ -66,7 +66,7 @@ export function createHostedAgentHandler(agent: HostedPatchAgent): RequestListen
       const token = bearer?.[1];
       try {
         if (!token) throw new Error("authorization");
-        agent.inspectRun(runId, token);
+        await agent.inspectRun(runId, token);
       } catch {
         send(response, 401, { status: "unauthorized" });
         return;
@@ -94,7 +94,7 @@ export function createHostedAgentHandler(agent: HostedPatchAgent): RequestListen
         if (error instanceof LargePayloadError) send(response, 413, { status: "too-large" });
         else if (error instanceof SyntaxError || error instanceof z.ZodError) send(response, 400, { status: "invalid-request" });
         else if (error instanceof Error && /per-run|limit exceeded/i.test(error.message)) send(response, 429, { status: "limited" });
-        else if (error instanceof Error && /in flight/i.test(error.message)) send(response, 409, { status: "in-flight" });
+        else if (error instanceof Error && /in flight|concurrent update conflict/i.test(error.message)) send(response, 409, { status: "in-flight" });
         else if (error instanceof Error && /unknown usage|blocked/i.test(error.message)) send(response, 503, { status: "usage-unreconciled" });
         else if (error instanceof Error && /context|source|task/i.test(error.message)) send(response, 400, { status: "invalid-request" });
         else send(response, 503, { status: "unavailable" });

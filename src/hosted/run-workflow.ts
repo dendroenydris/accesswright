@@ -73,7 +73,7 @@ export interface HostedRunWorkflowDependencies {
     runId: string;
     repository: string;
     installationId: number;
-  };
+  } | Promise<{ runId: string; repository: string; installationId: number }>;
   /** Must run in the *trusted* coordinator boundary, not in target repo code. */
   verifyTrustedResult: (runId: string, reportDigest: string) => Promise<TrustedRunReceipt | null>;
 }
@@ -111,9 +111,9 @@ export class HostedRunWorkflow {
     this.dependencies = dependencies;
   }
 
-  private authenticate(runId: string, token: string): ReturnType<HostedRunWorkflowDependencies["authenticate"]> {
+  private async authenticate(runId: string, token: string): Promise<Awaited<ReturnType<HostedRunWorkflowDependencies["authenticate"]>>> {
     const parsed = runSchema.parse(runId);
-    const identity = this.dependencies.authenticate(parsed, token);
+    const identity = await this.dependencies.authenticate(parsed, token);
     if (identity.runId !== parsed) throw new Error("Run authorization identity mismatch");
     return {
       runId: parsed,
@@ -123,7 +123,7 @@ export class HostedRunWorkflow {
   }
 
   async submitResults(runId: string, token: string, raw: unknown): Promise<HostedRunTransition> {
-    const identity = this.authenticate(runId, token);
+    const identity = await this.authenticate(runId, token);
     const report = RunReportSchema.parse(raw);
     const reportDigest = digest(report);
     const existing = await this.dependencies.store.get(identity.runId);
@@ -153,14 +153,14 @@ export class HostedRunWorkflow {
   }
 
   async inspect(runId: string, token: string): Promise<StoredRunResult | undefined> {
-    const identity = this.authenticate(runId, token);
+    const identity = await this.authenticate(runId, token);
     const stored = await this.dependencies.store.get(runId);
     return stored?.repository === identity.repository && stored?.installationId === identity.installationId
       ? stored : undefined;
   }
 
   async finish(runId: string, token: string): Promise<HostedRunTransition> {
-    const identity = this.authenticate(runId, token);
+    const identity = await this.authenticate(runId, token);
     const current = await this.dependencies.store.get(identity.runId);
     if (current === undefined || current.repository !== identity.repository ||
       current.installationId !== identity.installationId) {

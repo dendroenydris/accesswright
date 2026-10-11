@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 
+import { defaults } from "../config.js";
 import { calculateUsageCost } from "../llm/ai-sdk-provider.js";
 import type { ModelPricing } from "../llm/ai-sdk-provider.js";
 import { LlmClient } from "../llm/client.js";
@@ -8,8 +9,11 @@ import { DurableBudgetProvider } from "../llm/durable-provider.js";
 import type { DurableSpendLedger } from "../llm/durable-spend.js";
 import { getRepairGuidance } from "../llm/guidance.js";
 import type { LlmModelConfig, LlmProvider } from "../llm/types.js";
-import { FixTaskSchema, isSourcePath, PatchSchema } from "../types/schemas.js";
+import { FixTaskSchema, isSourcePath, LlmModelConfigSchema, PatchSchema } from "../types/schemas.js";
 import type { Patch } from "../types/schemas.js";
+import type { HostedAgentRun, HostedAgentRunStore, HostedRunRecord } from "./agent-run-store.js";
+
+export type { HostedRunRecord } from "./agent-run-store.js";
 
 const runIdSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/);
 const repositorySchema = z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/);
@@ -43,6 +47,7 @@ export interface HostedPatchAgentOptions {
   maxCostUsdPerRun: number;
   ledger: DurableSpendLedger;
   provider: LlmProvider;
+  runStore: HostedAgentRunStore;
 }
 
 export interface RunRegistration {
@@ -51,25 +56,6 @@ export interface RunRegistration {
   installationId: number;
   maxRequests?: number;
   expiresInSeconds?: number;
-}
-
-export interface HostedRunRecord {
-  runId: string;
-  repository: string;
-  installationId: number;
-  createdAt: string;
-  expiresAt: string;
-  requestCount: number;
-  maxRequests: number;
-  spentUsd: number;
-  usageUnknown: boolean;
-  lastStatus: "registered" | "accepted" | "rejected" | "blocked";
-}
-
-interface PrivateRun {
-  record: HostedRunRecord;
-  tokenHash: Buffer;
-  inFlight: boolean;
 }
 
 export type HostedPatchResponse =
@@ -86,15 +72,19 @@ function digestToken(token: string): Buffer {
  * and durable spend ledger contain metadata, not source snippets or screenshots.
  */
 export class HostedPatchAgent {
-  private readonly runs = new Map<string, PrivateRun>();
   private readonly client: LlmClient;
   private readonly maxReservationUsd: number;
   private readonly options: HostedPatchAgentOptions;
+  private readonly modelFingerprint: string;
 
   constructor(options: HostedPatchAgentOptions) {
-    this.options = options;
+    this.options = Object.freeze({ ...options,
+      model: Object.freeze(LlmModelConfigSchema.parse(options.model)),
+      pricing: Object.freeze({ ...options.pricing }),
+    });
+    this.modelFingerprint = createHash("sha256").update(JSON.stringify(this.options.model)).digest("hex");
     if (!Number.isSafeInteger(options.maxInputTokens) || options.maxInputTokens < 1) throw new Error("Verified model input bound is required");
-    if (!Number.isSafeInteger(options.maxOutputTokens) || options.maxOutputTokens < 1 || options.maxOutputTokens > 8_192) throw new Error("Bounded output tokens are required");
+    if (!Number.isSafeInteger(options.maxOutputTokens) || options.maxOutputTokens < 1 || options.maxOutputTokens > defaults.hostedMaxOutputTokens) throw new Error("Bounded output tokens are required");
     if (!Number.isFinite(options.maxCostUsdPerRun) || options.maxCostUsdPerRun <= 0) throw new Error("Positive operator run allowance is required");
     this.maxReservationUsd = calculateUsageCost({
       inputTokens: options.maxInputTokens,
@@ -103,60 +93,61 @@ export class HostedPatchAgent {
     if (this.maxReservationUsd <= 0) throw new Error("Verified positive model pricing is required");
     this.client = new LlmClient(new DurableBudgetProvider(options.provider, {
       ledger: options.ledger,
-      model: options.model,
-      pricing: options.pricing,
+      model: this.options.model,
+      pricing: this.options.pricing,
       maxInputTokens: options.maxInputTokens,
     }));
   }
 
-  registerRun(input: RunRegistration): string {
+  async registerRun(input: RunRegistration): Promise<string> {
     const runId = runIdSchema.parse(input.runId);
-    if (this.runs.has(runId)) throw new Error("Run identity already registered");
     const repository = repositorySchema.parse(input.repository);
     const installationId = z.number().int().positive().parse(input.installationId);
-    const maxRequests = z.number().int().min(1).max(20).parse(input.maxRequests ?? 3);
-    const ttl = z.number().int().min(30).max(3600).parse(input.expiresInSeconds ?? 900);
+    const maxRequests = z.number().int().min(1).max(defaults.hostedMaxRequests).parse(input.maxRequests ?? defaults.hostedDefaultMaxRequests);
+    const ttl = z.number().int().min(defaults.hostedMinTtlSeconds).max(defaults.hostedMaxTtlSeconds).parse(input.expiresInSeconds ?? defaults.hostedDefaultTtlSeconds);
     const token = randomBytes(32).toString("hex");
     const now = Date.now();
-    this.runs.set(runId, {
-      tokenHash: digestToken(token),
+    await this.options.runStore.insert({
+      runId,
+      tokenHash: digestToken(token).toString("hex"),
+      modelFingerprint: this.modelFingerprint,
       inFlight: false,
       record: {
         runId, repository, installationId, createdAt: new Date(now).toISOString(),
         expiresAt: new Date(now + ttl * 1000).toISOString(),
         requestCount: 0, maxRequests, spentUsd: 0,
+        maxCostUsd: this.options.maxCostUsdPerRun,
         usageUnknown: false, lastStatus: "registered",
       },
     });
     return token;
   }
 
-  private authenticate(runId: string, token: string): PrivateRun {
-    const run = this.runs.get(runIdSchema.parse(runId));
-    if (typeof token !== "string" || !/^[a-f0-9]{64}$/.test(token) ||
-      !run || Date.now() >= Date.parse(run.record.expiresAt) ||
-      !timingSafeEqual(run.tokenHash, digestToken(token))) {
-      throw new Error("Run authorization failed or expired");
-    }
+  private async authenticate(runId: string, token: string): Promise<HostedAgentRun> {
+    const run = await this.options.runStore.get(runIdSchema.parse(runId));
+    this.validateToken(run, token);
+    if (!run) throw new Error("Run authorization failed or expired");
     return run;
   }
 
-  inspectRun(runId: string, token: string): HostedRunRecord {
-    return { ...this.authenticate(runId, token).record };
+  private validateToken(run: HostedAgentRun | undefined, token: string): void {
+    if (typeof token !== "string" || !/^[a-f0-9]{64}$/.test(token) ||
+      !run || Date.now() >= Date.parse(run.record.expiresAt) ||
+      !timingSafeEqual(Buffer.from(run.tokenHash, "hex"), digestToken(token))) {
+      throw new Error("Run authorization failed or expired");
+    }
   }
 
-  records(): HostedRunRecord[] {
-    return [...this.runs.values()].map(run => ({ ...run.record }));
+  async inspectRun(runId: string, token: string): Promise<HostedRunRecord> {
+    return { ...(await this.authenticate(runId, token)).record };
+  }
+
+  async records(): Promise<HostedRunRecord[]> {
+    return (await this.options.runStore.records()).map(run => ({ ...run.record }));
   }
 
   async patch(runId: string, token: string, taskInput: unknown, contextInput: unknown): Promise<HostedPatchResponse> {
-    const run = this.authenticate(runId, token);
-    if (run.inFlight) throw new Error("Run already has a provider request in flight");
-    if (run.record.usageUnknown) throw new Error("Unknown usage blocks further run calls");
-    if (run.record.requestCount >= run.record.maxRequests ||
-      run.record.spentUsd + this.maxReservationUsd > this.options.maxCostUsdPerRun) {
-      throw new Error("Per-run model request or cost limit exceeded");
-    }
+    await this.authenticate(runId, token);
 
     const task = FixTaskSchema.parse(taskInput);
     const contextResult = contextSchema.safeParse(contextInput);
@@ -188,8 +179,17 @@ export class HostedPatchAgent {
       untrusted,
     ].join("\n");
 
-    run.inFlight = true;
-    run.record.requestCount += 1;
+    const claimed = await this.options.runStore.update(runId, run => {
+      this.validateToken(run, token);
+      if (run.modelFingerprint !== this.modelFingerprint) throw new Error("Run model authorization changed");
+      if (run.inFlight) throw new Error("Run already has a provider request in flight");
+      if (run.record.usageUnknown) throw new Error("Unknown usage blocks further run calls");
+      if (run.record.requestCount >= run.record.maxRequests ||
+        run.record.spentUsd + this.maxReservationUsd > Math.min(run.record.maxCostUsd, this.options.maxCostUsdPerRun)) {
+        throw new Error("Per-run model request or cost limit exceeded");
+      }
+      return { ...run, inFlight: true, record: { ...run.record, requestCount: run.record.requestCount + 1 } };
+    });
     try {
       const result = await this.client.callStructured({
         taskType: "hosted-semantic-repair",
@@ -197,24 +197,29 @@ export class HostedPatchAgent {
         prompt,
         maxOutputTokens: this.options.maxOutputTokens,
       }, schema, PatchSchema);
-      if (!result.usage) {
-        run.record.usageUnknown = true;
-        run.record.lastStatus = "blocked";
-        return { status: "rejected", reason: "Provider usage is unknown; run blocked", usage: null };
-      }
-      run.record.spentUsd += result.usage.costUsd;
-      if (run.record.spentUsd > this.options.maxCostUsdPerRun) {
-        run.record.lastStatus = "blocked";
+      const completed = await this.options.runStore.update(runId, run => {
+        if (!run.inFlight || run.record.requestCount !== claimed.record.requestCount) throw new Error("Run request claim changed");
+        const spentUsd = run.record.spentUsd + (result.usage?.costUsd ?? 0);
+        const blocked = !result.usage || spentUsd > Math.min(run.record.maxCostUsd, this.options.maxCostUsdPerRun);
+        return { ...run, inFlight: false, record: {
+          ...run.record, spentUsd, usageUnknown: !result.usage,
+          lastStatus: blocked ? "blocked" : result.status,
+        } };
+      });
+      if (!result.usage) return { status: "rejected", reason: "Provider usage is unknown; run blocked", usage: null };
+      if (completed.record.lastStatus === "blocked") {
         return { status: "rejected", reason: "Actual usage exceeded the per-run allowance", usage: result.usage };
       }
       if (result.status === "rejected") {
-        run.record.lastStatus = "rejected";
         return { status: "rejected", reason: result.reason === "schema" ? "patch-validation-failed" : "provider-failed", usage: result.usage };
       }
-      run.record.lastStatus = "accepted";
       return { status: "accepted", patch: result.value, usage: result.usage };
-    } finally {
-      run.inFlight = false;
+    } catch (error) {
+      // A crash or failed settlement keeps the claim/unknown usage blocked across restarts.
+      await this.options.runStore.update(runId, run => ({
+        ...run, inFlight: false, record: { ...run.record, usageUnknown: true, lastStatus: "blocked" },
+      }));
+      throw error;
     }
   }
 }

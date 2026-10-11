@@ -6,6 +6,7 @@ import { afterEach, expect, it } from "vitest";
 import { DurableSpendLedger } from "../../src/llm/durable-spend.js";
 import type { LlmProvider } from "../../src/llm/types.js";
 import { HostedPatchAgent } from "../../src/hosted/agent-api.js";
+import { InMemoryHostedAgentRunStore } from "../../src/hosted/agent-run-store.js";
 
 const temporaryRoots: string[] = [];
 const task = {
@@ -61,6 +62,7 @@ async function agent(override?: LlmProvider) {
     maxCostUsdPerRun: 0.02,
     ledger,
     provider,
+    runStore: new InMemoryHostedAgentRunStore(),
   });
   return { service, ledger, get calls() { return count; } };
 }
@@ -68,16 +70,16 @@ afterEach(async () => { await Promise.all(temporaryRoots.splice(0).map(root => r
 
 it("issues run-scoped tokens and returns verified-schema patches without persisting private context", async () => {
   const harness = await agent();
-  const token = harness.service.registerRun({ runId: "run-1", repository: "owner/private-app", installationId: 42 });
+  const token = await harness.service.registerRun({ runId: "run-1", repository: "owner/private-app", installationId: 42 });
   const result = await harness.service.patch("run-1", token, task, context);
   expect(result).toMatchObject({ status: "accepted", patch: { taskId: task.id } });
   expect(harness.calls).toBe(1);
-  const records = harness.service.records();
+  const records = await harness.service.records();
   expect(records).toHaveLength(1);
   expect(JSON.stringify(records)).not.toContain("Save changes");
   expect(JSON.stringify(records)).not.toContain('<button id="save">');
   expect((await harness.ledger.snapshot()).settledAttempts).toBe(1);
-  expect(() => harness.service.inspectRun("run-1", "not-the-token")).toThrow(/authorization/i);
+  await expect(harness.service.inspectRun("run-1", "not-the-token")).rejects.toThrow(/authorization/i);
 });
 
 it("rejects out-of-context patch paths instead of returning model-suggested arbitrary edits", async () => {
@@ -91,7 +93,7 @@ it("rejects out-of-context patch paths instead of returning model-suggested arbi
       usage: { inputTokens: 200, outputTokens: 100, costUsd: 0.0004 },
     }),
   });
-  const token = harness.service.registerRun({ runId: "run-2", repository: "owner/private-app", installationId: 42 });
+  const token = await harness.service.registerRun({ runId: "run-2", repository: "owner/private-app", installationId: 42 });
   const result = await harness.service.patch("run-2", token, task, context);
   expect(result).toMatchObject({ status: "rejected" });
   expect(JSON.stringify(result)).not.toContain("secrets.tsx");
@@ -99,13 +101,13 @@ it("rejects out-of-context patch paths instead of returning model-suggested arbi
 
 it("enforces per-run request caps and does not silently treat unknown model usage as free", async () => {
   const harness = await agent();
-  const token = harness.service.registerRun({ runId: "run-3", repository: "owner/private-app", installationId: 42, maxRequests: 1 });
+  const token = await harness.service.registerRun({ runId: "run-3", repository: "owner/private-app", installationId: 42, maxRequests: 1 });
   expect((await harness.service.patch("run-3", token, task, context)).status).toBe("accepted");
   await expect(harness.service.patch("run-3", token, task, context)).rejects.toThrow(/limit/i);
   expect(harness.calls).toBe(1);
 
   const failed = await agent({ generateObject: () => Promise.reject(new Error("fixture unknown usage")) });
-  const secondToken = failed.service.registerRun({ runId: "run-4", repository: "owner/private-app", installationId: 42 });
+  const secondToken = await failed.service.registerRun({ runId: "run-4", repository: "owner/private-app", installationId: 42 });
   expect((await failed.service.patch("run-4", secondToken, task, context)).status).toBe("rejected");
   await expect(failed.service.patch("run-4", secondToken, task, context)).rejects.toThrow(/usage|blocked|unknown/i);
   expect((await failed.ledger.snapshot()).unknownAttempts).toBe(1);
@@ -113,7 +115,7 @@ it("enforces per-run request caps and does not silently treat unknown model usag
 
 it("refuses source-sized untrusted payloads before provider invocation", async () => {
   const harness = await agent();
-  const token = harness.service.registerRun({ runId: "run-5", repository: "owner/private-app", installationId: 42 });
+  const token = await harness.service.registerRun({ runId: "run-5", repository: "owner/private-app", installationId: 42 });
   await expect(harness.service.patch("run-5", token, task, {
     ...context,
     component: { ...context.component, sourceExcerpt: "x".repeat(70_000) },

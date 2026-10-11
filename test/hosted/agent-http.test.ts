@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 
 import { HostedPatchAgent } from "../../src/hosted/agent-api.js";
+import { InMemoryHostedAgentRunStore } from "../../src/hosted/agent-run-store.js";
 import { createHostedAgentHandler } from "../../src/hosted/agent-http.js";
 import { DurableSpendLedger } from "../../src/llm/durable-spend.js";
 import type { LlmProvider } from "../../src/llm/types.js";
@@ -45,9 +46,9 @@ async function fixture(providerOverride?: LlmProvider) {
     model: { provider: "openai", id: "fixture-only", reasoningEffort: "high" },
     pricing: { inputUsdPerMillion: 1, outputUsdPerMillion: 2 },
     maxInputTokens: 1200, maxOutputTokens: 256, maxCostUsdPerRun: 0.02,
-    ledger, provider,
+    ledger, provider, runStore: new InMemoryHostedAgentRunStore(),
   });
-  const token = service.registerRun({ runId: "run-9", repository: "owner/repo", installationId: 42, maxRequests: 1 });
+  const token = await service.registerRun({ runId: "run-9", repository: "owner/repo", installationId: 42, maxRequests: 1 });
   const server = createServer(createHostedAgentHandler(service));
   server.listen(0, "127.0.0.1");
   await once(server, "listening");

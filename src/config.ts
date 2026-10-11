@@ -28,6 +28,16 @@ export const defaults = Object.freeze({
   maximumDiagnosticBytes: 32 * 1024 * 1024,
   targetPort: 3000,
   browserNavigationTimeoutMs: 90000,
+  hostedDefaultMaxRequests: 3,
+  hostedMaxRequests: 20,
+  hostedDefaultTtlSeconds: 900,
+  hostedMinTtlSeconds: 30,
+  hostedMaxTtlSeconds: 3600,
+  hostedMaxOutputTokens: 8192,
+  firestoreRecordMaxBytes: 8192,
+  firestoreResponseMaxBytes: 256 * 1024,
+  firestorePageSize: 25,
+  firestoreMaxListPages: 40,
 });
 
 export async function loadConfig(
