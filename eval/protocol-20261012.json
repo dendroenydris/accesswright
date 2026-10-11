@@ -1,10 +1,10 @@
 {
-  "digest": "b1e5676c4d2af0d54906d6e106a0933ac1478708310caf914915dd0b47307b8b",
+  "digest": "0d8bbd6b17839e210798f98cf67e1dc36ff28b9a0b46ce045de86a63cecb3191",
   "protocol": {
     "version": 1,
     "corpus": "public-nextjs",
-    "frozenAt": "2026-10-11T22:37:15.722Z",
-    "selection": "Version 20261012 extends protocol-20261007 (digest 02dc0d3b...) after its 300-case target proved unreachable (about 2.5 valid unique test cases per repository). Retains its 20 repositories, SHAs and splits unchanged. Source 1: repositories from the archived pool eval/candidate-pool-20261012.json (GitHub search 2026-10-12: topic:nextjs, fork:false, archived:false, pushed>=2025-10-12, stars>=10, MIT/Apache-2.0/BSD-2-Clause/BSD-3-Clause/ISC) in case-insensitive alphabetical order, keeping each repository whose default-branch HEAD has a root package.json with next ^15/^16 (semver minimum major 15 or 16) and exactly one root npm or pnpm lockfile (no yarn/bun lockfile), until the test split holds 40 repositories; all examined candidates and rejection reasons are in eval/candidate-checks-20261012.json. Source 2: every A11YRepair repository (A11YBench pinned commits, and the pre-merge first parent of each merged A11YRepair upstream PR) passing the same license, Next 15/16 and lockfile filters; a repository in both uses the pre-merge PR commit; checks in eval/a11yrepair-sources-20261012.json. Split: dev iff sha256(lowercase owner/name) first 4 bytes big-endian mod 5 == 0 (reproduces all 20 original splits). No repair outcomes observed for added repositories; compatibility failures remain reported, not replaced.",
+    "frozenAt": "2026-10-11T23:30:36.943Z",
+    "selection": "Version 20261012 extends protocol-20261007 (digest 02dc0d3b...) after its 300-case target proved unreachable (about 2.5 valid unique test cases per repository), and widens supported Next.js from 15/16 to 12-16. Retains its 20 repositories, SHAs and splits unchanged. Source 1: repositories from the archived pool eval/candidate-pool-20261012.json (GitHub search 2026-10-12: topic:nextjs, fork:false, archived:false, pushed>=2025-10-12, stars>=10, MIT/Apache-2.0/BSD-2-Clause/BSD-3-Clause/ISC) in case-insensitive alphabetical order, keeping each repository whose default-branch HEAD has a root package.json depending on next, exactly one root npm or pnpm lockfile (no yarn/bun lockfile), and a lockfile-resolved next version >=12.0.0 <17, until the test split holds 40 repositories; all examined candidates and rejection reasons are in eval/candidate-checks-20261012.json. Source 2: every A11YRepair repository (A11YBench pinned commits, and the pre-merge first parent of each merged A11YRepair upstream PR) passing the same license, lockfile and Next filters; a repository in both uses the pre-merge PR commit; checks in eval/a11yrepair-sources-20261012.json. Split: dev iff sha256(lowercase owner/name) first 4 bytes big-endian mod 5 == 0 (reproduces all 20 original splits). No repair outcomes observed for added repositories; compatibility failures remain reported, not replaced.",
     "repositories": [
       {
         "repository": "0ffy/beenote",
@@ -15,6 +15,12 @@
       {
         "repository": "0l1v3rr/github-readme-tech-stack",
         "sha": "6ba0814458fd4e6b61e2574d0a2ca28d2cc03a26",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "0si43/shetommy.com",
+        "sha": "94356839581d100ee9c28b8aa9256e72a884a8b3",
         "license": "MIT",
         "split": "test"
       },
@@ -85,6 +91,12 @@
         "split": "test"
       },
       {
+        "repository": "aarkue/pdf-tools-web",
+        "sha": "4bbee85c06a3b22d4b8524c319e5f8216a5438f9",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
         "repository": "aaronjmars/tweazy",
         "sha": "a562b93b7544b92765262e772cfd9d6315b4d2dc",
         "license": "MIT",
@@ -127,6 +139,12 @@
         "split": "test"
       },
       {
+        "repository": "abhay-ramesh/Wordmark",
+        "sha": "7904124d36da0fe8d49b181ff2e96559d981431a",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
         "repository": "AbhiVarde/syncui",
         "sha": "5529f79c6408b8f49ef06e957478447b42f826b6",
         "license": "MIT",
@@ -145,27 +163,9 @@
         "split": "test"
       },
       {
-        "repository": "actionagentai/openclaw-dashboard",
-        "sha": "513fbd0db0175525fffdafd453cdb18eac10c784",
-        "license": "MIT",
-        "split": "test"
-      },
-      {
-        "repository": "actionow-ai/x2t",
-        "sha": "f90487430f8d93fa245f81ac7b37a2014301e3b5",
-        "license": "MIT",
-        "split": "test"
-      },
-      {
-        "repository": "adarshaacharya/adarsha.dev",
-        "sha": "ef887f6c26df0bb160abefa89636e54283ee72ce",
-        "license": "MIT",
-        "split": "test"
-      },
-      {
-        "repository": "adarshaacharya/humantryx",
-        "sha": "3c7b8798fb80486b9c8dcc485864878260da789a",
-        "license": "MIT",
+        "repository": "ably-labs/ably-nextjs-fundamentals-kit",
+        "sha": "8f7fead7ea32efc27e99fbd06708cd413f7eea76",
+        "license": "Apache-2.0",
         "split": "test"
       },
       {
@@ -185,6 +185,12 @@
         "sha": "cbcdef8623f71a7a95463ab35371da3b279e2b1a",
         "license": "Apache-2.0",
         "split": "test"
+      },
+      {
+        "repository": "AykutSarac/jsoncrack.com",
+        "sha": "637edb86c04bba0d8a07eec50a0a7ff3a6cd487f",
+        "license": "Apache-2.0",
+        "split": "dev"
       },
       {
         "repository": "bymaul/maulana.dev",
@@ -211,6 +217,12 @@
         "split": "test"
       },
       {
+        "repository": "ethereum/ethereum-org-website",
+        "sha": "46fd1a32e216e09f2d80a971e5a08c27bc486c92",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
         "repository": "ixartz/Next-js-Boilerplate",
         "sha": "6acd079673a4eaaf7df6875d8025d2bec1240985",
         "license": "MIT",
@@ -231,6 +243,12 @@
       {
         "repository": "KasperiP/windows11-portfolio",
         "sha": "3d7647e39553db158a09d5a4a61316e9f072ad81",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "magicuidesign/magicui",
+        "sha": "38aa1901967d0b8d9eb3d4d01c3c49fc5b4779b1",
         "license": "MIT",
         "split": "test"
       },
@@ -309,6 +327,12 @@
       {
         "repository": "umutxyp/Personal-Website",
         "sha": "bf3820b3e140aa0c604632296b8af63c8a5d4f9e",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "vercel/hyper-site",
+        "sha": "fa4fd463de191d17a1f2e72f86c5adc49ad46160",
         "license": "MIT",
         "split": "test"
       }

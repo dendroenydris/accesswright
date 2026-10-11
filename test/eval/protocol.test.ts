@@ -34,7 +34,7 @@ it("extends the 20261007 corpus without changing its repositories, SHAs or split
   const original = await readFrozenProtocol("eval/protocol-20261007.json");
   const extended = await readFrozenProtocol("eval/protocol-20261012.json");
   for (const repository of original.protocol.repositories) expect(extended.protocol.repositories).toContainEqual(repository);
-  expect(extended.protocol.repositories.filter(repository => repository.split === "test")).toHaveLength(43);
+  expect(extended.protocol.repositories.filter(repository => repository.split === "test")).toHaveLength(46);
   expect(extended.protocol.targetTestCases).toBe(80);
   expect({ ...extended.protocol, frozenAt: "", selection: "", repositories: [], targetTestCases: 0 }).toEqual({ ...original.protocol, frozenAt: "", selection: "", repositories: [], targetTestCases: 0 });
 });

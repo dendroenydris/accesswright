@@ -6,7 +6,7 @@ import { createPagesIntegrationFixture } from "../fixtures/pages-integration.js"
 import { DockerRepairSession } from "../../src/runner/repair-session.js";
 import { runRepair } from "../../src/core/repair.js";
 
-for (const [next, language] of [["15.5.27", "tsx"], ["16.3.8", "jsx"]] as const) {
+for (const [next, language] of [["12.3.7", "jsx"], ["13.5.11", "tsx"], ["14.2.35", "jsx"], ["15.5.27", "tsx"], ["16.3.8", "jsx"]] as const) {
   it(`maps and repairs Next ${next} Pages Router ${language}, a dynamic route and fetched HTTP data`, async () => {
     const tempRoot = process.env.ACCESSWRIGHT_TMP_ROOT ?? join(tmpdir(), "accesswright-integration");
     await mkdir(tempRoot, { recursive: true });

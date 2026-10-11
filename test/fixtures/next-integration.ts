@@ -2,12 +2,14 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 /** Owned synthetic application, executed only in Docker. Not a public-repository benchmark result. */
-export async function createNextIntegrationFixture(root: string): Promise<void> {
+export async function createNextIntegrationFixture(root: string, next: "13.5.11" | "14.2.35" | "16.3.8" = "16.3.8"): Promise<void> {
+  // Next 13-14 support React 18 and map sources only through webpack, so they run without Turbopack.
+  const legacy = next !== "16.3.8", react = legacy ? "18.3.1" : "19.3.0";
   const files: Record<string, string> = {
     "package.json": JSON.stringify({ name: "accesswright-next-integration-fixture", version: "1.0.0", private: true, type: "module",
-      scripts: { dev: "next dev --turbopack", build: "next build", start: "next start", typecheck: "tsc --noEmit", lint: "eslint app components --max-warnings=0", test: "node --test test/invariant.test.mjs" },
-      dependencies: { next: "16.3.8", react: "19.3.0", "react-dom": "19.3.0" },
-      devDependencies: { typescript: "5.9.3", "@types/node": "26.6.4", "@types/react": "19.3.0", eslint: "10.12.0", "typescript-eslint": "8.71.0" },
+      scripts: { dev: legacy ? "next dev" : "next dev --turbopack", build: "next build", start: "next start", typecheck: "tsc --noEmit", lint: "eslint app components --max-warnings=0", test: "node --test test/invariant.test.mjs" },
+      dependencies: { next, react, "react-dom": react },
+      devDependencies: { typescript: "5.9.3", "@types/node": "26.6.4", "@types/react": legacy ? "18.3.31" : "19.3.0", eslint: "10.12.0", "typescript-eslint": "8.71.0" },
     }, null, 2),
     "next.config.mjs": "export default { reactStrictMode: true, poweredByHeader: false };\n",
     "tsconfig.json": JSON.stringify({ compilerOptions: { target: "ES2017", lib: ["dom", "dom.iterable", "esnext"], allowJs: true, skipLibCheck: true, strict: true, noEmit: true, esModuleInterop: true, module: "esnext", moduleResolution: "bundler", resolveJsonModule: true, isolatedModules: true, jsx: "preserve", incremental: true, plugins: [{ name: "next" }] }, include: ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"], exclude: ["node_modules"] }, null, 2),

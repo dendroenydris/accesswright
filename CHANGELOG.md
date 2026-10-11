@@ -17,6 +17,7 @@
 ### Added
 
 - CLI help without repository access, Docker or model credentials, and a typed library entry for installed packages.
+- Target-repository support extended from Next.js 15.5-16 to Next.js 12-16; Docker fixtures for Next 12.3.7, 13.5.11 and 14.2.35 (Pages Router) and 13.5.11 and 14.2.35 (App Router) map and repair through webpack source mapping.
 - Read-only GitHub App source access with installation/owner/repository checks, bounded signed requests and metadata-only revision records.
 - Create-only Firestore original-revision pins shared by source provisioning and independent verification across service restarts.
 - Temporary trusted checkouts with pinned HTTPS Git fetches, scrubbed installation-token runtime configuration, metadata-only records and explicit source erasure.
@@ -54,11 +55,12 @@
 
 - npm tarballs contain the compiled runtime and public package documents, excluding development checkouts, fixtures and internal files.
 - Opt-in OpenAI live validation uses the standard local `OPENAI_API_KEY` environment variable instead of the temporary GitHub secret name.
-- Evaluation protocol `eval/protocol-20261012.json` replaces `eval/protocol-20261007.json` as the CLI default: 51 pinned repositories (43 test, 8 dev) instead of 20, and a test target of 80 seeded cases instead of 300, which the 16 original test repositories could not reach (about 2.5 valid unique cases per repository). The original 20 repositories, SHAs and splits are retained, plus four A11YRepair repositories (A11YBench commits or the commit before a merged A11YRepair PR) that pass the same filters. The candidate pool and per-candidate qualification results are archived beside it.
+- Evaluation protocol `eval/protocol-20261012.json` replaces `eval/protocol-20261007.json` as the CLI default: 55 pinned repositories (46 test, 9 dev; Next.js 12-16 by lockfile-resolved version) instead of 20, and a test target of 80 seeded cases instead of 300, which the 16 original test repositories could not reach (about 2.5 valid unique cases per repository). The original 20 repositories, SHAs and splits are retained, plus eight A11YRepair repositories (A11YBench commits or the commit before a merged A11YRepair PR) that pass the same filters. The candidate pool and per-candidate qualification results are archived beside it.
 
 ### Fixed
 
 - Recognized installed npm command symlinks and mounted complete hoisted runtime dependencies without substituting module versions.
+- Docker repairs on Next.js 12-14 no longer time out after a patch: webpack dev watchers could read a copied file before ownership was transferred, cache EACCES, and never recompile. Ownership transfer now also refreshes the file mtime.
 - Excluded macOS transport sidecars from lint discovery and removed only verified untracked AppleDouble bytes in a newly owned pinned fetch.
 - Withheld private cleanup when its registered object identity conflicts, without deleting a different generation.
 - Erased corrupted private candidate objects at their trusted expiry without parsing source; missing current objects no longer imply confirmed cleanup.
