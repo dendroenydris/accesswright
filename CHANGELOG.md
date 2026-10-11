@@ -11,6 +11,7 @@
 
 ### Added
 
+- Bounded Hosted worker patch transport with PNG evidence, verifier feedback, scoped authentication and fail-closed response/path validation.
 - Trusted Hosted per-run token settlements and an irreversible seal that blocks further model calls before independent verification.
 - Independent Docker replay of Hosted candidate patches, pinned-checkout and reconciled-usage checks, and digest-bound review receipts.
 - Private Hosted HTTP service composition with shared scoped run authentication for patches, results, finish and status, retaining the independent trusted-verifier gate.

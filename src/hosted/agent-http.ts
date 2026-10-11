@@ -7,10 +7,10 @@ import type { HostedPatchAgent } from "./agent-api.js";
 import { createHostedRunHandler } from "./run-http.js";
 import { HostedRunWorkflow } from "./run-workflow.js";
 import type { HostedRunWorkflowDependencies } from "./run-workflow.js";
+import { HostedPatchRequestSchema } from "./agent-protocol.js";
 
-const maxBodyBytes = 64 * 1024;
+const maxBodyBytes = defaults.hostedMaxPatchBodyBytes;
 const patchPath = /^\/runs\/([A-Za-z0-9_-]{1,64})\/tasks\/([^/?]+)\/patch$/;
-const requestSchema = z.object({ task: z.unknown(), context: z.unknown() }).strict();
 
 class LargePayloadError extends Error {
   constructor() { super("Internal agent request exceeds byte limit"); }
@@ -83,17 +83,18 @@ export function createHostedAgentHandler(agent: HostedPatchAgent): RequestListen
         return;
       }
       try {
-        const parsed = requestSchema.safeParse(await boundedJson(request));
+        const parsed = HostedPatchRequestSchema.safeParse(await boundedJson(request));
         if (!parsed.success) {
           send(response, 400, { status: "invalid-request" });
           return;
         }
+        if (Buffer.byteLength(JSON.stringify({ task: parsed.data.task, context: parsed.data.context, feedback: parsed.data.feedback })) > defaults.hostedMaxContextBytes) throw new LargePayloadError();
         const task = z.object({ id: z.string().min(1).max(1024) }).passthrough().safeParse(parsed.data.task);
         if (!task.success || task.data.id !== taskId) {
           send(response, 400, { status: "invalid-task" });
           return;
         }
-        const result = await agent.patch(runId, token, parsed.data.task, parsed.data.context);
+        const result = await agent.patch(runId, token, parsed.data.task, parsed.data.context, { images: parsed.data.images, feedback: parsed.data.feedback });
         send(response, result.status === "accepted" ? 200 : 422, result);
       } catch (error) {
         if (error instanceof LargePayloadError) send(response, 413, { status: "too-large" });

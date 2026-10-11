@@ -12,9 +12,11 @@ import { DurableSpendLedger } from "../../src/llm/durable-spend.js";
 import type { LlmProvider } from "../../src/llm/types.js";
 import type { RunReport } from "../../src/reporter/report.js";
 import { FakeLlmProvider } from "../helpers/fake-provider.js";
+import { HostedAgentClient } from "../../src/hosted/agent-client.js";
+import type { FixTask } from "../../src/types/schemas.js";
 
 const roots: string[] = [];
-const task = {
+const task: FixTask = {
   id: "llm:4.1.2:button-name:components/Controls.tsx:4:7",
   ruleId: "button-name", criterion: "4.1.2", kind: "semantic", route: "llm",
   source: { file: "components/Controls.tsx", line: 4, column: 7 },
@@ -56,13 +58,43 @@ async function fixture(providerOverride?: LlmProvider) {
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Agent server missing TCP port");
   return {
-    service, token, ledger, server, runStore, get calls() { return fake.requests.length; }, get trustedCalls() { return trustedCalls; },
+    service, token, ledger, server, runStore, providerRequests: fake.requests, get calls() { return fake.requests.length; }, get trustedCalls() { return trustedCalls; },
     origin: "http://127.0.0.1:" + address.port,
     endpoint: "http://127.0.0.1:" + address.port + "/runs/run-9/tasks/" + encodeURIComponent(task.id) + "/patch",
   };
 }
 afterEach(async () => {
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
+});
+
+it("transfers actual PNG bytes and bounded verifier feedback through the private worker client", async () => {
+  const f = await fixture();
+  const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+  try {
+    const client = new HostedAgentClient({ origin: f.origin, runId: "run-9", token: f.token });
+    expect((await client.patch(task, context, [{ data: png, mediaType: "image/png" }], "check=target; reason=previous name missing")).status).toBe("accepted");
+    expect(f.providerRequests[0]?.images).toEqual([{ data: png, mediaType: "image/png" }]);
+    expect(f.providerRequests[0]?.prompt).toContain("previous name missing");
+    const records = JSON.stringify(await f.service.records());
+    expect(records).not.toContain(Buffer.from(png).toString("base64"));
+    expect(records).not.toContain("previous name missing");
+    expect(records).not.toContain(context.component.sourceExcerpt);
+    expect(await f.service.sealForVerification("run-9")).toMatchObject({ usage: { inputTokens: 250, outputTokens: 80, spentUsd: 0.00041 } });
+  } finally { await new Promise<void>(resolve => f.server.close(() => resolve())); }
+});
+
+it.each(["base64", "signature", "size", "feedback"])("rejects invalid %s image/feedback evidence before provider invocation", async kind => {
+  const f = await fixture();
+  try {
+    const valid = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).toString("base64");
+    const data = kind === "base64" ? "https://attacker.example/secret" : kind === "signature" ? Buffer.from("not PNG bytes").toString("base64") : kind === "size" ? "A".repeat(6 * 1024 * 1024) : valid;
+    const response = await fetch(f.endpoint, { method: "POST", headers: { authorization: "Bearer " + f.token, "content-type": "application/json" }, body: JSON.stringify({ task, context,
+      images: [{ mediaType: "image/png", data }], feedback: kind === "feedback" ? "x".repeat(5000) : null }) });
+    expect(response.status).toBe(kind === "size" ? 413 : 400);
+    await response.arrayBuffer();
+    expect(f.calls).toBe(0);
+    expect((await f.ledger.snapshot()).settledAttempts).toBe(0);
+  } finally { await new Promise<void>(resolve => f.server.close(() => resolve())); }
 });
 
 it("shares scoped authentication across patch, result and finish endpoints without trusting job reports", async () => {

@@ -45,7 +45,7 @@ export async function gatherRepairContext(input: ContextGatheringInput) {
     if (!/^[a-zA-Z0-9_-]+\.png$/.test(screenshot)) throw new Error("Invalid screenshot evidence reference");
     const path = join(input.evidenceDir, screenshot);
     const info = await lstat(path);
-    if (!info.isFile() || info.isSymbolicLink() || info.size > 4 * 1024 * 1024) throw new Error("Image evidence is not a bounded regular file");
+    if (!info.isFile() || info.isSymbolicLink() || info.size > defaults.maxImageBytes) throw new Error("Image evidence is not a bounded regular file");
     const data = await readFile(path);
     if (!data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) throw new Error("Image evidence is not PNG data");
     images.push({ data: new Uint8Array(data), mediaType: "image/png" });
