@@ -30,3 +30,11 @@ it("refuses overwriting a frozen protocol and detects a changed digest", async (
     await expect(readFrozenProtocol(path)).rejects.toThrow(/digest/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+it("extends the 20261007 corpus without changing its repositories, SHAs or splits", async () => {
+  const original = await readFrozenProtocol("eval/protocol-20261007.json");
+  const extended = await readFrozenProtocol("eval/protocol-20261012.json");
+  for (const repository of original.protocol.repositories) expect(extended.protocol.repositories).toContainEqual(repository);
+  expect(extended.protocol.repositories.filter(repository => repository.split === "test")).toHaveLength(40);
+  expect(extended.protocol.targetTestCases).toBe(80);
+  expect({ ...extended.protocol, frozenAt: "", selection: "", repositories: [], targetTestCases: 0 }).toEqual({ ...original.protocol, frozenAt: "", selection: "", repositories: [], targetTestCases: 0 });
+});

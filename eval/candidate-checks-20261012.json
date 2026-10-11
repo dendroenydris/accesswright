@@ -1,0 +1,589 @@
+{
+  "checkedAt": "2026-10-11T22:25:30.631Z",
+  "testTarget": 40,
+  "checks": [
+    {
+      "repository": "0ffy/beenote",
+      "sha": "dd326635ae93103744b073c911df45621f05c921",
+      "lockfile": "package-lock.json",
+      "next": "^16.2.6",
+      "eligible": true
+    },
+    {
+      "repository": "0l1v3rr/github-readme-tech-stack",
+      "sha": "6ba0814458fd4e6b61e2574d0a2ca28d2cc03a26",
+      "lockfile": "package-lock.json",
+      "next": "^15.0.4",
+      "eligible": true
+    },
+    {
+      "repository": "0si43/shetommy.com",
+      "sha": "94356839581d100ee9c28b8aa9256e72a884a8b3",
+      "reason": "next ^14.1.0"
+    },
+    {
+      "repository": "0xarchit/ByokChat",
+      "sha": "8af456173f4f7b492ed8dff1a55665e521645b57",
+      "lockfile": "package-lock.json",
+      "next": "16.0.0",
+      "eligible": true
+    },
+    {
+      "repository": "0xcadams/ssr-themes",
+      "sha": "84cf37165078e965510c64e07683c561e37da184",
+      "reason": "lockfiles [\"bun.lock\"]"
+    },
+    {
+      "repository": "0xcro3dile/answerui",
+      "sha": "9a993359cfd01279e1f46edf15e4bddbfba7c7d2",
+      "lockfile": "pnpm-lock.yaml",
+      "next": "^16.3.1",
+      "eligible": true
+    },
+    {
+      "repository": "0xkuze/next-hexagonal-architecture",
+      "sha": "8f205504c756b893f356c33e00b7e27a799ccb3a",
+      "reason": "lockfiles [\"package-lock.json\",\"bun.lock\"]"
+    },
+    {
+      "repository": "0xReLogic/Streaky",
+      "sha": "94afe26fa76c72609e518ca5aaeda0c4ffb26da8",
+      "reason": "no root package.json"
+    },
+    {
+      "repository": "100mslive/100ms-docs",
+      "sha": "6d516eb74526d28eb36da0560497cbd4cdfa2470",
+      "reason": "lockfiles [\"yarn.lock\"]"
+    },
+    {
+      "repository": "1146345502/aural-oss",
+      "sha": "ff366fbf52f2adb15d288bd2ce659e925cbbaafc",
+      "lockfile": "package-lock.json",
+      "next": "^16.3.1",
+      "eligible": true
+    },
+    {
+      "repository": "12-Studio/Tackl",
+      "sha": "4e7c0190d2f2850419466eab90960507a25aa80c",
+      "reason": "lockfiles [\"bun.lock\"]"
+    },
+    {
+      "repository": "17380936778/omp-web",
+      "sha": "f09920e04ed4851ad10d86c6fc92d95c2b3485c1",
+      "reason": "lockfiles [\"package-lock.json\",\"bun.lock\"]"
+    },
+    {
+      "repository": "199-biotechnologies/motion-dev-animations-skill",
+      "sha": "3feedfb4dba8adae40fc9a5f9a23e3dda2121205",
+      "reason": "no root package.json"
+    },
+    {
+      "repository": "1998code/shorten-url",
+      "sha": "48bf02a375f23c0a031852ccc42f333d35184822",
+      "reason": "lockfiles [\"package-lock.json\",\"bun.lockb\"]"
+    },
+    {
+      "repository": "1weiho/next-lens",
+      "sha": "02a90713e79fcbbe3072135d9b014ed609946264",
+      "reason": "no root next dependency"
+    },
+    {
+      "repository": "1weiho/next-sandbox",
+      "sha": "133b37713fc040896fe6dce1839c208f48ab9b0e",
+      "reason": "no root next dependency"
+    },
+    {
+      "repository": "20tab/nextjs-continuous-delivery",
+      "sha": "506241a44158103d58e124244cc0228a8d2aa4ae",
+      "reason": "no root package.json"
+    },
+    {
+      "repository": "23ag1/ClawdOS",
+      "sha": "818fd56e12ab935d036721d8aa2ceeed245f4aef",
+      "lockfile": "package-lock.json",
+      "next": "16.1.6",
+      "eligible": true
+    },
+    {
+      "repository": "2color/voice-ama",
+      "sha": "e3e5b63d6d769bafe60606899f20eeec935ec114",
+      "lockfile": "package-lock.json",
+      "next": "15.5.9",
+      "eligible": true
+    },
+    {
+      "repository": "2nthony/blogkit",
+      "sha": "9c8ace77cb8aa3dbbbccca36f3e58a30196c2be5",
+      "reason": "no root next dependency"
+    },
+    {
+      "repository": "403errors/repomind",
+      "sha": "7cb4436e6537e398664da5342612fcd8e9c53ba0",
+      "lockfile": "package-lock.json",
+      "next": "16.1.1",
+      "eligible": true
+    },
+    {
+      "repository": "4lejandrito/next-plausible",
+      "sha": "cbe1c7c1c91554a16e58b76576445061d9aee290",
+      "lockfile": "package-lock.json",
+      "next": "16.0.10",
+      "eligible": true
+    },
+    {
+      "repository": "599yongyang/DatasetLoom",
+      "sha": "347da61355aae15b89a1563245e52a1ba32ab153",
+      "reason": "no root next dependency"
+    },
+    {
+      "repository": "748811693aB/Management-System",
+      "sha": "56a8e8a1767ccb3ca47c0d172dc7404d3dc5a9ed",
+      "lockfile": "package-lock.json",
+      "next": "^16.2.9",
+      "eligible": true
+    },
+    {
+      "repository": "8starlabs/ui",
+      "sha": "9633e2fa89cdea2da40a81d69ef484ff04d0de63",
+      "lockfile": "pnpm-lock.yaml",
+      "next": "^16.2.11",
+      "eligible": true
+    },
+    {
+      "repository": "98mohitkumar/Cinephiled",
+      "sha": "3049b05ea24080b0eff57fd094cf5397039c9770",
+      "reason": "lockfiles [\"yarn.lock\"]"
+    },
+    {
+      "repository": "9d8dev/next-wp",
+      "sha": "4a2caeb1e14191fe58113b94326c2ad92106ff8b",
+      "lockfile": "pnpm-lock.yaml",
+      "next": "16.3.0",
+      "eligible": true
+    },
+    {
+      "repository": "a-tokyo/apple-signin-auth",
+      "sha": "562baff06020ae939ff24582edcb958c218bd1fd",
+      "reason": "lockfiles [\"yarn.lock\"]"
+    },
+    {
+      "repository": "a-tokyo/react-apple-signin-auth",
+      "sha": "89facd883db68a67b4884dfea70fa0f911bab3ed",
+      "reason": "lockfiles [\"yarn.lock\"]"
+    },
+    {
+      "repository": "a8hok/NodeJS-Study-Guide",
+      "sha": "f2ef197517f53fc3ace139195aa736453d25d78d",
+      "reason": "no root package.json"
+    },
+    {
+      "repository": "aadorian/ProtegeDesk",
+      "sha": "1551e09aa0b8e5951dff9acffe5a90b399b9c206",
+      "reason": "lockfiles [\"package-lock.json\",\"pnpm-lock.yaml\"]"
+    },
+    {
+      "repository": "aafnnp/site",
+      "sha": "450691f555c23b8a9c8d0d11b02b1ced5bbc6154",
+      "lockfile": "package-lock.json",
+      "next": "^16.2.4",
+      "eligible": true
+    },
+    {
+      "repository": "aamtt/ac",
+      "sha": "31d391d212c130e2e5b71da1e3569f7ee2bbfb6a",
+      "reason": "lockfiles [\"bun.lock\"]"
+    },
+    {
+      "repository": "aarkue/pdf-tools-web",
+      "sha": "4bbee85c06a3b22d4b8524c319e5f8216a5438f9",
+      "reason": "next 13.3.4"
+    },
+    {
+      "repository": "aaronjmars/tweazy",
+      "sha": "a562b93b7544b92765262e772cfd9d6315b4d2dc",
+      "lockfile": "package-lock.json",
+      "next": "^16.3.6",
+      "eligible": true
+    },
+    {
+      "repository": "Aaryan-Kapoor/ModelGate-Hackathon",
+      "sha": "f8281727eb1bc0912b8b60f9459bc72a5d0569b6",
+      "reason": "no root package.json"
+    },
+    {
+      "repository": "AayushBharti/keythm",
+      "sha": "5fae63a483b46bc8fcf365b0c0104b4e3af7d653",
+      "reason": "lockfiles [\"bun.lock\"]"
+    },
+    {
+      "repository": "AayushBharti/VentureDen",
+      "sha": "1affd6b35a3ce478b97a2a68441e975d59c6092d",
+      "reason": "no root next dependency"
+    },
+    {
+      "repository": "abaveja313/conduit",
+      "sha": "bc1d5877029e95984d6f39fa68033a5456b376cf",
+      "reason": "no root next dependency"
+    },
+    {
+      "repository": "Abdelrahman-Aboalkhair/ecommerce-platform",
+      "sha": "e0611a5d924e410f0bba40422eeb4a4e22c89d29",
+      "reason": "no root next dependency"
+    },
+    {
+      "repository": "abderrahimghazali/shadcn-fintech",
+      "sha": "e338240d10c908ab49403adbcd0bb4cc980ebfce",
+      "lockfile": "pnpm-lock.yaml",
+      "next": "16.2.3",
+      "eligible": true
+    },
+    {
+      "repository": "abdirahmanmahamoud/authverse",
+      "sha": "03b1cbd5205fdc4b562e394be2446d0fad3b8162",
+      "reason": "no root next dependency"
+    },
+    {
+      "repository": "abdtriedcoding/NotesGPT",
+      "sha": "896542c3ea09a4a1461ca8275efe8d2aa9ed4bc7",
+      "lockfile": "package-lock.json",
+      "next": "^15.5.19",
+      "eligible": true
+    },
+    {
+      "repository": "Abdul-Wasay-008/Atlas26",
+      "sha": "6dabf96565550246c118bb33a16e90cb2b1e11b4",
+      "lockfile": "package-lock.json",
+      "next": "16.2.1",
+      "eligible": true
+    },
+    {
+      "repository": "AbdulAHAD968/Currency-Converter",
+      "sha": "af4902379befce77c2ac878bf0deda6749b4483e",
+      "lockfile": "package-lock.json",
+      "next": "15.5.5",
+      "eligible": true
+    },
+    {
+      "repository": "abdullaalhussein/soc-training-simulator",
+      "sha": "2fe25f4e9ebb798c00d80ac423ea9e2e6d02243e",
+      "reason": "no root next dependency"
+    },
+    {
+      "repository": "abdullahceylan/ac-react-reddit",
+      "sha": "739629a290ee9a67d33b08f35e88c9b7a2759a0b",
+      "reason": "lockfiles []"
+    },
+    {
+      "repository": "abdulrcs/abdulrahman.id",
+      "sha": "8aa55f1e0d872f15a6901d0a2f05cd94666407fc",
+      "reason": "lockfiles [\"yarn.lock\"]"
+    },
+    {
+      "repository": "abdulrdeveloper/DevScope",
+      "sha": "605b3f763a6593ef56423f032ff1799ab477551f",
+      "lockfile": "package-lock.json",
+      "next": "16.2.6",
+      "eligible": true
+    },
+    {
+      "repository": "abdulrdeveloper/klar-AI",
+      "sha": "a6f9b0a120a1cf8a1303659c88134c2d12712c11",
+      "lockfile": "pnpm-lock.yaml",
+      "next": "16.2.9",
+      "eligible": true
+    },
+    {
+      "repository": "abhay-ramesh/next-s3-uploader",
+      "sha": "3fc8b045e1aae3815d95990afa9ce9eb8785f783",
+      "reason": "no root next dependency"
+    },
+    {
+      "repository": "abhay-ramesh/notebook-mdx",
+      "sha": "1a57f32252e1acee35594fa0d18ad3eb822c8f47",
+      "reason": "no root next dependency"
+    },
+    {
+      "repository": "abhay-ramesh/pushduck",
+      "sha": "1a4a907986cd9086f0272ed7800306a49299a951",
+      "reason": "no root next dependency"
+    },
+    {
+      "repository": "abhay-ramesh/Wordmark",
+      "sha": "7904124d36da0fe8d49b181ff2e96559d981431a",
+      "reason": "next 13.4.19"
+    },
+    {
+      "repository": "abhayy143/bundlediff",
+      "sha": "e51985b2948b6c57f1171d69b8f347e6b7592a14",
+      "reason": "no root next dependency"
+    },
+    {
+      "repository": "AbhiK24/family-os",
+      "sha": "4f077f07d0dbfe729ed46698509230920ffea4a0",
+      "reason": "no root next dependency"
+    },
+    {
+      "repository": "abhishekayu/react-access-engine",
+      "sha": "f942c0a60a94fd18faf43d419b180cf9d067338e",
+      "reason": "no root next dependency"
+    },
+    {
+      "repository": "AbhiVarde/syncui",
+      "sha": "5529f79c6408b8f49ef06e957478447b42f826b6",
+      "lockfile": "package-lock.json",
+      "next": "^16.3.3",
+      "eligible": true
+    },
+    {
+      "repository": "abinauv/dental-erp",
+      "sha": "655dc10a3a5b384019fb3943c0d2c2b056d6ed0e",
+      "lockfile": "package-lock.json",
+      "next": "^16.1.1",
+      "eligible": true
+    },
+    {
+      "repository": "abjt14/agamjeet",
+      "sha": "adfc77ee890b964c4d3ca08db9c128204874d47a",
+      "lockfile": "package-lock.json",
+      "next": "15.5.23",
+      "eligible": true
+    },
+    {
+      "repository": "ably-labs/ably-nextjs-fundamentals-kit",
+      "sha": "8f7fead7ea32efc27e99fbd06708cd413f7eea76",
+      "reason": "next ^14.1.4"
+    },
+    {
+      "repository": "ably-labs/NextJS-chat-app",
+      "sha": "af26af000df7cb678ff4b822efbc3e7290537bca",
+      "reason": "next ^14.2.3"
+    },
+    {
+      "repository": "ac12644/NFT-Marketplace",
+      "sha": "039b19110f4c3bdb05364b37dd8c41b177df88d5",
+      "reason": "no root next dependency"
+    },
+    {
+      "repository": "accensa/accensa-app",
+      "sha": "a10e648ccbcc1452cd10f743da869c971a445f9a",
+      "reason": "no root next dependency"
+    },
+    {
+      "repository": "AccessibleForAll/AccessibleWebDev",
+      "sha": "d5a42c7725f3d5a0fe92b5e0aa7defd1899820cf",
+      "reason": "next ^13.5.6"
+    },
+    {
+      "repository": "aceiny/NextJs-Starter-Kit",
+      "sha": "2f4384d357876921fe14c4721355b5734a5d2564",
+      "reason": "lockfiles [\"yarn.lock\"]"
+    },
+    {
+      "repository": "Acid-OP/DrawDeck",
+      "sha": "8afdb97e7d217e7d69bb260b4fa3f3241fe0309c",
+      "reason": "no root next dependency"
+    },
+    {
+      "repository": "acoder-ai-infra/agenui-studio",
+      "sha": "0c16144125cf2b13277da3a7301dac448db2c494",
+      "reason": "no root package.json"
+    },
+    {
+      "repository": "actifyjs/actify",
+      "sha": "bde0f0b00bf4b370ef62e44be8b01b6690695421",
+      "reason": "no root next dependency"
+    },
+    {
+      "repository": "actionagentai/openclaw-dashboard",
+      "sha": "513fbd0db0175525fffdafd453cdb18eac10c784",
+      "lockfile": "package-lock.json",
+      "next": "^16.1.6",
+      "eligible": true
+    },
+    {
+      "repository": "actionow-ai/x2t",
+      "sha": "f90487430f8d93fa245f81ac7b37a2014301e3b5",
+      "lockfile": "pnpm-lock.yaml",
+      "next": "^15.1.6",
+      "eligible": true
+    },
+    {
+      "repository": "adarshaacharya/adarsha.dev",
+      "sha": "ef887f6c26df0bb160abefa89636e54283ee72ce",
+      "lockfile": "pnpm-lock.yaml",
+      "next": "16.2.10",
+      "eligible": true
+    },
+    {
+      "repository": "adarshaacharya/humantryx",
+      "sha": "3c7b8798fb80486b9c8dcc485864878260da789a",
+      "lockfile": "pnpm-lock.yaml",
+      "next": "15.3.8",
+      "eligible": true
+    }
+  ],
+  "selected": [
+    {
+      "repository": "0ffy/beenote",
+      "sha": "dd326635ae93103744b073c911df45621f05c921",
+      "license": "MIT",
+      "split": "dev"
+    },
+    {
+      "repository": "0l1v3rr/github-readme-tech-stack",
+      "sha": "6ba0814458fd4e6b61e2574d0a2ca28d2cc03a26",
+      "license": "MIT",
+      "split": "test"
+    },
+    {
+      "repository": "0xarchit/ByokChat",
+      "sha": "8af456173f4f7b492ed8dff1a55665e521645b57",
+      "license": "MIT",
+      "split": "test"
+    },
+    {
+      "repository": "0xcro3dile/answerui",
+      "sha": "9a993359cfd01279e1f46edf15e4bddbfba7c7d2",
+      "license": "MIT",
+      "split": "test"
+    },
+    {
+      "repository": "1146345502/aural-oss",
+      "sha": "ff366fbf52f2adb15d288bd2ce659e925cbbaafc",
+      "license": "MIT",
+      "split": "test"
+    },
+    {
+      "repository": "23ag1/ClawdOS",
+      "sha": "818fd56e12ab935d036721d8aa2ceeed245f4aef",
+      "license": "MIT",
+      "split": "dev"
+    },
+    {
+      "repository": "2color/voice-ama",
+      "sha": "e3e5b63d6d769bafe60606899f20eeec935ec114",
+      "license": "MIT",
+      "split": "test"
+    },
+    {
+      "repository": "403errors/repomind",
+      "sha": "7cb4436e6537e398664da5342612fcd8e9c53ba0",
+      "license": "MIT",
+      "split": "test"
+    },
+    {
+      "repository": "4lejandrito/next-plausible",
+      "sha": "cbe1c7c1c91554a16e58b76576445061d9aee290",
+      "license": "MIT",
+      "split": "dev"
+    },
+    {
+      "repository": "748811693aB/Management-System",
+      "sha": "56a8e8a1767ccb3ca47c0d172dc7404d3dc5a9ed",
+      "license": "MIT",
+      "split": "test"
+    },
+    {
+      "repository": "8starlabs/ui",
+      "sha": "9633e2fa89cdea2da40a81d69ef484ff04d0de63",
+      "license": "MIT",
+      "split": "test"
+    },
+    {
+      "repository": "9d8dev/next-wp",
+      "sha": "4a2caeb1e14191fe58113b94326c2ad92106ff8b",
+      "license": "MIT",
+      "split": "test"
+    },
+    {
+      "repository": "aafnnp/site",
+      "sha": "450691f555c23b8a9c8d0d11b02b1ced5bbc6154",
+      "license": "MIT",
+      "split": "test"
+    },
+    {
+      "repository": "aaronjmars/tweazy",
+      "sha": "a562b93b7544b92765262e772cfd9d6315b4d2dc",
+      "license": "MIT",
+      "split": "test"
+    },
+    {
+      "repository": "abderrahimghazali/shadcn-fintech",
+      "sha": "e338240d10c908ab49403adbcd0bb4cc980ebfce",
+      "license": "MIT",
+      "split": "test"
+    },
+    {
+      "repository": "abdtriedcoding/NotesGPT",
+      "sha": "896542c3ea09a4a1461ca8275efe8d2aa9ed4bc7",
+      "license": "MIT",
+      "split": "test"
+    },
+    {
+      "repository": "Abdul-Wasay-008/Atlas26",
+      "sha": "6dabf96565550246c118bb33a16e90cb2b1e11b4",
+      "license": "MIT",
+      "split": "test"
+    },
+    {
+      "repository": "AbdulAHAD968/Currency-Converter",
+      "sha": "af4902379befce77c2ac878bf0deda6749b4483e",
+      "license": "MIT",
+      "split": "test"
+    },
+    {
+      "repository": "abdulrdeveloper/DevScope",
+      "sha": "605b3f763a6593ef56423f032ff1799ab477551f",
+      "license": "MIT",
+      "split": "test"
+    },
+    {
+      "repository": "abdulrdeveloper/klar-AI",
+      "sha": "a6f9b0a120a1cf8a1303659c88134c2d12712c11",
+      "license": "MIT",
+      "split": "test"
+    },
+    {
+      "repository": "AbhiVarde/syncui",
+      "sha": "5529f79c6408b8f49ef06e957478447b42f826b6",
+      "license": "MIT",
+      "split": "test"
+    },
+    {
+      "repository": "abinauv/dental-erp",
+      "sha": "655dc10a3a5b384019fb3943c0d2c2b056d6ed0e",
+      "license": "MIT",
+      "split": "test"
+    },
+    {
+      "repository": "abjt14/agamjeet",
+      "sha": "adfc77ee890b964c4d3ca08db9c128204874d47a",
+      "license": "MIT",
+      "split": "test"
+    },
+    {
+      "repository": "actionagentai/openclaw-dashboard",
+      "sha": "513fbd0db0175525fffdafd453cdb18eac10c784",
+      "license": "MIT",
+      "split": "test"
+    },
+    {
+      "repository": "actionow-ai/x2t",
+      "sha": "f90487430f8d93fa245f81ac7b37a2014301e3b5",
+      "license": "MIT",
+      "split": "test"
+    },
+    {
+      "repository": "adarshaacharya/adarsha.dev",
+      "sha": "ef887f6c26df0bb160abefa89636e54283ee72ce",
+      "license": "MIT",
+      "split": "test"
+    },
+    {
+      "repository": "adarshaacharya/humantryx",
+      "sha": "3c7b8798fb80486b9c8dcc485864878260da789a",
+      "license": "MIT",
+      "split": "test"
+    }
+  ]
+}

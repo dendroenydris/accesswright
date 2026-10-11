@@ -1,0 +1,326 @@
+{
+  "digest": "8f3e0b55431739decb8599b0fd57158a9594717a43c4454d841e882b09e6bf80",
+  "protocol": {
+    "version": 1,
+    "corpus": "public-nextjs",
+    "frozenAt": "2026-10-11T22:26:19.460Z",
+    "selection": "Version 20261012 extends protocol-20261007 (digest 02dc0d3b...) after its 300-case target proved unreachable (about 2.5 valid unique test cases per repository). Retains its 20 repositories, SHAs and splits unchanged. Adds repositories from the archived pool eval/candidate-pool-20261012.json (GitHub search 2026-10-12: topic:nextjs, fork:false, archived:false, pushed>=2025-10-12, stars>=10, MIT/Apache-2.0/BSD-2-Clause/BSD-3-Clause/ISC) in case-insensitive alphabetical order, keeping each repository whose default-branch HEAD has a root package.json with next ^15/^16 (semver minimum major 15 or 16) and exactly one root npm or pnpm lockfile (no yarn/bun lockfile), until the test split holds 40 repositories. Split: dev iff sha256(lowercase owner/name) first 4 bytes big-endian mod 5 == 0 (reproduces all 20 original splits). Every examined candidate and rejection reason is archived in eval/candidate-checks-20261012.json. No repair outcomes observed for added repositories; compatibility failures remain reported, not replaced.",
+    "repositories": [
+      {
+        "repository": "0ffy/beenote",
+        "sha": "dd326635ae93103744b073c911df45621f05c921",
+        "license": "MIT",
+        "split": "dev"
+      },
+      {
+        "repository": "0l1v3rr/github-readme-tech-stack",
+        "sha": "6ba0814458fd4e6b61e2574d0a2ca28d2cc03a26",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "0xarchit/ByokChat",
+        "sha": "8af456173f4f7b492ed8dff1a55665e521645b57",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "0xcro3dile/answerui",
+        "sha": "9a993359cfd01279e1f46edf15e4bddbfba7c7d2",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "1146345502/aural-oss",
+        "sha": "ff366fbf52f2adb15d288bd2ce659e925cbbaafc",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "23ag1/ClawdOS",
+        "sha": "818fd56e12ab935d036721d8aa2ceeed245f4aef",
+        "license": "MIT",
+        "split": "dev"
+      },
+      {
+        "repository": "2color/voice-ama",
+        "sha": "e3e5b63d6d769bafe60606899f20eeec935ec114",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "403errors/repomind",
+        "sha": "7cb4436e6537e398664da5342612fcd8e9c53ba0",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "4lejandrito/next-plausible",
+        "sha": "cbe1c7c1c91554a16e58b76576445061d9aee290",
+        "license": "MIT",
+        "split": "dev"
+      },
+      {
+        "repository": "748811693aB/Management-System",
+        "sha": "56a8e8a1767ccb3ca47c0d172dc7404d3dc5a9ed",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "8starlabs/ui",
+        "sha": "9633e2fa89cdea2da40a81d69ef484ff04d0de63",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "9d8dev/next-wp",
+        "sha": "4a2caeb1e14191fe58113b94326c2ad92106ff8b",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "aafnnp/site",
+        "sha": "450691f555c23b8a9c8d0d11b02b1ced5bbc6154",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "aaronjmars/tweazy",
+        "sha": "a562b93b7544b92765262e772cfd9d6315b4d2dc",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "abderrahimghazali/shadcn-fintech",
+        "sha": "e338240d10c908ab49403adbcd0bb4cc980ebfce",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "abdtriedcoding/NotesGPT",
+        "sha": "896542c3ea09a4a1461ca8275efe8d2aa9ed4bc7",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "Abdul-Wasay-008/Atlas26",
+        "sha": "6dabf96565550246c118bb33a16e90cb2b1e11b4",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "AbdulAHAD968/Currency-Converter",
+        "sha": "af4902379befce77c2ac878bf0deda6749b4483e",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "abdulrdeveloper/DevScope",
+        "sha": "605b3f763a6593ef56423f032ff1799ab477551f",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "abdulrdeveloper/klar-AI",
+        "sha": "a6f9b0a120a1cf8a1303659c88134c2d12712c11",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "AbhiVarde/syncui",
+        "sha": "5529f79c6408b8f49ef06e957478447b42f826b6",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "abinauv/dental-erp",
+        "sha": "655dc10a3a5b384019fb3943c0d2c2b056d6ed0e",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "abjt14/agamjeet",
+        "sha": "adfc77ee890b964c4d3ca08db9c128204874d47a",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "actionagentai/openclaw-dashboard",
+        "sha": "513fbd0db0175525fffdafd453cdb18eac10c784",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "actionow-ai/x2t",
+        "sha": "f90487430f8d93fa245f81ac7b37a2014301e3b5",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "adarshaacharya/adarsha.dev",
+        "sha": "ef887f6c26df0bb160abefa89636e54283ee72ce",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "adarshaacharya/humantryx",
+        "sha": "3c7b8798fb80486b9c8dcc485864878260da789a",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "alemoraru/nextjs-portofolio-website",
+        "sha": "082faf5c174f7af44e092ed46901f7cf4548b5e0",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "alex289/Portfolio",
+        "sha": "6e9f4015da3ffab44ed0931d98f0f9f2a7dd4b3b",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "bymaul/maulana.dev",
+        "sha": "5946f651f7683d7737714a768bff13ddfd919251",
+        "license": "MIT",
+        "split": "dev"
+      },
+      {
+        "repository": "ColorlibHQ/velora-ui",
+        "sha": "a07bcc129b45eeed3fc070357a6a74b876d96159",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "dedeard/next-personal-web-app",
+        "sha": "418f9e3e4aa6b9734e0e1c04a0ed7a179b67c590",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "ixartz/Next-js-Boilerplate",
+        "sha": "6acd079673a4eaaf7df6875d8025d2bec1240985",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "jpedroschmitz/typescript-nextjs-starter",
+        "sha": "c8076aafbe54a7207a9cec4c10b9f82b0ac93281",
+        "license": "MIT",
+        "split": "dev"
+      },
+      {
+        "repository": "jpvalery/portfolio",
+        "sha": "72652b14ba5cfed5d89ee6ad7436a98b684519fa",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "KasperiP/windows11-portfolio",
+        "sha": "3d7647e39553db158a09d5a4a61316e9f072ad81",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "mk965/mengke.me",
+        "sha": "2dc662d220bc85474a20c0afd5ab6a448f844946",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "ncdai/chanhdai.com",
+        "sha": "1951e213749f58787fc2211cb1cfdc4f386de033",
+        "license": "MIT",
+        "split": "dev"
+      },
+      {
+        "repository": "netlify-templates/nextjs-blog-theme",
+        "sha": "473909fa3f50cb50ea1bd97987cb2ea14afaa76f",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "NotHarshhaa/cv-portfolio",
+        "sha": "eacb3e89619766b51edd7794551d5d9dde39f472",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "pdsuwwz/nextjs-nextra-starter",
+        "sha": "05b8bd442637ef59c888aa0283283af27d8b3b90",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "sanidhyy/modern-portfolio",
+        "sha": "76e21aa4fb439747fbfd28b10fc70456b1c6ac2f",
+        "license": "MIT",
+        "split": "dev"
+      },
+      {
+        "repository": "sanidhyy/portfolio",
+        "sha": "01139cc91c96cf75a3e6fe62523cda9365dd835d",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "sanidhyy/space-portfolio",
+        "sha": "f956a02c3eb1f1b1182b17c9f9dfca66ff9a5ee4",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "Skolaczk/next-starter",
+        "sha": "5de3b14ad471feb06300a5e9e92570c9668729f1",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "uday-a/next-boilerplate",
+        "sha": "08d5aeaa64eddb47b4fe65efe0cc9441af64bbe2",
+        "license": "MIT",
+        "split": "test"
+      },
+      {
+        "repository": "umutxyp/Personal-Website",
+        "sha": "bf3820b3e140aa0c604632296b8af63c8a5d4f9e",
+        "license": "MIT",
+        "split": "test"
+      }
+    ],
+    "model": {
+      "provider": "openai",
+      "id": "gpt-6-luna",
+      "reasoningEffort": "high"
+    },
+    "operators": [
+      "remove-alt",
+      "break-label",
+      "remove-button-name",
+      "remove-link-name",
+      "low-contrast",
+      "invalid-aria",
+      "remove-lang",
+      "positive-tabindex"
+    ],
+    "systems": [
+      "A",
+      "A1",
+      "B1",
+      "deterministic"
+    ],
+    "seeds": {
+      "dev": [
+        1
+      ],
+      "test": [
+        1,
+        2,
+        3
+      ]
+    },
+    "maxCasesPerRepository": 30,
+    "targetTestCases": 80
+  }
+}

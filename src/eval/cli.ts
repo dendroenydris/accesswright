@@ -39,7 +39,7 @@ export function parseEvalArgs(args: readonly string[]): EvalCliArgs {
   const seeds=values.has("--seeds")?values.get("--seeds")?.split(",").map(value=>z.number().int().nonnegative().safe().parse(value.trim()?Number(value):NaN)):undefined;
   const repositories=values.has("--repositories")?values.get("--repositories")?.split(",").map(value=>z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/).parse(value)):undefined;
   const caseLimit=values.has("--max-cases")?z.number().int().positive().max(1000).parse(Number(values.get("--max-cases"))):undefined;
-  return {protocol:values.get("--protocol")??"eval/protocol-20261007.json",output,split:z.enum(["dev","test"]).parse(values.get("--split")??"dev"),systems,
+  return {protocol:values.get("--protocol")??"eval/protocol-20261012.json",output,split:z.enum(["dev","test"]).parse(values.get("--split")??"dev"),systems,
     ...(seeds?{seeds}:{}),...(repositories?{repositories}:{}),...(caseLimit===undefined?{}:{caseLimit}),
     ...(values.has("--tmp-root")?{tempRoot:values.get("--tmp-root")}:{}),...(values.has("--cache-root")?{cacheRoot:values.get("--cache-root")}:{}),...(values.has("--authorization")?{authorization:values.get("--authorization")}:{}),
     ...(values.has("--resume")?{resume:true}:{}),

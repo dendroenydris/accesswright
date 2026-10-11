@@ -154,11 +154,11 @@ Model-assisted mode sends bounded source excerpts, deterministic call-site conte
 
 ## Reproducible evaluation
 
-`eval/protocol-20261007.json` freezes the public Next.js corpus, exact SHAs, dev/test split, operators, seeds, systems, and `gpt-6-luna` high-reasoning configuration. A zero-cost smoke run is:
+`eval/protocol-20261012.json` freezes the public Next.js corpus (47 repositories: 40 test, 7 dev), exact SHAs, dev/test split, operators, seeds, systems, the 80-case test target, and `gpt-6-luna` high-reasoning configuration. It extends `eval/protocol-20261007.json` (20 repositories, unchanged and still valid for its own results) with repositories drawn alphabetically from the archived candidate pool `eval/candidate-pool-20261012.json`; every examined candidate and its rejection reason is in `eval/candidate-checks-20261012.json`. Results under different protocol digests are not pooled. A zero-cost smoke run is:
 
 ```sh
 npm run build
-npm run eval -- --protocol eval/protocol-20261007.json --output /absolute/path/to/results --split dev --systems deterministic --max-cases 2 --tmp-root /tmp/accesswright/integration-20261007 --cache-root /tmp/accesswright/integration-20261007/eval-source-cache
+npm run eval -- --protocol eval/protocol-20261012.json --output /absolute/path/to/results --split dev --systems deterministic --max-cases 2 --tmp-root /tmp/accesswright/integration-20261007 --cache-root /tmp/accesswright/integration-20261007/eval-source-cache
 ```
 To continue an interrupted run, repeat its *identical* command with `--resume` and the same output folder. Completed cells and the original rendered reference are reused only after checking protocol/model/implementation identities and regenerating every reference mutation from the exact pinned source AST. The original multi-route browser baseline is not repeated for an unchanged reference, but each **new candidate** still undergoes real Docker build, browser checks, per-patch verification and the full final production gate. This avoids duplicate paid calls without counting unverified mutations. A changed protocol, model, selected corpus, system, seed, batch bound or compiled implementation fails closed; completed reports cannot be resumed. A previously stored `blocked` cell is retained as failed evidence and is not silently converted into a success: rerun genuinely changed infrastructure in a separate output and report it separately, without pooling unlike implementations.
 
