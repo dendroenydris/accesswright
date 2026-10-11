@@ -110,6 +110,7 @@ it("erases corrupted private objects at the authenticated scheduled expiry witho
   const f = fixture(), saved = await f.open().put("run1", hostedCandidateFixture(), 30);
   const row = f.rows.get("accesswright-candidates/run1"); if (!row) throw new Error("Missing fixture object");
   row.body = "corrupted-private-source-marker";
+  expect(await f.open().generationForCleanup("run1")).toBe(saved.generation);
   await expect(f.open().expire("run1", saved.expiresAt)).rejects.toThrow("not due");
   expect(f.rows.size).toBe(1);
   vi.setSystemTime(new Date(saved.expiresAt));

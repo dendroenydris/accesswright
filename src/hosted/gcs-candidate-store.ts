@@ -105,9 +105,8 @@ export class GcsHostedCandidateStore {
     return { generation: saved.generation, expiresAt, candidateDigest };
   }
   async get(rawRunId: string): Promise<(HostedCandidateReference & { candidate: HostedCandidate }) | null> {
-    const runId = runSchema.parse(rawRunId); const response = await this.request(this.objectUrl(runId));
-    if (response.status === 404) { await response.body?.cancel(); return null; }
-    const metadata = this.checkedMetadata(await this.successful(response, defaults.firestoreRecordMaxBytes), runId);
+    const runId = runSchema.parse(rawRunId), metadata = await this.readMetadata(runId);
+    if (!metadata) return null;
     const media = await this.request(this.objectUrl(runId) + "?alt=media&generation=" + metadata.generation + "&ifGenerationMatch=" + metadata.generation);
     const envelope = envelopeSchema.parse(await this.successful(media, defaults.hostedMaxCandidateObjectBytes));
     const lifetime = Date.parse(envelope.expiresAt) - Date.parse(envelope.createdAt);
@@ -117,6 +116,16 @@ export class GcsHostedCandidateStore {
     }
     if (Date.parse(envelope.expiresAt) <= Date.now()) { await this.remove(runId, metadata.generation); return null; }
     return { generation: metadata.generation, expiresAt: envelope.expiresAt, candidateDigest: envelope.candidateDigest, candidate: envelope.candidate };
+  }
+  private async readMetadata(runId: string) {
+    const response = await this.request(this.objectUrl(runId));
+    if (response.status === 404) { await response.body?.cancel(); return null; }
+    return this.checkedMetadata(await this.successful(response, defaults.firestoreRecordMaxBytes), runId);
+  }
+  /** Recover only the fixed object's deletion identity; never parse potentially corrupted source. */
+  async generationForCleanup(rawRunId: string): Promise<string | null> {
+    const metadata = await this.readMetadata(runSchema.parse(rawRunId));
+    return metadata?.generation ?? null;
   }
   async remove(rawRunId: string, rawGeneration: string): Promise<void> {
     const runId = runSchema.parse(rawRunId), generation = generationSchema.parse(rawGeneration);
@@ -133,12 +142,8 @@ export class GcsHostedCandidateStore {
   async expire(rawRunId: string, expectedExpiresAt: string): Promise<void> {
     const runId = runSchema.parse(rawRunId), expiry = z.iso.datetime().parse(expectedExpiresAt);
     if (Date.parse(expiry) > Date.now()) throw new Error("Private candidate expiry is not due; retry the authenticated cleanup check");
-    const response = await this.request(this.objectUrl(runId));
-    if (response.status === 404) {
-      await response.body?.cancel();
-      throw new Error("Private candidate is absent; a prior trusted cleanup receipt is required");
-    }
-    const metadata = this.checkedMetadata(await this.successful(response, defaults.firestoreRecordMaxBytes), runId);
+    const metadata = await this.readMetadata(runId);
+    if (!metadata) throw new Error("Private candidate is absent; a prior trusted cleanup receipt is required");
     await this.remove(runId, metadata.generation);
   }
 }

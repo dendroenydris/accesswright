@@ -8,6 +8,8 @@ import { HostedCandidateSchema, hostedCandidateDigest } from "./agent-protocol.j
 import type { HostedCandidate } from "./agent-protocol.js";
 import type { HostedPatchAgent } from "./agent-api.js";
 import type { GcsHostedCandidateStore } from "./gcs-candidate-store.js";
+import { clearHostedCandidate } from "./candidate-cleanup.js";
+import type { FirestoreCandidateCleanupStore } from "./candidate-cleanup.js";
 import { eligibleForTrustedVerification, hostedReportDigest } from "./run-workflow.js";
 import { verifyHostedCandidate } from "./trusted-verifier.js";
 import type { HostedVerificationOptions } from "./trusted-verifier.js";
@@ -16,6 +18,7 @@ import type { HostedVerificationOptions } from "./trusted-verifier.js";
 export function createHostedCandidateCoordinator(options: {
   agent: Pick<HostedPatchAgent, "sealForVerification">;
   store: Pick<GcsHostedCandidateStore, "put" | "get" | "remove">;
+  cleanup: Pick<FirestoreCandidateCleanupStore, "claim" | "confirm" | "get">;
   evidenceRoot: string;
   resolveCheckout: (runId: string) => Promise<Omit<HostedVerificationOptions, "reconciled">>;
   /** Durably enqueue only the run/report identity before any private upload. */
@@ -43,24 +46,35 @@ export function createHostedCandidateCoordinator(options: {
         return;
       }
       const reference = await options.store.put(runId, candidate, ttl);
-      try { await record(runId, "hosted-candidate-staged", "ok", digest); }
+      try {
+        await options.cleanup.claim(runId, reference);
+        await record(runId, "hosted-candidate-staged", "ok", digest);
+      }
       catch {
-        await options.store.remove(runId, reference.generation);
+        await clearHostedCandidate(options, runId, reference);
         throw new Error("Private candidate staging evidence failed");
       }
     },
     verifyTrustedResult: async (rawRunId: string, rawDigest: string) => {
       const runId = runSchema.parse(rawRunId), digest = z.string().regex(/^[a-f0-9]{64}$/).parse(rawDigest);
       const staged = await options.store.get(runId);
-      if (!staged) return null;
+      if (!staged) {
+        const previous = await options.cleanup.get(runId);
+        if (previous?.status === "pending") {
+          await clearHostedCandidate(options, runId, { generation: previous.generation, expiresAt: previous.expiresAt, candidateDigest: previous.candidateDigest });
+          await record(runId, "hosted-candidate-cleared", "ok", previous.candidateDigest);
+        }
+        return null;
+      }
+      const { candidate, ...reference } = staged;
       try {
-        if (hostedReportDigest(staged.candidate.report) !== digest) return null;
+        if (hostedReportDigest(candidate.report) !== digest) return null;
         const reconciled = await options.agent.sealForVerification(runId);
         const checkout = await options.resolveCheckout(runId);
-        return await verifyHostedCandidate({ ...checkout, reconciled }, staged.candidate);
+        return await verifyHostedCandidate({ ...checkout, reconciled }, candidate);
       } finally {
         // A replay success is withheld if private-source deletion cannot be confirmed.
-        await options.store.remove(runId, staged.generation);
+        await clearHostedCandidate(options, runId, reference);
         await record(runId, "hosted-candidate-cleared", "ok", staged.candidateDigest);
       }
     },

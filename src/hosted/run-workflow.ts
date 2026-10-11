@@ -216,6 +216,19 @@ export class HostedRunWorkflow {
       current.installationId !== identity.installationId) {
       throw new Error("Run results must be submitted before finish");
     }
+    return this.finishRecord(current);
+  }
+
+  /** Trusted task ingress only; never expose this path to worker run tokens. */
+  async finishTrustedReport(rawRunId: string, rawDigest: string): Promise<HostedRunTransition> {
+    const runId = runSchema.parse(rawRunId), digest = z.string().regex(/^[a-f0-9]{64}$/).parse(rawDigest);
+    const current = await this.dependencies.store.get(runId);
+    if (!current || current.reportDigest !== digest) throw new Error("Trusted task report identity mismatch");
+    return this.finishRecord(current);
+  }
+
+  private async finishRecord(current: StoredRunResult): Promise<HostedRunTransition> {
+    const runId = current.runId;
     if (current.status === "ready-for-review") {
       return { runId, status: current.status, ...(current.verifiedBaseSha ? { verifiedBaseSha: current.verifiedBaseSha } : {}) };
     }

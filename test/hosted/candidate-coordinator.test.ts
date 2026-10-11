@@ -4,11 +4,13 @@ import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { createHostedCandidateCoordinator } from "../../src/hosted/candidate-coordinator.js";
+import { FirestoreCandidateCleanupStore } from "../../src/hosted/candidate-cleanup.js";
 import { hostedCandidateDigest } from "../../src/hosted/agent-protocol.js";
 import type { HostedCandidate } from "../../src/hosted/agent-protocol.js";
 import { hostedReportDigest } from "../../src/hosted/run-workflow.js";
 import { verifyHostedCandidate } from "../../src/hosted/trusted-verifier.js";
 import { hostedCandidateFixture } from "../helpers/hosted-candidate.js";
+import { createFakeFirestore } from "../helpers/fake-firestore.js";
 
 vi.mock("../../src/hosted/trusted-verifier.js", () => ({ verifyHostedCandidate: vi.fn() }));
 let root: string;
@@ -35,8 +37,10 @@ function fixture() {
     }),
   };
   const sealForVerification = vi.fn(() => Promise.resolve(reconciled)), resolveCheckout = vi.fn(() => Promise.resolve(checkout));
-  const open = (evidenceRoot = root) => createHostedCandidateCoordinator({ agent: { sealForVerification }, store, evidenceRoot, resolveCheckout, scheduleVerification });
-  return { rows, store, sealForVerification, resolveCheckout, scheduleVerification, open };
+  const metadata = createFakeFirestore("candidateCleanup");
+  const cleanup = new FirestoreCandidateCleanupStore(metadata.options);
+  const open = (evidenceRoot = root) => createHostedCandidateCoordinator({ agent: { sealForVerification }, store, cleanup, evidenceRoot, resolveCheckout, scheduleVerification });
+  return { rows, store, cleanup, sealForVerification, resolveCheckout, scheduleVerification, open };
 }
 
 it("survives coordinator restart, seals service usage, independently replays, and confirms source deletion before its receipt", async () => {
@@ -44,6 +48,7 @@ it("survives coordinator restart, seals service usage, independently replays, an
   expect(await f.open().verifyTrustedResult("run1", digest)).toEqual({ reportDigest: digest, verifiedBaseSha: checkout.verifiedBaseSha });
   expect(verifyHostedCandidate).toHaveBeenCalledExactlyOnceWith({ ...checkout, reconciled }, candidate);
   expect(f.rows.size).toBe(0); expect(f.store.remove).toHaveBeenCalledExactlyOnceWith("run1", "12345678901234567890");
+  expect(await f.cleanup.get("run1")).toMatchObject({ status: "cleared", candidateDigest: hostedCandidateDigest(candidate) });
   expect(await f.open().verifyTrustedResult("run1", digest)).toBeNull();
   const log = await readFile(join(root, "run1/run.jsonl"), "utf8");
   expect(log).toContain("hosted-candidate-staged"); expect(log).toContain("hosted-candidate-cleared");
@@ -88,6 +93,7 @@ it("withholds successful replay when private deletion is unconfirmed", async () 
   f.store.remove.mockRejectedValueOnce(new Error("cleanup unconfirmed"));
   await expect(f.open().verifyTrustedResult("run1", digest)).rejects.toThrow("cleanup unconfirmed");
   expect(f.rows.size).toBe(1);
+  expect((await f.cleanup.get("run1"))?.status).toBe("pending");
   expect(await readFile(join(root, "run1/run.jsonl"), "utf8")).not.toContain("hosted-candidate-cleared");
 });
 
@@ -95,4 +101,12 @@ it("erases uploaded source if staging metadata cannot be recorded", async () => 
   const f = fixture(), blocked = join(root, "not-a-directory"); await writeFile(blocked, "owned test marker");
   await expect(f.open(blocked).receiveCandidate("run1", candidate)).rejects.toThrow("staging evidence failed");
   expect(f.rows.size).toBe(0); expect(f.store.remove).toHaveBeenCalledOnce();
+});
+
+it("withholds a replay receipt when durable cleanup confirmation fails after physical erasure", async () => {
+  const f = fixture(); await f.open().receiveCandidate("run1", candidate);
+  vi.spyOn(f.cleanup, "confirm").mockRejectedValueOnce(new Error("confirmation lost"));
+  await expect(f.open().verifyTrustedResult("run1", digest)).rejects.toThrow("confirmation lost");
+  expect(f.rows.size).toBe(0); expect((await f.cleanup.get("run1"))?.status).toBe("pending");
+  expect(await readFile(join(root, "run1/run.jsonl"), "utf8")).not.toContain("hosted-candidate-cleared");
 });
