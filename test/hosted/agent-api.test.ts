@@ -62,6 +62,7 @@ async function agent(override?: LlmProvider) {
     maxCostUsdPerRun: 0.02,
     ledgerForRun: () => Promise.resolve(ledger),
     provider,
+    providerVerification: "fake-provider",
     runStore: new InMemoryHostedAgentRunStore(),
   });
   return { service, ledger, get calls() { return count; } };

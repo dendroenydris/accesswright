@@ -35,7 +35,7 @@ async function fixture(maxCostUsdPerRun = 0.02) {
   const options = {
     model: { provider: "openai" as const, id: "fixture-only", reasoningEffort: "high" as const },
     pricing: { inputUsdPerMillion: 1, outputUsdPerMillion: 2 }, maxInputTokens: 1000,
-    maxOutputTokens: 256, maxCostUsdPerRun, ledgerForRun: () => Promise.resolve(ledger), provider,
+    maxOutputTokens: 256, maxCostUsdPerRun, ledgerForRun: () => Promise.resolve(ledger), provider, providerVerification: "fake-provider" as const,
   };
   const openStore = () => new FirestoreHostedAgentRunStore(cloud.options);
   const open = () => new HostedPatchAgent({ ...options, runStore: openStore() });
@@ -51,7 +51,7 @@ it("recovers token authentication and consumed request limits across service res
   const token = await first.registerRun({ runId: "run-1", repository: "owner/private-app", installationId: 42, maxRequests: 1 });
   expect((await first.patch("run-1", token, task, context)).status).toBe("accepted");
   const restarted = f.open();
-  expect(await restarted.inspectRun("run-1", token)).toMatchObject({ requestCount: 1, spentUsd: 0.0005, lastStatus: "accepted" });
+  expect(await restarted.inspectRun("run-1", token)).toMatchObject({ requestCount: 1, settledRequests: 1, inputTokens: 300, outputTokens: 100, spentUsd: 0.0005, lastStatus: "accepted" });
   await expect(restarted.patch("run-1", token, task, context)).rejects.toThrow(/limit/i);
   await expect(restarted.registerRun({ runId: "run-1", repository: "owner/private-app", installationId: 42 })).rejects.toThrow(/exists|conflict/i);
   expect(f.provider.requests).toHaveLength(1);
@@ -75,6 +75,35 @@ it("claims a provider request once across two independent service replicas", asy
   expect(results.filter(result => result.status === "rejected")).toHaveLength(1);
   expect(f.provider.requests).toHaveLength(1);
   expect(await f.open().inspectRun("run-2", token)).toMatchObject({ requestCount: 1, spentUsd: 0.0005 });
+});
+
+it("seals cumulative service usage across restarts before independent verification", async () => {
+  const f = await fixture(), first = f.open();
+  const token = await first.registerRun({ runId: "run-sealed", repository: "owner/repo", installationId: 42 });
+  await first.patch("run-sealed", token, task, context);
+  await f.open().patch("run-sealed", token, task, context);
+  const expected = { usage: { inputTokens: 600, outputTokens: 200, spentUsd: 0.001 }, unknownUsage: false, providerVerification: "fake-provider" };
+  expect(await f.open().sealForVerification("run-sealed")).toEqual(expected);
+  expect(await f.open().sealForVerification("run-sealed")).toEqual(expected);
+  await expect(f.open().patch("run-sealed", token, task, context)).rejects.toThrow(/sealed/);
+  await expect(f.openStore().update("run-sealed", run => ({ ...run, sealed: false }))).rejects.toThrow(/authorization/);
+  for (const field of ["inputTokens", "outputTokens", "settledRequests"] as const) {
+    await expect(f.openStore().update("run-sealed", run => ({ ...run, record: { ...run.record, [field]: 0 } }))).rejects.toThrow(/usage/);
+  }
+  expect(f.provider.requests).toHaveLength(2);
+});
+
+it("keeps no-call and rejected-call usage distinct and prevents fake evidence becoming provider API evidence", async () => {
+  const f = await fixture(), first = f.open();
+  await first.registerRun({ runId: "run-empty", repository: "owner/repo", installationId: 42 });
+  expect(await f.open().sealForVerification("run-empty")).toEqual({ usage: { inputTokens: 0, outputTokens: 0, spentUsd: 0 }, unknownUsage: false, providerVerification: "not-run" });
+  const provider = new FakeLlmProvider([{ object: { taskId: "wrong-task", changes: [] }, usage: { inputTokens: 100, outputTokens: 10, costUsd: 0.00012 } }]);
+  const rejected = new HostedPatchAgent({ ...f.options, provider, runStore: f.openStore() });
+  const token = await rejected.registerRun({ runId: "run-rejected", repository: "owner/repo", installationId: 42 });
+  expect((await rejected.patch("run-rejected", token, task, context)).status).toBe("rejected");
+  expect(await f.open().sealForVerification("run-rejected")).toEqual({ usage: { inputTokens: 100, outputTokens: 10, spentUsd: 0.00012 }, unknownUsage: false, providerVerification: "fake-provider" });
+  const changed = new HostedPatchAgent({ ...f.options, providerVerification: "provider-api", runStore: f.openStore() });
+  await expect(changed.sealForVerification("run-rejected")).rejects.toThrow(/model authorization/);
 });
 
 it("preserves equivalent model configurations and ignores later caller mutations", async () => {
@@ -103,6 +132,7 @@ it("blocks an interrupted in-flight request and model substitution after restart
   const f = await fixture(), first = f.open();
   const token = await first.registerRun({ runId: "run-4", repository: "owner/repo", installationId: 42 });
   await f.openStore().update("run-4", run => ({ ...run, inFlight: true, record: { ...run.record, requestCount: 1 } }));
+  await expect(f.open().sealForVerification("run-4")).rejects.toThrow(/in flight/);
   await expect(f.open().patch("run-4", token, task, context)).rejects.toThrow(/in flight/i);
   const changed = new HostedPatchAgent({ ...f.options, model: { ...f.options.model, id: "substitute" }, runStore: f.openStore() });
   await expect(changed.patch("run-4", token, task, context)).rejects.toThrow(/model authorization/i);
@@ -117,6 +147,8 @@ it("retains unknown provider usage across restarts instead of retrying it as a f
   expect(await first.patch("run-5", token, task, context)).toMatchObject({ status: "rejected", usage: null });
   expect(await f.open().inspectRun("run-5", token)).toMatchObject({ usageUnknown: true, lastStatus: "blocked", requestCount: 1 });
   await expect(f.open().patch("run-5", token, task, context)).rejects.toThrow(/unknown usage/i);
+  expect(await f.open().sealForVerification("run-5")).toMatchObject({ unknownUsage: true, providerVerification: "not-run" });
+  await expect(f.open().patch("run-5", token, task, context)).rejects.toThrow(/sealed/i);
   expect(f.provider.requests).toHaveLength(0);
   expect((await f.ledger.snapshot()).unknownAttempts).toBe(1);
 });

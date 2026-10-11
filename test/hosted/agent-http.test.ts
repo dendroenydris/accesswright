@@ -44,6 +44,7 @@ async function fixture(providerOverride?: LlmProvider) {
     pricing: { inputUsdPerMillion: 1, outputUsdPerMillion: 2 },
     maxInputTokens: 1200, maxOutputTokens: 256, maxCostUsdPerRun: 0.02,
     ledgerForRun: () => Promise.resolve(ledger), provider, runStore: new InMemoryHostedAgentRunStore(),
+    providerVerification: "fake-provider",
   });
   const token = await service.registerRun({ runId: "run-9", repository: "owner/repo", installationId: 42, maxRequests: 1 });
   const runStore = new InMemoryHostedRunStore();
@@ -135,6 +136,18 @@ it("accepts only authenticated per-run task requests and consumes the durable bu
     });
     expect(second.status).toBe(429);
     expect(f.calls).toBe(1);
+  } finally { await new Promise<void>(resolve => f.server.close(() => resolve())); }
+});
+
+it("does not invoke the provider after trusted verification has sealed the run", async () => {
+  const f = await fixture();
+  try {
+    await f.service.sealForVerification("run-9");
+    const response = await fetch(f.endpoint, { method: "POST", headers: { authorization: "Bearer " + f.token, "content-type": "application/json" }, body: JSON.stringify({ task, context }) });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ status: "run-closed" });
+    expect(f.calls).toBe(0);
+    expect((await f.ledger.snapshot()).settledAttempts).toBe(0);
   } finally { await new Promise<void>(resolve => f.server.close(() => resolve())); }
 });
 

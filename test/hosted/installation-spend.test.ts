@@ -109,7 +109,7 @@ it("uses the authenticated installation for Hosted calls and denies absent month
     page: { title: "Settings", surroundingText: "Save changes", caption: null, linkTarget: null }, screenshotPath: null };
   const provider = new FakeLlmProvider(Array.from({ length: 2 }, () => ({ object: { taskId: task.id, changes: [{ path: task.source.file, before: '<button id="save" />', after: '<button id="save" aria-label="Save changes" />' }] }, usage })));
   const agent = new HostedPatchAgent({ model, pricing, maxInputTokens: 100000, maxOutputTokens: 100,
-    maxCostUsdPerRun: 0.2, provider, runStore: new InMemoryHostedAgentRunStore(),
+    maxCostUsdPerRun: 0.2, provider, providerVerification: "fake-provider", runStore: new InMemoryHostedAgentRunStore(),
     ledgerForRun: run => openMonthlyHostedSpend(cloud.options, run.installationId) });
   const token = await agent.registerRun({ runId: "authorized", repository: "owner/repo", installationId: 42 });
   expect((await agent.patch("authorized", token, task, context)).status).toBe("accepted");

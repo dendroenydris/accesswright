@@ -11,21 +11,25 @@ const recordSchema = z.object({
   createdAt: z.iso.datetime(),
   expiresAt: z.iso.datetime(),
   requestCount: z.number().int().nonnegative(),
+  settledRequests: z.number().int().nonnegative(),
+  inputTokens: z.number().int().nonnegative(),
+  outputTokens: z.number().int().nonnegative(),
   maxRequests: z.number().int().min(1).max(defaults.hostedMaxRequests),
   maxCostUsd: z.number().finite().positive(),
   spentUsd: z.number().finite().nonnegative(),
   usageUnknown: z.boolean(),
   lastStatus: z.enum(["registered", "accepted", "rejected", "blocked"]),
-}).strict().refine(record => record.requestCount <= record.maxRequests &&
+}).strict().refine(record => record.requestCount <= record.maxRequests && record.settledRequests <= record.requestCount &&
   Date.parse(record.createdAt) < Date.parse(record.expiresAt), "Invalid run bounds");
 export const HostedAgentRunSchema = z.object({
   runId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
   tokenHash: z.string().regex(/^[a-f0-9]{64}$/),
   modelFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
   inFlight: z.boolean(),
+  sealed: z.boolean(),
   record: recordSchema,
 }).strict().refine(run => run.runId === run.record.runId &&
-  (!run.inFlight || run.record.requestCount > 0), "Invalid authorization identity");
+  (!run.inFlight || run.record.requestCount > 0) && !(run.sealed && run.inFlight), "Invalid authorization identity");
 
 export type HostedRunRecord = z.infer<typeof recordSchema>;
 export type HostedAgentRun = z.infer<typeof HostedAgentRunSchema>;
@@ -40,10 +44,13 @@ export interface HostedAgentRunStore {
 function authorizeUpdate(before: HostedAgentRun, input: HostedAgentRun): HostedAgentRun {
   const after = HostedAgentRunSchema.parse(input);
   const immutable = (run: HostedAgentRun) => JSON.stringify({
-    ...run, inFlight: false,
-    record: { ...run.record, requestCount: 0, spentUsd: 0, usageUnknown: false, lastStatus: "registered" },
+    ...run, inFlight: false, sealed: false,
+    record: { ...run.record, requestCount: 0, settledRequests: 0, inputTokens: 0, outputTokens: 0, spentUsd: 0, usageUnknown: false, lastStatus: "registered" },
   });
   if (immutable(before) !== immutable(after) || after.record.requestCount < before.record.requestCount ||
+    after.record.settledRequests < before.record.settledRequests || after.record.inputTokens < before.record.inputTokens ||
+    after.record.outputTokens < before.record.outputTokens || (before.sealed && !after.sealed) ||
+    (before.sealed && after.record.requestCount !== before.record.requestCount) ||
     after.record.spentUsd < before.record.spentUsd || (before.record.usageUnknown && !after.record.usageUnknown)) {
     throw new Error("Run identity, authorization and cumulative usage cannot be changed");
   }

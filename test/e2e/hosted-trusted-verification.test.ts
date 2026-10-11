@@ -46,7 +46,7 @@ it("requires a second real Docker verifier before a private Hosted service accep
     const agent = new HostedPatchAgent({
       model: { provider: "openai", id: "fixture-only", reasoningEffort: "high" }, pricing: { inputUsdPerMillion: 1, outputUsdPerMillion: 2 },
       maxInputTokens: 1000, maxOutputTokens: 1000, maxCostUsdPerRun: 0.1, ledgerForRun: () => Promise.resolve(ledger),
-      provider, runStore: new InMemoryHostedAgentRunStore(),
+      provider, providerVerification: "fake-provider", runStore: new InMemoryHostedAgentRunStore(),
     });
     const token = await agent.registerRun({ runId: "hosted-fixture", repository: "owned/fixture", installationId: 42 });
     const store = new InMemoryHostedRunStore();
@@ -55,7 +55,7 @@ it("requires a second real Docker verifier before a private Hosted service accep
       if (runId !== "hosted-fixture" || digest !== hostedReportDigest(input.report)) return null;
       independentChecks++;
       return verifyHostedCandidate({ repoPath, verifiedBaseSha: baseSha, tempRoot: privateTemp, runtimeRoot: process.cwd(),
-        reconciled: { usage: { inputTokens: 0, outputTokens: 0, spentUsd: 0 }, unknownUsage: false, providerVerification: "not-run" } }, input);
+        reconciled: await agent.sealForVerification(runId) }, input);
     } });
     server.listen(0, "127.0.0.1");
     await once(server, "listening");

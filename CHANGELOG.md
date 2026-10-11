@@ -4,12 +4,14 @@
 
 ### Breaking Changes
 
+- `HostedPatchAgent` requires an explicit provider-evidence classification. Durable authorization records now require settled request and token counters plus a verification seal; earlier records fail validation rather than inferring missing usage.
 - LLM `promptHash` now covers a versioned encoding of text, system instructions, image bytes, media types and image order, rather than text alone.
 - `HostedPatchAgent` requires an explicit run store; run registration, inspection and metadata listing are asynchronous.
 - `HostedPatchAgent` selects its spending ledger through an asynchronous `ledgerForRun` callback using authenticated run metadata.
 
 ### Added
 
+- Trusted Hosted per-run token settlements and an irreversible seal that blocks further model calls before independent verification.
 - Independent Docker replay of Hosted candidate patches, pinned-checkout and reconciled-usage checks, and digest-bound review receipts.
 - Private Hosted HTTP service composition with shared scoped run authentication for patches, results, finish and status, retaining the independent trusted-verifier gate.
 - Atomic global and per-installation spending claims, with explicit UTC monthly policy selection and no automatic allowance creation.

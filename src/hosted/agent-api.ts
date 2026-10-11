@@ -11,6 +11,7 @@ import { getRepairGuidance } from "../llm/guidance.js";
 import type { LlmModelConfig, LlmProvider } from "../llm/types.js";
 import { FixTaskSchema, isSourcePath, LlmModelConfigSchema, PatchSchema } from "../types/schemas.js";
 import type { Patch } from "../types/schemas.js";
+import type { RunReport } from "../reporter/report.js";
 import type { HostedAgentRun, HostedAgentRunStore, HostedRunRecord } from "./agent-run-store.js";
 
 export type { HostedRunRecord } from "./agent-run-store.js";
@@ -47,6 +48,7 @@ export interface HostedPatchAgentOptions {
   maxCostUsdPerRun: number;
   ledgerForRun: (run: HostedRunRecord) => Promise<SpendLedger>;
   provider: LlmProvider;
+  providerVerification: Exclude<RunReport["providerVerification"], "not-run">;
   runStore: HostedAgentRunStore;
 }
 
@@ -79,9 +81,10 @@ export class HostedPatchAgent {
   constructor(options: HostedPatchAgentOptions) {
     this.options = Object.freeze({ ...options,
       model: Object.freeze(LlmModelConfigSchema.parse(options.model)),
+      providerVerification: z.enum(["fake-provider", "provider-api"]).parse(options.providerVerification),
       pricing: Object.freeze({ ...options.pricing }),
     });
-    this.modelFingerprint = createHash("sha256").update(JSON.stringify(this.options.model)).digest("hex");
+    this.modelFingerprint = createHash("sha256").update(JSON.stringify({ model: this.options.model, providerVerification: this.options.providerVerification })).digest("hex");
     if (!Number.isSafeInteger(options.maxInputTokens) || options.maxInputTokens < 1) throw new Error("Verified model input bound is required");
     if (!Number.isSafeInteger(options.maxOutputTokens) || options.maxOutputTokens < 1 || options.maxOutputTokens > defaults.hostedMaxOutputTokens) throw new Error("Bounded output tokens are required");
     if (!Number.isFinite(options.maxCostUsdPerRun) || options.maxCostUsdPerRun <= 0) throw new Error("Positive operator run allowance is required");
@@ -105,10 +108,11 @@ export class HostedPatchAgent {
       tokenHash: digestToken(token).toString("hex"),
       modelFingerprint: this.modelFingerprint,
       inFlight: false,
+      sealed: false,
       record: {
         runId, repository, installationId, createdAt: new Date(now).toISOString(),
         expiresAt: new Date(now + ttl * 1000).toISOString(),
-        requestCount: 0, maxRequests, spentUsd: 0,
+        requestCount: 0, settledRequests: 0, inputTokens: 0, outputTokens: 0, maxRequests, spentUsd: 0,
         maxCostUsd: this.options.maxCostUsdPerRun,
         usageUnknown: false, lastStatus: "registered",
       },
@@ -137,6 +141,20 @@ export class HostedPatchAgent {
 
   async records(): Promise<HostedRunRecord[]> {
     return (await this.options.runStore.records()).map(run => ({ ...run.record }));
+  }
+
+  /** Coordinator-only: freeze further calls and read service settlements, never a worker report. */
+  async sealForVerification(runId: string): Promise<Pick<RunReport, "usage" | "unknownUsage" | "providerVerification">> {
+    const run = await this.options.runStore.update(runIdSchema.parse(runId), current => {
+      if (current.modelFingerprint !== this.modelFingerprint) throw new Error("Run model authorization changed");
+      if (current.inFlight) throw new Error("Provider request in flight; usage is not reconciled");
+      return { ...current, sealed: true };
+    });
+    return {
+      usage: { inputTokens: run.record.inputTokens, outputTokens: run.record.outputTokens, spentUsd: run.record.spentUsd },
+      unknownUsage: run.record.usageUnknown,
+      providerVerification: run.record.settledRequests === 0 ? "not-run" : this.options.providerVerification,
+    };
   }
 
   async patch(runId: string, token: string, taskInput: unknown, contextInput: unknown): Promise<HostedPatchResponse> {
@@ -175,6 +193,7 @@ export class HostedPatchAgent {
     const claimed = await this.options.runStore.update(runId, run => {
       this.validateToken(run, token);
       if (run.modelFingerprint !== this.modelFingerprint) throw new Error("Run model authorization changed");
+      if (run.sealed) throw new Error("Run is sealed for independent verification");
       if (run.inFlight) throw new Error("Run already has a provider request in flight");
       if (run.record.usageUnknown) throw new Error("Unknown usage blocks further run calls");
       if (run.record.requestCount >= run.record.maxRequests ||
@@ -203,6 +222,9 @@ export class HostedPatchAgent {
         const blocked = !result.usage || spentUsd > Math.min(run.record.maxCostUsd, this.options.maxCostUsdPerRun);
         return { ...run, inFlight: false, record: {
           ...run.record, spentUsd, usageUnknown: !result.usage,
+          settledRequests: run.record.settledRequests + (result.usage ? 1 : 0),
+          inputTokens: run.record.inputTokens + (result.usage?.inputTokens ?? 0),
+          outputTokens: run.record.outputTokens + (result.usage?.outputTokens ?? 0),
           lastStatus: blocked ? "blocked" : result.status,
         } };
       });
