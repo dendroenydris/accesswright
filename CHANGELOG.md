@@ -11,6 +11,7 @@
 
 ### Added
 
+- Secretless non-root ephemeral repair sessions that reuse existing browser/production gates, refuse unsupported offline mode and duplicate job attempts, and require independent trusted verification.
 - Bounded Hosted worker patch transport with PNG evidence, verifier feedback, scoped authentication and fail-closed response/path validation.
 - Trusted Hosted per-run token settlements and an irreversible seal that blocks further model calls before independent verification.
 - Independent Docker replay of Hosted candidate patches, pinned-checkout and reconciled-usage checks, and digest-bound review receipts.

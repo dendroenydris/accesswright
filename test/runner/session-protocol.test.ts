@@ -6,6 +6,8 @@ describe("persistent runner protocol boundaries", () => {
     expect(BrowserCommandSchema.safeParse({ action: "crawl", baseUrl }).success).toBe(false);
   });
   it("accepts only relative same-origin routes and safe evidence names", () => {
+    expect(BrowserCommandSchema.safeParse({ action: "crawl", baseUrl: "http://127.0.0.1:3000" }).success).toBe(true);
+    expect(BrowserCommandSchema.safeParse({ action: "crawl", baseUrl: "http://127.0.0.1:3001" }).success).toBe(false);
     expect(BrowserCommandSchema.safeParse({ action: "scan", baseUrl: "http://accesswright-app:3000", routes: ["/"], generation: "baseline-1", mobile: true, dark: false, interactions: true }).success).toBe(true);
     expect(BrowserCommandSchema.safeParse({ action: "scan", baseUrl: "http://accesswright-app:3000", routes: ["//evil.example"], generation: "baseline-1", mobile: true, dark: false, interactions: true }).success).toBe(false);
     expect(BrowserCommandSchema.safeParse({ action: "scan", baseUrl: "http://accesswright-app:3000", routes: ["/"], generation: "../../outside", mobile: true, dark: false, interactions: true }).success).toBe(false);

@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { access } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright";
 import type { Page } from "playwright";
@@ -10,9 +9,12 @@ import { scanBrowserPage } from "./browser-scan.js";
 import { scanConditions } from "./browser-facts.js";
 import { mapRoutesBounded } from "./bounded-routes.js";
 import type { BrowserObservation } from "./observations.js";
+import { assertContainerRuntime } from "../runner/worker-boundary.js";
+import { z } from "zod";
 
-await access("/.dockerenv");
-if (process.platform !== "linux") throw new Error("Pinned browser scans require Docker");
+await assertContainerRuntime();
+const evidenceDir = process.env.ACCESSWRIGHT_EVIDENCE_ROOT === undefined ? "/evidence" :
+  z.string().regex(/^\/tmp\/accesswright\/repair-run-[A-Za-z0-9]+\/evidence$/).parse(process.env.ACCESSWRIGHT_EVIDENCE_ROOT);
 const command = BrowserCommandSchema.parse(JSON.parse(process.argv[2] ?? "null"));
 
 if (command.action === "ready") {
@@ -62,7 +64,7 @@ if (command.action === "ready") {
             const runtimeFailures: string[] = [];
             page.on("pageerror", error => { runtimeFailures.push(`runtime:${route}:${condition}:${createHash("sha256").update(error.message).digest("hex").slice(0, 16)}`); });
             await navigate(page, route);
-            const result = await scanBrowserPage(page, { route, condition, generation: command.generation, evidenceDir: "/evidence", interactionProbes: command.interactions });
+            const result = await scanBrowserPage(page, { route, condition, generation: command.generation, evidenceDir, interactionProbes: command.interactions });
             result.probeFailures.push(...runtimeFailures);
             if (condition === "desktop-light") darkSupported = result.darkMediaDetected;
             routeObservations.push(result);

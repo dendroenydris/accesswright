@@ -11,9 +11,10 @@ import type { ProductionCheckResult } from "./production-checks.js";
 import { TargetCommandSchema, targetProcessEnvironment } from "./session-protocol.js";
 import { hasStaticExport } from "./static-export-server.js";
 import { targetServerCommand } from "./server-plan.js";
+import { assertContainerRuntime } from "./worker-boundary.js";
 
-await access("/.dockerenv");
-if (process.platform !== "linux" || process.env.ACCESSWRIGHT_ISOLATED_TARGET !== "1") throw new Error("Target execution requires an explicitly isolated Docker process");
+await assertContainerRuntime();
+if (process.env.ACCESSWRIGHT_ISOLATED_TARGET !== "1") throw new Error("Target execution requires an explicitly isolated process");
 const command = TargetCommandSchema.parse(JSON.parse(process.argv[2] ?? "null"));
 const workspace = "/workspace";
 await removePlatformMetadata(workspace);
