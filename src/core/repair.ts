@@ -37,7 +37,7 @@ export interface RepairOptions {
   semanticRepair?: SemanticRepair;
   /** Coordinator-selected scope; excluded tasks still remain part of all regression scans. */
   includeTask?: (task: FixTask) => boolean;
-  /** Single-shot baselines may supply proposals, but cannot replace either verification gate. */
+  /** Baselines may supply bounded proposals, but cannot replace either verification gate. */
   proposalRepair?: SemanticRepair;
   onVerification?: (task: FixTask, verdict: PerPatchVerificationResult) => void | Promise<void>;
 }

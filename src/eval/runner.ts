@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, open, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
 import { basename, join, relative } from "node:path";
 import { z } from "zod";
 import { defaults } from "../config.js";
@@ -14,10 +15,14 @@ import type { DurableProviderOptions } from "../llm/durable-provider.js";
 import { resolveExecutionModel } from "../llm/execution-policy.js";
 import { createSemanticRepair } from "../llm/semantic-runner.js";
 import { createSuggestOnlyRepair } from "../llm/suggest-only.js";
+import { createToolLoopRepair } from "../llm/tool-loop.js";
+import { retrieveRepairGuidance } from "../llm/retrieval.js";
+import { gatherRepairContext } from "../llm/gather-context.js";
 import type { LlmProvider } from "../llm/types.js";
 import { makeRunReport } from "../reporter/report.js";
 import { summarizeScans } from "../reporter/scan-summary.js";
 import { DockerRepairSession, UnsupportedRepositoryError } from "../runner/repair-session.js";
+import { listSnapshotFiles } from "../runner/patch-journal.js";
 import { copyTargetSnapshot, resolveSafeSource } from "../sandbox/source-boundary.js";
 import { violationKey } from "../scanner/browser-facts.js";
 import { appendRunRecord } from "../tracer/run-record.js";
@@ -26,7 +31,9 @@ import type { RenderedCase } from "./cases.js";
 import { planCaseBatches, taskMatchesCases } from "./batches.js";
 import { compareCleanControls } from "./controls.js";
 import { applyMutations, generateMutations } from "./operators.js";
-import { EvalProtocolSchema, EvalSystemSchema, systemPolicy } from "./protocol.js";
+import { EvalProtocolSchema, EvalSystemSchema, experimentalEvalSystems, systemPolicy } from "./protocol.js";
+import { isSourcePath } from "../types/schemas.js";
+import type { FixTask } from "../types/schemas.js";
 import type { EvalProtocol, EvalSystem, FrozenProtocol } from "./protocol.js";
 import { EvalCellSchema, aggregateEvaluation, renderEvaluationReport } from "./report.js";
 import type { EvalCell } from "./report.js";
@@ -177,8 +184,28 @@ async function executeCell(options: EvalRunOptions, runtimeDistRoot: string, bas
           ...(event.usage ? { usage: event.usage } : {}), metadata: { taskType: event.taskType, promptHash: event.promptHash } });
       });
     }
-    const semanticRepair = client && pricing && policy.enrichedContext ? createSemanticRepair({ session, client, budget, model, pricing, maxAttempts: policy.attempts }) : undefined;
-    const proposalRepair = client && pricing && !policy.enrichedContext ? createSuggestOnlyRepair({ client, budget, model, pricing, readSource: path => session ? session.readSource(path) : Promise.reject(new Error("Missing evaluation session")) }) : undefined;
+    const toolLoop = client && pricing && (cell.system === "B2" || cell.system === "A-tool-loop") ? createToolLoopRepair({ client, budget, model, pricing,
+      allowedPaths: (await listSnapshotFiles(session.sourceRoot)).filter(isSourcePath), maxProposals: policy.attempts,
+      readSource: async (path, maximumBytes) => {
+        if (!session) throw new Error("Missing evaluation session");
+        const file = await open(await resolveSafeSource(session.sourceRoot, path), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+        try {
+          const info = await file.stat();if (!info.isFile()) throw new Error("Tool source is not a regular file");if (info.size > maximumBytes) return null;
+          const bytes = Buffer.alloc(maximumBytes + 1);let size = 0;
+          while (size < bytes.length) { const part = await file.read(bytes, size, bytes.length - size, null);if (!part.bytesRead) break;size += part.bytesRead; }
+          return size > maximumBytes ? null : bytes.subarray(0, size).toString("utf8");
+        } finally { await file.close(); }
+      },
+      ...(cell.system === "A-tool-loop" ? { readContext: (task: FixTask) => {
+        if (!session) throw new Error("Missing evaluation session");return gatherRepairContext({ root: session.sourceRoot, evidenceDir: session.evidenceDir, task, observations: session.observations });
+      } } : {}),
+      onTool: async event => { await appendRunRecord(join(session?.evidenceDir ?? options.outputDir, "run.jsonl"), { timestamp: new Date().toISOString(), step: "eval-tool", status: event.status,
+        durationMs: event.durationMs, metadata: { action: event.action, system: cell.system } }); },
+    }) : undefined;
+    const semanticRepair = cell.system === "A-tool-loop" ? toolLoop : client && pricing && policy.enrichedContext ? createSemanticRepair({ session, client, budget, model, pricing, maxAttempts: policy.attempts,
+      ...(cell.system === "A-retrieval" ? { guidanceForTask: (task: FixTask) => retrieveRepairGuidance(task).guidance } : {}),
+    }) : undefined;
+    const proposalRepair = cell.system === "B2" ? toolLoop : client && pricing && !policy.enrichedContext ? createSuggestOnlyRepair({ client, budget, model, pricing, readSource: path => session ? session.readSource(path) : Promise.reject(new Error("Missing evaluation session")) }) : undefined;
     const result = await runRepair(session, { noLlm: !policy.usesLlm, maxTasks: Math.max(defaults.maxTasks, eligible.length),
       ...(semanticRepair ? { semanticRepair } : {}), ...(proposalRepair ? { proposalRepair } : {}), includeTask: task => taskMatchesCases(task, eligible),
       onVerification: (task, verdict) => { cell.verification.push({ taskId: task.id, caseIds: eligible.filter(item => taskMatchesCases(task, [item])).map(item => item.mutation.id), accepted: verdict.accepted, check: verdict.check }); },
@@ -223,6 +250,7 @@ export async function runEvaluation(options: EvalRunOptions) {
   const protocol = EvalProtocolSchema.parse(options.frozen.protocol);
   if (createHash("sha256").update(JSON.stringify(protocol)).digest("hex") !== options.frozen.digest) throw new Error("Frozen protocol digest changed");
   const selection = resolveEvalSelection(protocol, options);
+  if (selection.systems.some(system => experimentalEvalSystems.some(item => item === system)) && !options.providerFactory) throw new Error("Experimental systems require explicit fake-provider injection; live ablations are not enabled");
   const maximum = options.caseLimit ?? protocol.maxCasesPerRepository;
   if (!Number.isSafeInteger(maximum) || maximum < 1 || maximum > protocol.maxCasesPerRepository) throw new Error("Case subset exceeds the frozen bound");
   if (options.fixtureRoots && protocol.corpus !== "controlled-fixtures") throw new Error("Local fixtures cannot substitute for the public corpus");

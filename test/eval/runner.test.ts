@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
-import { resolveEvalSelection, implementationDigest, snapshotCompiledRuntime, classifyOriginalPreparationError, classifyFinalEvaluationOutcome } from "../../src/eval/runner.js";
+import { resolveEvalSelection, implementationDigest, snapshotCompiledRuntime, classifyOriginalPreparationError, classifyFinalEvaluationOutcome, runEvaluation } from "../../src/eval/runner.js";
+import { createHash } from "node:crypto";
 import { UnsupportedRepositoryError } from "../../src/runner/repair-session.js";
 import { EvalProtocolSchema } from "../../src/eval/protocol.js";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -13,6 +14,12 @@ it("selects only frozen repositories/systems/seeds and preserves explicit partia
   expect(() => resolveEvalSelection(protocol, { split: "dev", seeds: [2] })).toThrow(/seed/i);
   expect(() => resolveEvalSelection(protocol, { split: "dev", repositories: ["owner/test"] })).toThrow(/repository/i);
   expect(() => resolveEvalSelection(protocol, { split: "test", systems: ["A", "A"] })).toThrow(/duplicate/i);
+});
+it("refuses new ablations outside the frozen protocol and refuses live execution before any workspace or Docker action", async () => {
+  expect(() => resolveEvalSelection(protocol, { split: "dev", systems: ["B2"] })).toThrow(/outside.*protocol/i);
+  const expanded = EvalProtocolSchema.parse({ ...protocol, systems: ["B2"] });
+  const frozen = { protocol: expanded, digest: createHash("sha256").update(JSON.stringify(expanded)).digest("hex") };
+  await expect(runEvaluation({ frozen, split: "dev", runtimeRoot: "/unused-runtime", tempRoot: "/unused-temp", cacheRoot: "/unused-cache", outputDir: "/unused-output" })).rejects.toThrow(/fake-provider injection/);
 });
 
 it("fingerprints executable implementation bytes without machine-specific absolute paths", async () => {

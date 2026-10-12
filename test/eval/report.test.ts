@@ -39,6 +39,14 @@ it("reports matched B1/A1/A denominators separately from unpaired coverage and r
   expect(report.pairedComparisons[0]?.results.map(result => result.eligibleCases)).toEqual([1,1,1]);
   expect(report.pairedComparisons[0]?.results[0]?.unpairedCaseOpportunities).toBe(1);
 });
+it("pairs each experimental system with A only on completed opportunities and refuses live experimental claims", () => {
+  const cells = ["A", "B2", "A-retrieval", "A-tool-loop"].map(system => EvalCellSchema.parse({ ...base, system, providerMode: "fake", providerEvidence: "fake-provider" }));
+  const toolLoop = cells[3];if (!toolLoop) throw new Error("Fixture missing");toolLoop.status = "blocked";
+  const paired = aggregateEvaluation(cells).pairedComparisons;
+  expect(paired.map(row => row.systems)).toEqual([["A", "B2"], ["A", "A-retrieval"], ["A", "A-tool-loop"]]);
+  expect(paired.map(row => row.pairedCaseOpportunities)).toEqual([1, 1, 0]);
+  expect(() => EvalCellSchema.parse({ ...base, system: "B2" })).toThrow(/fake-provider/);
+});
 
 it("keeps cases from blocked baselines unknown while retaining their costs and failure reasons", () => {
   const blocked = EvalCellSchema.parse({ ...base, status: "blocked", reason: "Unpatched production baseline did not reproduce" });

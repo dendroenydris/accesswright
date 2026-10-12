@@ -265,6 +265,14 @@ Evaluation outputs carry both the frozen protocol digest and a digest of an immu
 
 A frozen development deterministic smoke on 2026-10-07 selected four public repositories and produced five eligible seeded cases across three verified-compatible repositories: three semantically correct fixes, two unresolved cases, zero changed clean controls out of 368 observed, and USD 0 model spend. One fourth repository was unsupported because the unmodified production build failed. This `max-cases=2` smoke is **not** the 300-case Track S test result and is not a live B1/A1/A comparison.
 
+## Experimental evaluation systems (fake provider only)
+
+The eval library accepts `B2`, `A-retrieval` and `A-tool-loop` only with explicit fake-provider injection and a separate frozen protocol listing them. The existing frozen public protocols are unchanged, and the eval CLI refuses these variants before authenticating a provider. They do not enable paid experiments.
+
+`B2` is a restricted general source-agent prototype given axe findings and an allowlisted source-file inventory, without deterministic fixers or enriched context. It can read bounded source and propose up to three patches; it has no shell or command execution. `A-tool-loop` retains deterministic-first repair and adds an optional context tool. Both stop after six structured model actions, enforce the existing token/cost caps before every call and after settlement, and send every proposal through the same per-patch and final production gates. Tool traces contain action/status/timing metadata, not source contents. This prototype is not acceptance of a full headless coding-agent benchmark.
+
+`A-retrieval` substitutes lexical retrieval of at most two documents from the existing reviewed guidance table for static rule lookup; the actual table has a corpus digest. It is not an external WCAG index or learned fix memory. Paired reports compare each variant with A only on matching completed case/seed opportunities; blocked and unsupported observations remain unmeasured. Fake-provider tests establish harness behavior, not repair effectiveness or an ablation win. Real experiments and broader retrieval still require separate acceptance.
+
 ## Natural violations: Track N tooling (offline)
 
 `naturalScanMetadata(scope, observations)` in `dist/src/eval/natural-cases.js` projects existing unpatched baseline browser observations into metadata in memory. It hashes repository-local routes, selectors and source locations; HTML, page text, accessibility trees, source paths and screenshots are discarded. The caller must establish the pinned baseline and remove private observations after use. This helper does not launch a browser or authenticate that a scan came from that revision.

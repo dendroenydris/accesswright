@@ -3,7 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { z } from "zod";
-import { readFrozenProtocol, EvalSystemSchema } from "./protocol.js";
+import { readFrozenProtocol, EvalSystemSchema, experimentalEvalSystems } from "./protocol.js";
 import type { EvalSystem } from "./protocol.js";
 import { runEvaluation } from "./runner.js";
 import { DurableSpendLedger } from "../llm/durable-spend.js";
@@ -48,6 +48,7 @@ export function parseEvalArgs(args: readonly string[]): EvalCliArgs {
 
 export async function runEvaluationCli(args: readonly string[]) {
   const options=parseEvalArgs(args);
+  if(options.systems.some(system=>experimentalEvalSystems.some(item=>item===system)))throw new Error("Experimental baselines/ablations currently require the library's explicit fake-provider injection");
   const frozen=await readFrozenProtocol(resolve(options.protocol));
   const runtimeRoot=resolve(dirname(fileURLToPath(import.meta.url)),"../../..");
   const tempRoot=resolve(options.tempRoot??process.env.ACCESSWRIGHT_TMP_ROOT??join(tmpdir(),"accesswright-evaluation"));

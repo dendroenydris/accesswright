@@ -4,6 +4,7 @@ import type { CallEstimate, BudgetLedger } from "./budget.js";
 import { LlmClient } from "./client.js";
 import type { RepairContext } from "./context.js";
 import { getRepairGuidance } from "./guidance.js";
+import { defaults } from "../config.js";
 import type { LlmImage, LlmModelConfig } from "./types.js";
 import { PatchSchema } from "../types/schemas.js";
 import type { FixTask, Patch } from "../types/schemas.js";
@@ -31,6 +32,7 @@ export interface SemanticRepairOptions {
   estimate: CallEstimate;
   maxAttempts?: number;
   images?: readonly LlmImage[];
+  guidance?: string;
   verifyPatch: (patch: Patch) => Promise<PatchVerification>;
 }
 
@@ -75,7 +77,7 @@ function patchSchemaForTask(
   });
 }
 
-function basePrompt(task: FixTask, context: RepairContext): string {
+function basePrompt(task: FixTask, context: RepairContext, guidance?: string): string {
   return [
     "Repair exactly the accessibility task below.",
     "Return only a source patch that matches the required structured schema.",
@@ -87,7 +89,7 @@ function basePrompt(task: FixTask, context: RepairContext): string {
     `Rule: ${task.ruleId}`,
     `WCAG criterion: ${task.criterion}`,
     `Source: ${context.component.file}:${context.component.line}:${context.component.column}`,
-    `Guidance: ${getRepairGuidance(task.ruleId)}`,
+    `Guidance: ${guidance === undefined ? getRepairGuidance(task.ruleId) : z.string().min(1).max(defaults.maxContextBytes).parse(guidance)}`,
     `Deterministic context: ${JSON.stringify(context)}`,
   ].join("\n");
 }
@@ -118,7 +120,7 @@ export async function runSemanticRepair(
   }
 
   const schema = patchSchemaForTask(options.task, options.context);
-  const prompt = basePrompt(options.task, options.context);
+  const prompt = basePrompt(options.task, options.context, options.guidance);
   const maxAttempts = options.maxAttempts ?? 3;
   if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 3) {
     throw new Error("maxAttempts must be an integer between 1 and 3");

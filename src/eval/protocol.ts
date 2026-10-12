@@ -5,7 +5,8 @@ import { LlmModelConfigSchema } from "../types/schemas.js";
 
 export const OperatorSchema = z.enum(["remove-alt", "break-label", "remove-button-name", "remove-link-name", "low-contrast", "invalid-aria", "remove-lang", "positive-tabindex"]);
 export type Operator = z.infer<typeof OperatorSchema>;
-export const EvalSystemSchema = z.enum(["A", "A1", "B1", "deterministic"]);
+export const experimentalEvalSystems = Object.freeze(["B2", "A-retrieval", "A-tool-loop"] as const);
+export const EvalSystemSchema = z.enum(["A", "A1", "B1", "deterministic", ...experimentalEvalSystems]);
 export type EvalSystem = z.infer<typeof EvalSystemSchema>;
 const seeds = z.array(z.number().int().nonnegative().safe()).min(1).max(20).refine(items => new Set(items).size === items.length, "Duplicate seeds");
 export const EvalProtocolSchema = z.object({
@@ -38,5 +39,6 @@ export async function readFrozenProtocol(path: string): Promise<FrozenProtocol> 
 }
 export function systemPolicy(input: EvalSystem) {
   const system = EvalSystemSchema.parse(input);
-  return { attempts: system === "A" ? 3 : 1, usesLlm: system !== "deterministic", enrichedContext: system !== "B1", verificationFeedback: system === "A", deterministicFirst: system !== "B1" };
+  const baseline = system === "B1" || system === "B2", iterative = system === "A" || experimentalEvalSystems.some(item => item === system);
+  return { attempts: iterative ? 3 : 1, usesLlm: system !== "deterministic", enrichedContext: !baseline, verificationFeedback: iterative, deterministicFirst: !baseline };
 }

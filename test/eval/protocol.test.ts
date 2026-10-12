@@ -18,6 +18,11 @@ it("defines A1 as one-attempt full context and B1 as suggest-only, not as no-LLM
   expect(systemPolicy("A")).toMatchObject({ attempts: 3, verificationFeedback: true });
   expect(systemPolicy("deterministic").usesLlm).toBe(false);
 });
+it("defines bounded B2 and retrieval/tool-loop ablations without changing the frozen corpus", () => {
+  expect(systemPolicy("B2")).toMatchObject({ attempts: 3, enrichedContext: false, deterministicFirst: false, verificationFeedback: true });
+  for (const system of ["A-retrieval", "A-tool-loop"] as const) expect(systemPolicy(system)).toMatchObject({ attempts: 3, enrichedContext: true, deterministicFirst: true });
+  expect(EvalProtocolSchema.parse({ ...protocol, systems: ["B2", "A-retrieval", "A-tool-loop"] }).systems).toHaveLength(3);
+});
 it("refuses overwriting a frozen protocol and detects a changed digest", async () => {
   const root = await mkdtemp(join(tmpdir(), "aw-protocol-"));
   try {

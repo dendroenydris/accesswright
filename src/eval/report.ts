@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { LlmModelConfigSchema } from "../types/schemas.js";
 import { RunReportSchema } from "../reporter/report.js";
-import { EvalSystemSchema, OperatorSchema } from "./protocol.js";
+import { EvalSystemSchema, OperatorSchema, experimentalEvalSystems } from "./protocol.js";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const count = z.number().int().nonnegative();
@@ -22,7 +22,8 @@ export const EvalCellSchema = z.object({
   controls: z.object({ observed: count, changed: count, unexpectedEditedFiles: z.array(z.string()) }).strict().refine(value => value.changed <= value.observed),
   newViolations: count, report: RunReportSchema.nullable(),
   evidenceId: z.string().regex(/^repair-run-[A-Za-z0-9_-]+$/).nullable().default(null),
-}).strict().refine(cell => cell.providerEvidence === "not-run" || (cell.providerEvidence === "fake-provider" && cell.providerMode === "fake") || (cell.providerEvidence === "provider-api" && cell.providerMode === "live"), "Provider transport provenance conflicts with the configured mode");
+}).strict().refine(cell => cell.providerEvidence === "not-run" || (cell.providerEvidence === "fake-provider" && cell.providerMode === "fake") || (cell.providerEvidence === "provider-api" && cell.providerMode === "live"), "Provider transport provenance conflicts with the configured mode")
+  .refine(cell => !experimentalEvalSystems.some(system => system === cell.system) || cell.providerMode === "fake", "Experimental results require fake-provider mode");
 export type EvalCell = z.infer<typeof EvalCellSchema>;
 
 function quantile(values: number[], percentile: number): number | null {
@@ -33,13 +34,13 @@ function quantile(values: number[], percentile: number): number | null {
 function rate(numerator: number, denominator: number): number | null { return denominator ? numerator / denominator : null; }
 
 function pairedComparisons(cells: readonly EvalCell[]) {
-  const systems = ["B1", "A1", "A"] as const;
+  const families = [["B1", "A1", "A"], ["A", "B2"], ["A", "A-retrieval"], ["A", "A-tool-loop"]] as const;
   const scopes = new Map<string, EvalCell[]>();
   for (const cell of cells) {
     const key = `${cell.corpus}|${cell.split}|${cell.providerMode}`;
     const group = scopes.get(key) ?? []; group.push(cell); scopes.set(key, group);
   }
-  return [...scopes.entries()].filter(([, group]) => systems.every(system => group.some(cell => cell.system === system))).map(([scope, group]) => {
+  return families.flatMap(systems => [...scopes.entries()].filter(([, group]) => systems.every(system => group.some(cell => cell.system === system))).map(([scope, group]) => {
     const observations = systems.map(system => new Map(group.filter(cell => cell.system === system && cell.status === "completed").flatMap(cell => cell.cases.map(item => [`${cell.repository.toLowerCase()}@${cell.sha}|${cell.seed}|${item.id}`, item] as const))));
     const matched = [...(observations[0]?.keys() ?? [])].filter(key => observations.every(observation => observation.has(key)));
     return { scope, systems: [...systems], pairedCaseOpportunities: matched.length, results: observations.map((observation, index) => {
@@ -47,7 +48,7 @@ function pairedComparisons(cells: readonly EvalCell[]) {
       const correct = values.filter(value => value.correctlyFixed).length;
       return { system: systems[index], eligibleCases: values.length, correctlyFixed: correct, checkerAccepted: values.filter(value => value.checkerAccepted).length, correctFixRate: rate(correct, values.length), unpairedCaseOpportunities: observation.size - values.length };
     }) };
-  });
+  }));
 }
 
 /** Pure reconstruction from actual cells: duplicates and mixed protocols fail closed; fake and live results never pool. */
@@ -115,7 +116,7 @@ export function renderEvaluationReport(summary: EvaluationSummary): string {
     ...summary.groups.map(group => `| ${group.system} | ${group.split} / ${group.providerEvidence} | ${group.eligibleCases} / ${group.uniqueCases} | ${percentage(group.checkerAcceptanceRate)} | ${percentage(group.correctFixRate)} | ${group.falseFixes} | ${group.spentUsd.toFixed(6)}${group.unknownUsage ? " + unknown" : ""} |`), "",
     "The evidence column denotes the configured mode. A live-capable system can fix deterministic cases without calling a provider; actual API invocation is recorded per cell and remains in the same system denominator.", "",
     "## Paired comparison", "",
-    "Only case/seed opportunities in completed cells from all three systems enter the paired table. A rejected or unresolved repair in a completed cell remains in this denominator. Blocked baselines, setup failures and non-triggering injections are excluded, reported separately, and cannot be interpreted as matched outcomes.", "",
+    "Only case/seed opportunities in completed cells from every system listed in a comparison enter its paired table. A rejected or unresolved repair in a completed cell remains in this denominator. Blocked baselines, setup failures and non-triggering injections are excluded, reported separately, and cannot be interpreted as matched outcomes. Experimental B2/retrieval/tool-loop groups are directional fake-provider harness evidence until separately authorized live acceptance.", "",
     ...summary.pairedComparisons.map(comparison => `${comparison.scope}: ${comparison.pairedCaseOpportunities} matched opportunities. ${comparison.results.map(result => `${result.system ?? "unknown"}: ${result.correctlyFixed}/${result.eligibleCases} correct; ${result.unpairedCaseOpportunities} unpaired opportunities`).join("; ")}.`), "",
     "## Coverage and controls", "",
     ...summary.groups.map(group => `${group.system} (${group.providerEvidence}, ${group.split}): ${group.repositories.length} observed repositories; operators ${group.operators.join(", ") || "none"}; seeds ${group.seeds.join(", ")}; ${group.completedCells} completed cells, ${group.blockedCells} blocked and ${group.unsupportedCells} unsupported; ${group.unmeasuredCases} unmeasured case opportunities. Costs, controls, candidate attempts and timings retain evidence from all cells. Clean-node changes ${group.cleanNodesChanged}/${group.cleanNodesObserved}; unexpected edited files ${group.unexpectedEditedFiles.length}; rejected candidate attempts ${group.rejectedAttempts}/${group.candidateAttempts}; aria-tree gaming rejections ${group.gamingAttempts}; p50/p95 run ms ${group.p50RunMs ?? "n/a"}/${group.p95RunMs ?? "n/a"}.`), "",

@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, it } from "vitest";
-import { parseEvalArgs } from "../../src/eval/cli.js";
+import { parseEvalArgs, runEvaluationCli } from "../../src/eval/cli.js";
 
 it("exposes the compiled evaluation CLI as the reproducible npm entrypoint", async () => {
   const manifest = JSON.parse(await readFile("package.json", "utf8")) as { scripts?: Record<string, string> };
@@ -18,4 +18,7 @@ it("preserves explicit subsets and rejects unknown, duplicate, malformed, or emp
   for (const flags of [["--systems","fake"],["--seeds","NaN"],["--max-cases","0"],["--max-cases","1.2"],["--foo","bar"],["--systems","A","--systems","A1"],["--repositories",""]]) {
     expect(() => parseEvalArgs(["--output","/tmp/results",...flags])).toThrow();
   }
+});
+it.each(["B2", "A-retrieval", "A-tool-loop"])("refuses live CLI %s before protocol reading or model authentication", async system => {
+  await expect(runEvaluationCli(["--output", "/unused-output", "--protocol", "/missing-protocol", "--systems", system])).rejects.toThrow(/fake-provider injection/);
 });

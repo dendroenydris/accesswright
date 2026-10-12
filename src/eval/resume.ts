@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { RenderedCaseSchema } from "./cases.js";
 import type { RenderedCase } from "./cases.js";
-import { EvalProtocolSchema } from "./protocol.js";
+import { EvalProtocolSchema, EvalSystemSchema } from "./protocol.js";
 import type { EvalProtocol, EvalSystem, FrozenProtocol } from "./protocol.js";
 import { EvalCellSchema, aggregateEvaluation } from "./report.js";
 import type { EvalCell } from "./report.js";
@@ -19,7 +19,7 @@ const manifestSchema = z.object({
   runtimeSnapshot: z.literal("runtime"),
   selection: z.object({
     split: z.enum(["dev", "test"]),
-    systems: z.array(z.enum(["A", "A1", "B1", "deterministic"])),
+    systems: z.array(EvalSystemSchema),
     seeds: z.array(z.number().int().nonnegative()),
     repositories: z.array(repositorySchema),
   }).strict(),
