@@ -6,7 +6,7 @@ const options = { projectId: "accesswright-dev-123", region: "europe-west1", que
   targetOrigin: "https://trusted-verifier.a.run.app", serviceAccountEmail: "candidate-tasks@accesswright-dev-123.iam.gserviceaccount.com",
   getAccessToken: () => Promise.resolve("trusted-workload-fixture") };
 type Task = { name: string; scheduleTime: string; dispatchDeadline: string; httpRequest: { url: string; body: string; oidcToken: { audience: string; serviceAccountEmail: string } } };
-function fixture() {
+function fixture(targetOrigin = options.targetOrigin) {
   const tasks = new Map<string, Task>(), calls: Array<{ url: string; method: string }> = [];
   const fetcher: typeof fetch = (input, init) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
@@ -25,8 +25,17 @@ function fixture() {
     const task = tasks.get(url.pathname.slice("/v2/".length));
     return Promise.resolve(task ? Response.json(task) : new Response(null, { status: 404 }));
   };
-  return { tasks, calls, fetcher, open: () => new CloudTasksCandidateQueue({ ...options, fetcher }) };
+  return { tasks, calls, fetcher, open: () => new CloudTasksCandidateQueue({ ...options, targetOrigin, fetcher }) };
 }
+
+it("preserves regional Cloud Run URLs as the exact candidate endpoint and OIDC audience", async () => {
+  const origin = "https://candidate-123456789012.europe-west1.run.app", f = fixture(origin);
+  await f.open().enqueueVerification("run1", "f".repeat(64));
+  const task = [...f.tasks.values()][0];
+  expect(task.httpRequest.url).toBe(origin + "/internal/candidates/verify");
+  expect(task.httpRequest.oidcToken.audience).toBe(origin);
+  expect(() => fixture(origin + ".attacker.example").open()).toThrow("private Cloud Run");
+});
 
 it("schedules only digest/expiry metadata to fixed authenticated endpoints and keeps existing exact tasks after restart", async () => {
   const f = fixture(), expiry = new Date(Date.now() + 900_000).toISOString();

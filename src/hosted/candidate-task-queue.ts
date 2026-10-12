@@ -38,7 +38,7 @@ export class CloudTasksCandidateQueue {
     const account = z.string().regex(/^[A-Za-z0-9-]+@[a-z][a-z0-9-]{4,30}[a-z0-9]\.iam\.gserviceaccount\.com$/).parse(options.serviceAccountEmail);
     if (account.split("@")[1] !== project + ".iam.gserviceaccount.com") throw new Error("Candidate task identity must belong to the selected project");
     const origin = new URL(options.targetOrigin);
-    if (origin.protocol !== "https:" || !origin.hostname.endsWith(".a.run.app") || origin.pathname !== "/" ||
+    if (origin.protocol !== "https:" || !origin.hostname.endsWith(".run.app") || origin.pathname !== "/" ||
       origin.port || origin.username || origin.password || origin.search || origin.hash) throw new Error("Candidate tasks require a trusted private Cloud Run origin");
     this.prefix = "projects/" + project + "/locations/" + region + "/queues/" + queue + "/tasks/";
     this.base = "https://cloudtasks.googleapis.com/v2/" + this.prefix.slice(0, -1);

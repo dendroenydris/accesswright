@@ -17,6 +17,7 @@
 
 ### Added
 
+- Executable webhook, agent, task relay and independent verifier roles with durable enqueue, scoped workload identities and checked metadata-network isolation.
 - Trusted service composition with separate worker/task HTTP ingress, persistent original source pins and scoped source access.
 - Generic non-root worker image with an allowlisted public build context and opt-in downloaded-input/independent-Docker acceptance.
 - Actual tarball installation and npm-command Docker repair acceptance in CI, with zero model usage and original source preservation.
@@ -71,6 +72,7 @@
 - Identified preserved unattributable repair branches in Action errors without exposing arbitrary diagnostics.
 - Recognized installed npm command symlinks and mounted complete hoisted runtime dependencies without substituting module versions.
 - Docker repairs on Next.js 12-14 no longer time out after a patch: webpack dev watchers could read a copied file before ownership was transferred, cache EACCES, and never recompile. Ownership transfer now also refreshes the file mtime.
+- Accepted canonical regional Cloud Run service URLs while retaining exact task paths, fixed OIDC audiences and rejection of lookalike domains.
 - Excluded macOS transport sidecars from lint discovery and removed only verified untracked AppleDouble bytes in a newly owned pinned fetch.
 - Withheld private cleanup when its registered object identity conflicts, without deleting a different generation.
 - Erased corrupted private candidate objects at their trusted expiry without parsing source; missing current objects no longer imply confirmed cleanup.

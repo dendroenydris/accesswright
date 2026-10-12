@@ -10,14 +10,15 @@ import type { HostedPatchResponse } from "./agent-api.js";
 import { HostedInputBundleSchema } from "./input-bundle.js";
 import type { HostedInputBundle } from "./input-bundle.js";
 
-/** Worker transport holds only a scoped run token. Lost responses are never retried here. */
+/** Worker transport holds only scoped run/workload identities. Lost responses are never retried here. */
 export class HostedAgentClient {
   private readonly origin: string;
   private readonly runId: string;
   private readonly token: string;
   private readonly fetcher: typeof fetch;
+  private readonly getIdentityToken: ((audience: string) => Promise<string>) | undefined;
 
-  constructor(options: { origin: string; runId: string; token: string; fetcher?: typeof fetch }) {
+  constructor(options: { origin: string; runId: string; token: string; fetcher?: typeof fetch; getIdentityToken?: (audience: string) => Promise<string> }) {
     const url = new URL(options.origin);
     if (url.username || url.password || url.search || url.hash || url.pathname !== "/" ||
       !(url.protocol === "https:" || (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)))) {
@@ -27,6 +28,8 @@ export class HostedAgentClient {
     this.runId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).parse(options.runId);
     this.token = z.string().regex(/^[a-f0-9]{64}$/).parse(options.token);
     this.fetcher = options.fetcher ?? fetch;
+    if (options.getIdentityToken && url.protocol !== "https:") throw new Error("Workload identity requires an HTTPS agent origin");
+    this.getIdentityToken = options.getIdentityToken;
   }
 
   async patch(taskInput: FixTask, contextInput: RepairContext, images: readonly LlmImage[] = [], feedback: string | null = null): Promise<HostedPatchResponse> {
@@ -73,8 +76,11 @@ export class HostedAgentClient {
   }
 
   private async post(path: string, body: string, statuses: number[], maxBytes: number): Promise<{ status: number; data: unknown }> {
+      const identity = this.getIdentityToken ? await this.getIdentityToken(this.origin) : undefined;
+      if (identity !== undefined && (!identity || Buffer.byteLength(identity) > defaults.googleIdentityMaxTokenBytes || /\s|\p{Cc}/u.test(identity))) throw new Error("Worker workload identity is unconfirmed");
       const response = await this.fetcher(this.origin + "/runs/" + this.runId + "/" + path, {
-        method: "POST", headers: { authorization: "Bearer " + this.token, "content-type": "application/json" }, body,
+        method: "POST", headers: { authorization: "Bearer " + this.token, "content-type": "application/json",
+          ...(identity ? { "x-serverless-authorization": "Bearer " + identity } : {}) }, body,
         redirect: "error", credentials: "omit", cache: "no-store", signal: AbortSignal.timeout(defaults.providerTimeoutMs + defaults.hostedHttpHeadersTimeoutMs),
       });
       if (!statuses.includes(response.status) || !response.body || Number(response.headers.get("content-length")) > maxBytes) {

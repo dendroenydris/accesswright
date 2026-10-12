@@ -22,6 +22,9 @@ it("allows only a bounded run token and an initial single-task job", () => {
   expect(() => validateSecretlessWorkerEnvironment({ ...environment, ...cloud, ACCESSWRIGHT_REPOSITORY: "owner/private", ACCESSWRIGHT_INSTALLATION_ID: "42", ACCESSWRIGHT_PR_NUMBER: "" })).not.toThrow();
   expect(() => validateSecretlessWorkerEnvironment({ ...environment, ...cloud, ACCESSWRIGHT_RUN_TOKEN: "a".repeat(64) })).not.toThrow();
   expect(() => validateSecretlessWorkerEnvironment({ ...environment, ACCESSWRIGHT_RUN_TOKEN: "provider-key" })).toThrow("scoped worker token");
+  expect(() => validateSecretlessWorkerEnvironment({ ...environment, ...cloud,
+    ACCESSWRIGHT_WORKER_SERVICE_ACCOUNT_EMAIL: "worker@accesswright-dev-123.iam.gserviceaccount.com" })).not.toThrow();
+  expect(() => validateSecretlessWorkerEnvironment({ ...environment, ACCESSWRIGHT_WORKER_SERVICE_ACCOUNT_EMAIL: "private-secret" })).toThrow();
 });
 it.each([{ CLOUD_RUN_TASK_COUNT: "2" }, { CLOUD_RUN_TASK_INDEX: "1" }, { CLOUD_RUN_TASK_ATTEMPT: "1" }, { CLOUD_RUN_JOB: undefined }])("rejects duplicate or incomplete job configuration %j", change => {
   expect(() => validateSecretlessWorkerEnvironment({ ...environment, ...cloud, ...change })).toThrow("one initial");

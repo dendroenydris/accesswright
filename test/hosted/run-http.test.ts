@@ -23,6 +23,26 @@ const valid: RunReport = {
   final: { acceptedFixIds: ["id-1"], droppedFixIds: [], failures: [] },
 };
 
+it("polls scheduled finish without claiming verification, then reports only a separately trusted terminal result", async () => {
+  const store = new InMemoryHostedRunStore(), verifyTrustedResult = vi.fn((_runId: string, reportDigest: string) => Promise.resolve({ reportDigest, verifiedBaseSha: "f".repeat(40) }));
+  const workflow = new HostedRunWorkflow({ store, verifyTrustedResult,
+    authenticate: runId => ({ runId, repository: "owned/fixture", installationId: 42 }) });
+  const server = createServer(createHostedRunHandler(workflow, true));
+  server.listen(0, "127.0.0.1"); await once(server, "listening");
+  const address = server.address(); if (!address || typeof address === "string") throw new Error("Missing fixture listener");
+  const endpoint = "http://127.0.0.1:" + address.port + "/runs/run1/finish";
+  const poll = () => fetch(endpoint, { method: "POST", headers: { authorization: "Bearer " + "a".repeat(64), "content-type": "application/json" }, body: "{}" });
+  try {
+    const missing = await poll(); expect(missing.status).toBe(409); await missing.arrayBuffer();
+    await workflow.submitResults("run1", "fixture", valid);
+    const pending = await poll(); expect(pending.status).toBe(202); expect(await pending.json()).toEqual({ runId: "run1", status: "recorded" });
+    expect(store.get("run1")?.status).toBe("recorded"); expect(verifyTrustedResult).not.toHaveBeenCalled();
+    await workflow.finishTrustedReport("run1", store.get("run1")?.reportDigest ?? "");
+    const completed = await poll(); expect(completed.status).toBe(200); expect(await completed.json()).toEqual({ runId: "run1", status: "ready-for-review", verifiedBaseSha: "f".repeat(40) });
+    expect(verifyTrustedResult).toHaveBeenCalledOnce();
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
 it("submits and finishes a real HTTP run with independent receipt, without any GitHub writes", async () => {
   let trustedCalls = 0;
   const store = new InMemoryHostedRunStore();

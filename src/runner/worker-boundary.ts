@@ -8,6 +8,7 @@ const allowedEnvironment = new Set([
   "PATH", "HOME", "HOSTNAME", "LANG", "LC_ALL", "PLAYWRIGHT_BROWSERS_PATH", "CI", "NEXT_TELEMETRY_DISABLED", "NODE_ENV",
   "ACCESSWRIGHT_ISOLATED_WORKER", "ACCESSWRIGHT_ISOLATED_TARGET", "ACCESSWRIGHT_EVIDENCE_ROOT",
   "ACCESSWRIGHT_RUN_ID", "ACCESSWRIGHT_RUN_TOKEN", "ACCESSWRIGHT_AGENT_ORIGIN", "ACCESSWRIGHT_PROVIDER_VERIFICATION",
+  "ACCESSWRIGHT_WORKER_SERVICE_ACCOUNT_EMAIL",
   "ACCESSWRIGHT_REPOSITORY", "ACCESSWRIGHT_INSTALLATION_ID", "ACCESSWRIGHT_PR_NUMBER",
   "CLOUD_RUN_JOB", "CLOUD_RUN_EXECUTION", "CLOUD_RUN_TASK_INDEX", "CLOUD_RUN_TASK_ATTEMPT", "CLOUD_RUN_TASK_COUNT",
 ]);
@@ -16,6 +17,9 @@ const allowedEnvironment = new Set([
 export function validateSecretlessWorkerEnvironment(environment: NodeJS.ProcessEnv): void {
   if (Object.entries(environment).some(([name, value]) => value !== undefined && !allowedEnvironment.has(name))) throw new Error("Secretless worker environment is not allowlisted");
   if (environment.ACCESSWRIGHT_RUN_TOKEN !== undefined && !/^[a-f0-9]{64}$/.test(environment.ACCESSWRIGHT_RUN_TOKEN)) throw new Error("Invalid scoped worker token");
+  if (environment.ACCESSWRIGHT_WORKER_SERVICE_ACCOUNT_EMAIL !== undefined) z.string().regex(
+    /^[A-Za-z0-9-]+@[a-z][a-z0-9-]{4,30}[a-z0-9]\.iam\.gserviceaccount\.com$/,
+  ).parse(environment.ACCESSWRIGHT_WORKER_SERVICE_ACCOUNT_EMAIL);
   if (Object.keys(environment).some(name => name.startsWith("CLOUD_RUN_") && environment[name] !== undefined)) {
     const valid = z.object({ CLOUD_RUN_JOB: z.string().min(1), CLOUD_RUN_EXECUTION: z.string().min(1), CLOUD_RUN_TASK_INDEX: z.literal("0"),
       CLOUD_RUN_TASK_COUNT: z.literal("1"), CLOUD_RUN_TASK_ATTEMPT: z.literal("0") }).safeParse(environment);

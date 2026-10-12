@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { defaults } from "../config.js";
 
 import type { QueuedRun } from "./webhook.js";
 
@@ -14,6 +15,27 @@ const queuedRunSchema = z.object({
   createdAt: z.iso.datetime(),
   pullNumber: z.number().int().positive().nullable(),
 }).strict();
+const responseSchema = z.object({ name: z.string().max(512), dispatchDeadline: z.string().regex(/^[0-9]+(?:\.[0-9]+)?s$/),
+  httpRequest: z.object({ httpMethod: z.literal("POST"), url: z.string().max(512), body: z.string().max(defaults.firestoreRecordMaxBytes),
+    oidcToken: z.object({ serviceAccountEmail: z.string().max(256), audience: z.string().max(256) }).passthrough() }).passthrough() }).passthrough();
+
+async function confirmedResponse(response: Response): Promise<z.infer<typeof responseSchema>> {
+  const declared = Number(response.headers.get("content-length") ?? 0);
+  if (!response.ok || !Number.isFinite(declared) || declared < 0 || declared > defaults.firestoreRecordMaxBytes || !response.body) {
+    await response.body?.cancel(); throw new Error("Cloud Tasks run enqueue is unconfirmed (HTTP " + response.status + ")");
+  }
+  const reader = response.body.getReader(), chunks: Uint8Array[] = []; let length = 0;
+  try {
+    for (;;) {
+      const next = await reader.read(); if (next.done) break;
+      length += next.value.length;
+      if (length > defaults.firestoreRecordMaxBytes) throw new Error("Cloud Tasks run response exceeds its bound");
+      chunks.push(next.value);
+    }
+    return responseSchema.parse(JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown);
+  } catch { throw new Error("Cloud Tasks run response identity is unconfirmed"); }
+  finally { try { await reader.cancel(); } finally { reader.releaseLock(); } }
+}
 
 export interface CloudTasksRunQueueOptions {
   projectId: string;
@@ -55,7 +77,7 @@ export class CloudTasksRunQueue {
     }
     const target = new URL(options.targetUrl);
     if (target.protocol !== "https:" ||
-      !target.hostname.endsWith(".a.run.app") ||
+      !target.hostname.endsWith(".run.app") ||
       target.pathname !== "/internal/jobs" ||
       target.port || target.username || target.password || target.search || target.hash) {
       throw new Error("Cloud Tasks target must be the trusted HTTPS Cloud Run jobs dispatcher");
@@ -81,7 +103,7 @@ export class CloudTasksRunQueue {
     const task = {
       task: {
         name,
-        dispatchDeadline: "30s",
+        dispatchDeadline: String(defaults.hostedJobDispatchDeadlineSeconds) + "s",
         httpRequest: {
           httpMethod: "POST",
           url: this.targetUrl,
@@ -94,26 +116,32 @@ export class CloudTasksRunQueue {
         },
       },
     };
-    const response = await this.fetcher(this.url, {
+    let response = await this.fetcher(this.url, {
       method: "POST",
       redirect: "error",
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(defaults.hostedHttpHeadersTimeoutMs),
       headers: {
         Authorization: "Bearer " + token,
         Accept: "application/json",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(task),
+      body: JSON.stringify({ ...task, responseView: "FULL" }),
     });
+    const duplicate = response.status === 409;
     if (response.status === 409) {
       await response.body?.cancel();
-      return { status: "duplicate", runId: run.runId };
+      // Recently deleted task names also return 409; prove the exact task still exists.
+      response = await this.fetcher("https://cloudtasks.googleapis.com/v2/" + name + "?responseView=FULL", {
+        method: "GET", redirect: "error", signal: AbortSignal.timeout(defaults.hostedHttpHeadersTimeoutMs),
+        headers: { Authorization: "Bearer " + token, Accept: "application/json" },
+      });
     }
-    if (!response.ok) {
-      await response.body?.cancel();
-      throw new Error("Cloud Tasks run enqueue failed (HTTP " + response.status + ")");
+    const saved = await confirmedResponse(response), expected = task.task;
+    if (saved.name !== name || parseFloat(saved.dispatchDeadline) !== parseFloat(expected.dispatchDeadline) ||
+      saved.httpRequest.url !== expected.httpRequest.url || saved.httpRequest.body !== expected.httpRequest.body ||
+      saved.httpRequest.oidcToken.serviceAccountEmail !== this.serviceAccountEmail || saved.httpRequest.oidcToken.audience !== this.audience) {
+      throw new Error("Cloud Tasks run identity or deadline changed");
     }
-    await response.body?.cancel();
-    return { status: "queued", runId: run.runId };
+    return { status: duplicate ? "duplicate" : "queued", runId: run.runId };
   }
 }

@@ -1,4 +1,4 @@
-import { createPrivateKey, sign } from "node:crypto";
+import { createHash, createPrivateKey, sign } from "node:crypto";
 import type { KeyObject } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -104,15 +104,41 @@ export class GitHubSourceAccess {
     return (await this.sourceAccess(input)).token;
   }
 
+  async authorizeComment(input: { repository: string; installationId: number; sender: string; pullNumber: number }): Promise<boolean> {
+    const context = z.object({ repository: repositorySchema, installationId: identitySchema.shape.installationId,
+      sender: z.string().min(1).max(100).regex(/^[A-Za-z0-9_.[\]-]+$/), pullNumber: z.number().int().positive() }).strict().parse(input);
+    const runId = "comment-" + createHash("sha256").update(JSON.stringify(context)).digest("hex").slice(0, 32);
+    const source = this.identity({ runId, repository: context.repository, installationId: context.installationId });
+    let allowed: boolean;
+    try {
+      const { token } = await this.sourceAccess(source);
+      const permission = z.object({ permission: z.enum(["none", "read", "triage", "write", "maintain", "admin"]),
+        user: z.object({ login: z.string().min(1) }).passthrough() }).passthrough().parse(await this.request(
+        "/repos/" + source.repository.split("/").map(encodeURIComponent).join("/") + "/collaborators/" + encodeURIComponent(context.sender) + "/permission", token));
+      allowed = ["write", "maintain", "admin"].includes(permission.permission) && permission.user.login.toLowerCase() === context.sender.toLowerCase();
+    } catch {
+      await this.record(runId, "hosted-github-comment-authorization", "error"); return false;
+    }
+    await this.record(runId, "hosted-github-comment-authorization", allowed ? "ok" : "error"); return allowed;
+  }
+
   /** Pin once before job registration; persist this SHA and reuse it for input and independent replay. */
-  async pinDefaultRevision(input: SourceIdentity): Promise<string> {
+  pinDefaultRevision(input: SourceIdentity): Promise<string> {
+    return this.pinRunRevision(input, null);
+  }
+
+  /** PR heads come from the allowlisted base repository's exact pull ref, never its merge or default branch. */
+  async pinRunRevision(input: SourceIdentity, pullNumber: number | null): Promise<string> {
     const run = this.identity(input);
+    const pull = pullNumber === null ? null : z.number().int().positive().parse(pullNumber);
     try {
       const { token, defaultBranch } = await this.sourceAccess(run);
-      const commit = z.object({ sha: z.string().regex(/^[a-f0-9]{40}$/) }).passthrough().parse(await this.request(
-        "/repos/" + run.repository.split("/").map(encodeURIComponent).join("/") + "/commits/" + encodeURIComponent(defaultBranch), token));
-      await this.record(run.runId, "hosted-github-source-revision", "ok", commit.sha);
-      return commit.sha;
+      const ref = pull === null ? "heads/" + defaultBranch : "pull/" + pull + "/head";
+      const reference = z.object({ ref: z.literal("refs/" + ref),
+        object: z.object({ type: z.literal("commit"), sha: z.string().regex(/^[a-f0-9]{40}$/) }).passthrough() }).passthrough().parse(await this.request(
+        "/repos/" + run.repository.split("/").map(encodeURIComponent).join("/") + "/git/ref/" + ref.split("/").map(encodeURIComponent).join("/"), token));
+      await this.record(run.runId, "hosted-github-source-revision", "ok", reference.object.sha);
+      return reference.object.sha;
     } catch {
       await this.record(run.runId, "hosted-github-source-revision", "error");
       throw new Error("GitHub source revision is unconfirmed");

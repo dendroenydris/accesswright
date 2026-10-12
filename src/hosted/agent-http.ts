@@ -123,15 +123,16 @@ export function createHostedAgentHandler(agent: HostedPatchAgent): RequestListen
 }
 
 /** Private coordinator only; public webhooks use their separate receiver. */
-export function createHostedAgentServer(options: Pick<HostedRunWorkflowDependencies, "store" | "verifyTrustedResult" | "receiveCandidate"> & { agent: HostedPatchAgent; input?: HostedInputOptions }) {
+export function createHostedAgentServer(options: Pick<HostedRunWorkflowDependencies, "store" | "verifyTrustedResult" | "receiveCandidate"> & { agent: HostedPatchAgent; input?: HostedInputOptions; finishScheduled?: boolean; dispatchJobs?: RequestListener }) {
   const patches = createHostedAgentHandler(options.agent);
   const runs = createHostedRunHandler(new HostedRunWorkflow({
     store: options.store,
     authenticate: (runId, token) => options.agent.inspectRun(runId, token),
     verifyTrustedResult: options.verifyTrustedResult,
     ...(options.receiveCandidate ? { receiveCandidate: options.receiveCandidate } : {}),
-  }));
+  }), options.finishScheduled);
   const server = createServer((request, response) => {
+    if (request.url === "/internal/jobs" && options.dispatchJobs) { options.dispatchJobs(request, response); return; }
     const path = (request.url ?? "").split("?")[0] ?? "";
     const input = inputPath.exec(request.url ?? "");
     const inputOptions = options.input;

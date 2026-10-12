@@ -27,6 +27,30 @@ it("sends only the scoped authorization header and validates a patch response wi
   expect(JSON.parse(init.body)).toMatchObject({ task, context, images: [], feedback: null });
 });
 
+it("uses a separate Cloud Run identity header while retaining the application run token", async () => {
+  const identity = "local-google-identity", getIdentityToken = vi.fn(() => Promise.resolve(identity));
+  const fetcher = vi.fn<typeof fetch>(() => Promise.resolve(Response.json(accepted)));
+  expect(await new HostedAgentClient({ ...options, fetcher, getIdentityToken }).patch(task, context)).toEqual(accepted);
+  expect(getIdentityToken).toHaveBeenCalledExactlyOnceWith(options.origin);
+  const [url, init] = fetcher.mock.calls[0];
+  expect(new Headers(init?.headers).get("authorization")).toBe("Bearer " + options.token);
+  expect(new Headers(init?.headers).get("x-serverless-authorization")).toBe("Bearer " + identity);
+  expect(url).not.toContain(identity); expect(init?.body).not.toContain(identity);
+});
+
+it.each(["", "has a space", "injected\r\nheader", "x".repeat(defaults.googleIdentityMaxTokenBytes + 1)])("withholds a request for invalid workload identity (%#)", async identity => {
+  const fetcher = vi.fn<typeof fetch>(), getIdentityToken = vi.fn(() => Promise.resolve(identity));
+  expect(await new HostedAgentClient({ ...options, fetcher, getIdentityToken }).patch(task, context)).toEqual({ status: "rejected", reason: "agent-response-unreconciled", usage: null });
+  expect(fetcher).not.toHaveBeenCalled(); expect(getIdentityToken).toHaveBeenCalledOnce();
+});
+
+it("does not send source or retry when workload identity is unavailable and refuses identity over loopback HTTP", async () => {
+  const fetcher = vi.fn<typeof fetch>(), getIdentityToken = vi.fn(() => Promise.reject(new Error("private-identity-marker")));
+  await expect(new HostedAgentClient({ ...options, fetcher, getIdentityToken }).downloadInput()).rejects.toThrow(/^Hosted input transfer is unconfirmed/);
+  expect(fetcher).not.toHaveBeenCalled(); expect(getIdentityToken).toHaveBeenCalledOnce();
+  expect(() => new HostedAgentClient({ ...options, origin: "http://localhost:1234", getIdentityToken })).toThrow("HTTPS");
+});
+
 it.each(["http://agent.example", "https://user:password@agent.example", "https://agent.example/path", "https://agent.example/?token=secret", "https://agent.example/#secret", "file:///tmp/agent"])("rejects unsafe agent origin %s before sending source or authorization", origin => {
   expect(() => new HostedAgentClient({ ...options, origin })).toThrow(/origin/);
 });

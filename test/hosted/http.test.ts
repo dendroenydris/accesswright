@@ -21,7 +21,7 @@ function signed(body: string, event = "installation") {
 it("HTTP webhook processes signed requests, handles duplicates, and never exposes private payloads", async () => {
   const runs: string[] = [];
   const app = createHostedWebhookServer({
-    secret, installationAllowlist: new Set([123]), registry: new InMemoryRunRegistry(),
+    secret, installationAllowlist: new Set([123]), repositoryAllowlist: new Set(["owner/repo"]), registry: new InMemoryRunRegistry(),
     queue: run => { runs.push(run.runId); return Promise.resolve(); },
     authorizeComment: () => Promise.resolve(false),
   });
@@ -37,7 +37,7 @@ it("HTTP webhook processes signed requests, handles duplicates, and never expose
     const privateText = "must-not-appear-in-response";
     const body = JSON.stringify({
       action: "created", installation: { id: 123 },
-      repository: { full_name: "owner/repo", private: true },
+      repositories: [{ full_name: "owner/repo", private: true }],
       sender: { login: "authorized" }, text: privateText,
     });
     const response = await fetch(url + "/github/webhook", { method: "POST", headers: signed(body), body });

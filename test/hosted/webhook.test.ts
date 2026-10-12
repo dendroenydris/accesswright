@@ -15,6 +15,7 @@ function signed(payload: unknown, event: string, delivery: string) {
 const installation = { id: 42 };
 const repository = { full_name: "owner/private-app", private: true };
 const base = { installation, repository, sender: { login: "trusted-reviewer" } };
+const installPayload = { installation, repositories: [repository], sender: base.sender, action: "created" };
 
 it("authenticates exact raw bytes, refuses missing/wrong signature and oversized bodies", () => {
   const input = signed(base, "installation", "11111111-1111-4111-8111-111111111111");
@@ -30,11 +31,12 @@ it("queues only authorized installation and comment events with delivery/run ide
   const dependencies = {
     secret,
     installationAllowlist: new Set([42]),
+    repositoryAllowlist: new Set([repository.full_name, "owner/second"]),
     registry,
     queue: (job: { runId: string }) => { enqueued.push(job.runId); return Promise.resolve(); },
     authorizeComment: () => Promise.resolve(true),
   };
-  const first = signed({ ...base, action: "created" }, "installation", "11111111-1111-4111-8111-111111111111");
+  const first = signed(installPayload, "installation", "11111111-1111-4111-8111-111111111111");
   const queued = await dispatchGitHubWebhook(first.body, first.headers, dependencies);
   expect(queued).toMatchObject({ status: "queued" });
   const again = await dispatchGitHubWebhook(first.body, first.headers, dependencies);
@@ -61,7 +63,7 @@ it("does not queue unallowlisted or unauthorized comments, unsafe event types, o
   const registry = new InMemoryRunRegistry();
   const calls: string[] = [];
   const dependencies = {
-    secret, installationAllowlist: new Set([42]), registry,
+    secret, installationAllowlist: new Set([42]), repositoryAllowlist: new Set([repository.full_name]), registry,
     queue: () => { calls.push("queued"); return Promise.resolve(); },
     authorizeComment: () => Promise.resolve(false),
   };
@@ -69,17 +71,17 @@ it("does not queue unallowlisted or unauthorized comments, unsafe event types, o
   expect(await dispatchGitHubWebhook(push.body, push.headers, dependencies)).toMatchObject({ status: "ignored" });
   const comment = signed({ ...base, action: "created", issue: { number: 1, pull_request: {} }, comment: { body: "/accesswright fix", id: 99 } }, "issue_comment", "55555555-5555-4555-8555-555555555555");
   expect(await dispatchGitHubWebhook(comment.body, comment.headers, dependencies)).toMatchObject({ status: "unauthorized" });
-  const other = signed({ ...base, installation: { id: 404 }, action: "created" }, "installation", "66666666-6666-4666-8666-666666666666");
+  const other = signed({ ...installPayload, installation: { id: 404 } }, "installation", "66666666-6666-4666-8666-666666666666");
   expect(await dispatchGitHubWebhook(other.body, other.headers, dependencies)).toMatchObject({ status: "unauthorized" });
   expect(calls).toEqual([]);
 });
 
 it("does not mark failed enqueue as successful and allows the same delivery to retry", async () => {
   const registry = new InMemoryRunRegistry();
-  const input = signed({ ...base, action: "created" }, "installation", "77777777-7777-4777-8777-777777777777");
+  const input = signed(installPayload, "installation", "77777777-7777-4777-8777-777777777777");
   let attempts = 0;
   const dependencies = {
-    secret, installationAllowlist: new Set([42]), registry,
+    secret, installationAllowlist: new Set([42]), repositoryAllowlist: new Set([repository.full_name]), registry,
     queue: () => { attempts += 1; return attempts === 1 ? Promise.reject(new Error("transient queue failure")) : Promise.resolve(); },
     authorizeComment: () => Promise.resolve(true),
   };
@@ -87,4 +89,32 @@ it("does not mark failed enqueue as successful and allows the same delivery to r
   expect(registry.list()).toEqual([]);
   expect(await dispatchGitHubWebhook(input.body, input.headers, dependencies)).toMatchObject({ status: "queued" });
   expect(attempts).toBe(2);
+});
+
+it("queues every installation repository once and retries only unfinished repositories after a partial failure", async () => {
+  const registry = new InMemoryRunRegistry(), queued: string[] = [];
+  let failed = false;
+  const dependencies = { secret, installationAllowlist: new Set([42]), repositoryAllowlist: new Set([repository.full_name, "owner/second"]), registry, authorizeComment: () => Promise.resolve(false),
+    queue: (run: { repository: string }) => {
+      if (run.repository === "owner/second" && !failed) { failed = true; return Promise.reject(new Error("queue unavailable")); }
+      queued.push(run.repository); return Promise.resolve();
+    } };
+  const input = signed({ ...installPayload, repositories: [repository, { full_name: "owner/second", private: true },
+    { full_name: "OWNER/PRIVATE-APP", private: true }] }, "installation", "88888888-8888-4888-8888-888888888888");
+  await expect(dispatchGitHubWebhook(input.body, input.headers, dependencies)).rejects.toThrow("queue unavailable");
+  expect(queued).toEqual([repository.full_name]);
+  const resumed = await dispatchGitHubWebhook(input.body, input.headers, dependencies);
+  expect(resumed.status).toBe("queued"); expect(resumed.runIds).toHaveLength(2);
+  expect(queued).toEqual([repository.full_name, "owner/second"]);
+  const result = await dispatchGitHubWebhook(input.body, input.headers, dependencies);
+  expect(result.status).toBe("duplicate"); expect(result.runIds).toHaveLength(2); expect(new Set(result.runIds).size).toBe(2);
+});
+
+it("ignores empty installation lists and unrelated actions without requiring repository details", async () => {
+  const dependencies = { secret, installationAllowlist: new Set([42]), repositoryAllowlist: new Set([repository.full_name]), registry: new InMemoryRunRegistry(),
+    queue: () => Promise.reject(new Error("Should not enqueue")), authorizeComment: () => Promise.resolve(false) };
+  for (const payload of [{ ...installPayload, repositories: [] }, { installation, sender: base.sender, action: "deleted" }]) {
+    const input = signed(payload, "installation", "99999999-9999-4999-8999-999999999999");
+    expect(await dispatchGitHubWebhook(input.body, input.headers, dependencies)).toEqual({ status: "ignored", runIds: [] });
+  }
 });

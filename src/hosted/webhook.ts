@@ -4,6 +4,7 @@ import { z } from "zod";
 const MAX_WEBHOOK_BYTES = 1_048_576;
 const DeliverySchema = z.string().uuid();
 const FullNameSchema = z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/);
+const RepositorySchema = z.object({ full_name: FullNameSchema, private: z.boolean() }).passthrough();
 
 export interface WebhookHeaders {
   "x-hub-signature-256"?: string;
@@ -22,7 +23,6 @@ export function verifyGitHubSignature(body: Uint8Array, signature: string | unde
 
 const CommonPayloadSchema = z.object({
   installation: z.object({ id: z.number().int().positive() }).passthrough(),
-  repository: z.object({ full_name: FullNameSchema, private: z.boolean() }).passthrough(),
   sender: z.object({ login: z.string().min(1).max(100) }).passthrough(),
   action: z.string().min(1),
 }).passthrough();
@@ -38,13 +38,20 @@ export interface QueuedRun {
 
 export interface WebhookDispatchResult {
   status: "queued" | "ignored" | "duplicate" | "unauthorized";
-  runId: string | null;
+  runIds: string[];
+}
+
+export interface WebhookRunRegistry {
+  claim(key: string, delivery: string): boolean | Promise<boolean>;
+  commit(key: string, run: QueuedRun): void | Promise<void>;
+  release(key: string, delivery: string): void | Promise<void>;
 }
 
 export interface WebhookDispatchDependencies {
   secret: string;
   installationAllowlist: ReadonlySet<number>;
-  registry: InMemoryRunRegistry;
+  repositoryAllowlist: ReadonlySet<string>;
+  registry: WebhookRunRegistry;
   queue: (run: QueuedRun) => Promise<void>;
   authorizeComment: (context: {
     repository: string; pullNumber: number; sender: string; installationId: number;
@@ -90,67 +97,71 @@ export async function dispatchGitHubWebhook(
   dependencies: WebhookDispatchDependencies,
 ): Promise<WebhookDispatchResult> {
   if (!verifyGitHubSignature(body, headers["x-hub-signature-256"], dependencies.secret)) {
-    return { status: "unauthorized", runId: null };
+    return { status: "unauthorized", runIds: [] };
   }
   const delivery = DeliverySchema.parse(headers["x-github-delivery"]);
   const event = headers["x-github-event"];
   if (event !== "installation" && event !== "issue_comment") {
-    return { status: "ignored", runId: null };
+    return { status: "ignored", runIds: [] };
   }
   const payload = CommonPayloadSchema.parse(JSON.parse(Buffer.from(body).toString("utf8")) as unknown);
   if (!dependencies.installationAllowlist.has(payload.installation.id)) {
-    return { status: "unauthorized", runId: null };
+    return { status: "unauthorized", runIds: [] };
   }
+  if (payload.action !== "created") return { status: "ignored", runIds: [] };
 
-  let key: string;
+  let repositories: string[];
+  let commentId: number | null = null;
   let pullNumber: number | null = null;
+  const allowed = new Set([...dependencies.repositoryAllowlist].map(value => value.toLowerCase()));
   if (event === "installation") {
-    if (payload.action !== "created") return { status: "ignored", runId: null };
-    key = "installation|" + payload.installation.id + "|" + payload.repository.full_name;
+    const installation = z.object({ repositories: z.array(RepositorySchema) }).parse(payload);
+    repositories = [...new Set(installation.repositories.map(repo => repo.full_name.toLowerCase()))].filter(repo => allowed.has(repo));
   } else {
-    if (payload.action !== "created") return { status: "ignored", runId: null };
     const comment = z.object({
+      repository: RepositorySchema,
       issue: z.object({
         number: z.number().int().positive(),
         pull_request: z.object({}).passthrough(),
       }).passthrough(),
       comment: z.object({ body: z.string().max(20_000), id: z.number().int().positive() }).passthrough(),
     }).parse(payload);
+    if (!allowed.has(comment.repository.full_name.toLowerCase())) return { status: "unauthorized", runIds: [] };
     if (comment.comment.body.trim() !== "/accesswright fix") {
-      return { status: "ignored", runId: null };
+      return { status: "ignored", runIds: [] };
     }
     pullNumber = comment.issue.number;
     if (!await dependencies.authorizeComment({
-      repository: payload.repository.full_name,
+      repository: comment.repository.full_name,
       pullNumber,
       sender: payload.sender.login,
       installationId: payload.installation.id,
     })) {
-      return { status: "unauthorized", runId: null };
+      return { status: "unauthorized", runIds: [] };
     }
-    key = "comment|" + payload.installation.id + "|" + payload.repository.full_name + "|" + comment.comment.id;
+    repositories = [comment.repository.full_name.toLowerCase()];
+    commentId = comment.comment.id;
   }
 
-  const deliveryKey = stableId(delivery);
-  const runId = stableId(key).slice(0, 32);
-  if (!dependencies.registry.claim(key, deliveryKey)) {
-    return { status: "duplicate", runId };
+  const runIds: string[] = [];
+  let queued = false;
+  for (const repository of repositories) {
+    const key = event === "installation" ? "installation|" + payload.installation.id + "|" + repository :
+      "comment|" + payload.installation.id + "|" + repository + "|" + commentId;
+    // A single installation delivery can contain multiple independent repositories.
+    const deliveryKey = stableId(delivery + "|" + repository), runId = stableId(key).slice(0, 32);
+    runIds.push(runId);
+    if (!await dependencies.registry.claim(key, deliveryKey)) continue;
+    const run: QueuedRun = { runId, repository, installationId: payload.installation.id, event,
+      createdAt: new Date().toISOString(), pullNumber };
+    try {
+      await dependencies.queue(run);
+      await dependencies.registry.commit(key, run);
+      queued = true;
+    } catch (error) {
+      await dependencies.registry.release(key, deliveryKey);
+      throw error;
+    }
   }
-
-  const run: QueuedRun = {
-    runId,
-    repository: payload.repository.full_name,
-    installationId: payload.installation.id,
-    event,
-    createdAt: new Date().toISOString(),
-    pullNumber,
-  };
-  try {
-    await dependencies.queue(run);
-    dependencies.registry.commit(key, run);
-    return { status: "queued", runId };
-  } catch (error) {
-    dependencies.registry.release(key, deliveryKey);
-    throw error;
-  }
+  return { status: queued ? "queued" : runIds.length ? "duplicate" : "ignored", runIds };
 }

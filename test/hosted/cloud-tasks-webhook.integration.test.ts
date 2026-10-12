@@ -27,11 +27,11 @@ it("routes a signed GitHub webhook through real local HTTP into scoped Cloud Tas
       expect(decoded).toMatchObject({
         repository: "owner/private", installationId: 42, event: "installation",
       });
-      return Promise.resolve(Response.json({ name: "fixture-task" }));
+      return Promise.resolve(Response.json(record.task));
     },
   });
   const server = createHostedWebhookServer({
-    secret, installationAllowlist: new Set([42]),
+    secret, installationAllowlist: new Set([42]), repositoryAllowlist: new Set(["owner/private"]),
     registry: new InMemoryRunRegistry(),
     queue: async run => { await queue.enqueue(run); },
     authorizeComment: () => Promise.resolve(false),
@@ -44,7 +44,7 @@ it("routes a signed GitHub webhook through real local HTTP into scoped Cloud Tas
   try {
     const body = JSON.stringify({
       action: "created", installation: { id: 42 },
-      repository: { full_name: "owner/private", private: true },
+      repositories: [{ full_name: "owner/private", private: true }],
       sender: { login: "reviewer" },
     });
     const headers = {

@@ -42,7 +42,7 @@ async function readBody(request: IncomingMessage, maxBytes = maxBodyBytes): Prom
  * trusted coordinator independently validates its exact report digest.
  * Cloud use requires Firestore transactions and private service ingress.
  */
-export function createHostedRunHandler(workflow: HostedRunWorkflow): RequestListener {
+export function createHostedRunHandler(workflow: HostedRunWorkflow, finishScheduled = false): RequestListener {
   return (request, response) => {
     void (async () => {
       const path = (request.url ?? "").split("?")[0] ?? "";
@@ -91,6 +91,14 @@ export function createHostedRunHandler(workflow: HostedRunWorkflow): RequestList
           return;
         }
         z.object({}).strict().parse(body);
+        if (finishScheduled) {
+          const stored = await workflow.inspect(runId, token);
+          if (!stored) throw new Error("Run results must be submitted before finish");
+          // Polling must not consume the separately scheduled Docker verifier's claim.
+          send(response, stored.status === "blocked" ? 409 : stored.status === "ready-for-review" ? 200 : 202,
+            { runId, status: stored.status, ...(stored.verifiedBaseSha ? { verifiedBaseSha: stored.verifiedBaseSha } : {}) });
+          return;
+        }
         const result = await workflow.finish(runId, token);
         send(response, result.status === "blocked" ? 409 : 200, result);
       } catch (error) {
