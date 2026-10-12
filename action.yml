@@ -65,7 +65,7 @@ runs:
   steps:
     - name: Check out target branch separately from action code
       id: target
-      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         repository: ${{ github.repository }}
         ref: ${{ inputs.mode == 'pr' && format('refs/pull/{0}/head', inputs['pull-number']) || inputs['base-branch'] }}
@@ -73,9 +73,10 @@ runs:
         persist-credentials: false
         token: ${{ inputs.github-token }}
     - name: Set up pinned coordinator Node
-      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version: '26.5.1'
+        package-manager-cache: false
     - name: Build trusted action package without lifecycle scripts
       shell: bash
       env:

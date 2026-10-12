@@ -102,9 +102,12 @@ it("declares a pinned composite Action with safe default inputs", async () => {
     ?.map(step => step.uses)
     .filter((value): value is string => typeof value === "string");
   expect(uses).toContain(
-    "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+    "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
   );
   expect(uses).toContain(
-    "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+    "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
   );
+  expect(action.runs?.steps?.find(step => typeof step.uses === "string" && step.uses.startsWith("actions/setup-node@"))?.with).toMatchObject({
+    "package-manager-cache": false,
+  });
 });
