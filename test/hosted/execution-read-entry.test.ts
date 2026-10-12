@@ -4,7 +4,9 @@ import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { defaults } from "../../src/config.js";
 import { FirestoreDispatchClaims } from "../../src/hosted/firestore-dispatch-claims.js";
+import { FirestoreSpendLedger } from "../../src/hosted/firestore-spend-ledger.js";
 import { readHostedExecution, runHostedExecutionCli } from "../../src/hosted/execution-read-entry.js";
+import { runHostedSpendCli } from "../../src/hosted/spend-read-entry.js";
 import { createFakeFirestore } from "../helpers/fake-firestore.js";
 
 const run = { runId: "a".repeat(32), repository: "owner/private", installationId: 42, event: "installation" as const,
@@ -71,5 +73,36 @@ it("records metadata-only access failure without acquiring a launch claim or wri
     expect(fetcher).toHaveBeenCalledOnce();
     const trace = await readFile(join(root, "evidence", run.runId, "run.jsonl"), "utf8");
     expect(trace).toContain('"status":"error"'); expect(trace).not.toContain("PRIVATE_DIAGNOSTIC");
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+it.each(["pending", "unknown", "settled"])("reads original-month %s usage with only metadata GETs and no policy or accounting changes", async state => {
+  const root = await mkdtemp(join(tmpdir(), "aw-usage-read-")), cloud = createFakeFirestore("spending");
+  const options = { ...cloud.options, budgetId: "global-2026-09" };
+  await FirestoreSpendLedger.initialize(options, { maxUsd: 1, history: [] });
+  await FirestoreSpendLedger.initialize({ ...options, budgetId: "installation-42-2026-09" }, { maxUsd: 1, history: [] });
+  const ledger = await FirestoreSpendLedger.open({ ...options, installationBudgetId: "installation-42-2026-09" });
+  const id = await ledger.reserve("PRIVATE_MODEL", 0.1, "a".repeat(64));
+  if (state === "unknown") await ledger.recordUnknown(id);
+  if (state === "settled") await ledger.settle(id, { inputTokens: 1, outputTokens: 2, costUsd: 0.003 });
+  const before = JSON.stringify([...cloud.records]), updateTime = new Date().toISOString(); cloud.calls.length = 0;
+  const fetcher: typeof fetch = async (input, init) => {
+    expect(init?.method).toBe("GET"); expect(init?.body).toBeUndefined();
+    const uri = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    if (uri.origin === "http://metadata.google.internal") return Response.json({ access_token: "local-fixture-identity", expires_in: 3600, token_type: "Bearer" }, { headers: { "Metadata-Flavor": "Google" } });
+    const response = await cloud.fetcher(input, init);
+    if (response.status !== 200) return response;
+    return Response.json({ ...await response.json() as Record<string, unknown>, updateTime });
+  };
+  const args = ["--reservation-id", id, "--installation-id", "42", "--month", "2026-09"], environment = { ACCESSWRIGHT_HOSTED_CONFIG: JSON.stringify(config(root)) };
+  try {
+    const result = await runHostedSpendCli(args, environment, { fetcher });
+    expect(result).toEqual({ id, state, recordedAt: updateTime, costUsd: state === "settled" ? 0.003 : null });
+    expect(cloud.calls.map(call => call.method)).toEqual(["GET", "GET", "GET"]);
+    const trace = await readFile(join(root, "evidence", "usage", id, "run.jsonl"), "utf8");
+    expect(trace + JSON.stringify(result)).not.toMatch(/PRIVATE_MODEL|promptHash|reservedUsd|historyUpperBound|budgetId/);
+    await expect(runHostedSpendCli([...args.slice(0, 5), "2026-10"], environment, { fetcher })).rejects.toThrow(/absent/);
+    expect(JSON.stringify([...cloud.records])).toBe(before);
+    await expect(runHostedSpendCli([...args, "--retry"], environment, { fetcher })).rejects.toThrow(/Expected/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

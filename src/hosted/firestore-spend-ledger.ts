@@ -106,14 +106,24 @@ export class FirestoreSpendLedger implements SpendLedger {
     const current = await this.documents.getVersion(z.string().uuid().parse(id));
     if (!current || current.record.kind !== "reservation" || current.record.budgetId !== this.budgetId ||
       current.record.installationBudgetId !== this.installationBudgetId) throw new Error("Unknown budget reservation");
-    if (current.record.state === "settled") throw new Error("Budget reservation was already settled");
     return { ...current, record: current.record };
+  }
+
+  /** One scoped call's server-version observation, never reserved or historical spend. */
+  async observeReservation(id: string) {
+    const { record, updateTime } = await this.readReservation(id);
+    const timestamp = z.iso.datetime().safeParse(updateTime);
+    if (!timestamp.success || Date.parse(updateTime) < Date.parse(record.createdAt) || Date.parse(updateTime) > Date.now()) {
+      throw new Error("Unconfirmed usage observation timestamp");
+    }
+    return { id: record.runId, recordedAt: updateTime, state: record.state, costUsd: record.state === "settled" ? record.usage?.costUsd ?? null : null };
   }
 
   async settle(id: string, input: LlmUsage): Promise<void> {
     const usage = usageSchema.parse(input);
     const [budgets, claimed] = await Promise.all([this.readBudgets(), this.readReservation(id)]);
     const entry = claimed.record;
+    if (entry.state === "settled") throw new Error("Budget reservation was already settled");
     const exceeded = usage.costUsd > entry.reservedUsd + Number.EPSILON;
     const changes = budgets.map(({ record: budget, updateTime }) => {
       const pendingAttempts = budget.pendingAttempts - (entry.state === "pending" ? 1 : 0);
@@ -133,6 +143,7 @@ export class FirestoreSpendLedger implements SpendLedger {
 
   async recordUnknown(id: string): Promise<void> {
     const [budgets, claimed] = await Promise.all([this.readBudgets(), this.readReservation(id)]);
+    if (claimed.record.state === "settled") throw new Error("Budget reservation was already settled");
     if (claimed.record.state === "unknown") return;
     if (budgets.some(current => current.record.pendingAttempts < 1)) throw new Error("Cumulative reservation accounting is inconsistent");
     await this.documents.commit([

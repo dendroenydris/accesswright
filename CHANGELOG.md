@@ -18,6 +18,7 @@
 
 ### Added
 
+- Read-only settled-usage observation with original global/installation allowance scopes and the server document version time; pending and unknown costs remain null.
 - Single-run, read-only execution observation bound to the durable dispatch claim, fixed Cloud Run job and actual execution identity, with metadata-only output.
 - Offline operational alert preview for terminal job failure rate, settled daily model cost and duration p95, with explicit policies and incomplete-evidence states.
 - Trusted full-source publication artifacts rebuilt from independent replay, with candidate/report/base binding and delivery only after confirmed private-source deletion.
