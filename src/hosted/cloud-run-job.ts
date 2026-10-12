@@ -19,7 +19,9 @@ const operationSchema = z.object({
   name: z.string().regex(/^projects\/[a-z0-9-]+\/locations\/[a-z0-9-]+\/operations\/[A-Za-z0-9_-]+$/),
   done: z.boolean().optional(),
   error: z.object({ code: z.number().int().optional() }).passthrough().optional(),
-}).passthrough();
+  response: z.record(z.string(), z.unknown()).optional(),
+}).passthrough().refine(operation => !(operation.error && operation.response) &&
+  (operation.done === true || (operation.error === undefined && operation.response === undefined)), "Contradictory Cloud Run operation result");
 
 async function readBoundedOperation(response: Response): Promise<z.infer<typeof operationSchema>> {
   if (Number(response.headers.get("content-length") ?? 0) > 12000) {
@@ -90,10 +92,10 @@ export class CloudRunJobInvoker {
     this.fetcher = options.fetcher ?? fetch;
   }
 
-  /** Read-only reconciliation; never re-dispatch a run based on operation polling. */
+  /** API-operation status only, not terminal execution evidence; never re-dispatch based on polling. */
   async inspectOperation(operation: string): Promise<{
     operation: string;
-    status: "pending" | "succeeded" | "failed";
+    status: "pending" | "succeeded" | "failed" | "unknown";
   }> {
     const name = operationSchema.shape.name.parse(operation);
     if (!name.startsWith(this.operationPrefix)) {
@@ -115,7 +117,7 @@ export class CloudRunJobInvoker {
     }
     const result = await readBoundedOperation(response);
     if (result.name !== name) throw new Error("Cloud Run operation identity mismatch");
-    const status = result.done !== true ? "pending" : result.error ? "failed" : "succeeded";
+    const status = result.done !== true ? "pending" : result.error ? "failed" : result.response ? "succeeded" : "unknown";
     return { operation: name, status };
   }
 

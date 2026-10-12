@@ -94,6 +94,20 @@ it("fails closed on oversized streamed Cloud Run operation responses and mismatc
   oversized = false;
   await expect(invoker.inspectOperation(operation)).rejects.toThrow(/identity/i);
 });
+
+it("keeps a completed operation without a result unknown rather than inferring success", async () => {
+  const operation = "projects/accesswright-dev-123/locations/europe-west3/operations/abcdef";
+  const invoker = new CloudRunJobInvoker({ projectId: "accesswright-dev-123", region: "europe-west3", jobId: "accesswright-worker", containerName: "accesswright",
+    getAccessToken: () => Promise.resolve("fixture"), fetcher: () => Promise.resolve(Response.json({ name: operation, done: true })) });
+  expect(await invoker.inspectOperation(operation)).toEqual({ operation, status: "unknown" });
+});
+
+it.each([{ done: false, response: {} }, { done: true, response: {}, error: { code: 13 } }])("rejects contradictory Cloud Run operation results (%j)", async result => {
+  const operation = "projects/accesswright-dev-123/locations/europe-west3/operations/abcdef";
+  const invoker = new CloudRunJobInvoker({ projectId: "accesswright-dev-123", region: "europe-west3", jobId: "accesswright-worker", containerName: "accesswright",
+    getAccessToken: () => Promise.resolve("fixture"), fetcher: () => Promise.resolve(Response.json({ name: operation, ...result })) });
+  await expect(invoker.inspectOperation(operation)).rejects.toThrow();
+});
 it("rejects non-scoped run tokens, invalid job IDs and remote failures without exposing contents", async () => {
   const make = (id: string) => new CloudRunJobInvoker({
     projectId: "accesswright-dev-123", region: "europe-west3", jobId: id,

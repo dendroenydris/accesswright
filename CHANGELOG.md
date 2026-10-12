@@ -69,6 +69,7 @@
 
 ### Fixed
 
+- Kept completed Cloud Run operations with absent results unknown and rejected contradictory results instead of inferring success.
 - Enforced the existing Firestore dispatch-response byte limit during streaming reads and cancelled oversized bodies before full buffering.
 - Recorded Hosted model outcomes and known usage in per-run JSONL traces without source or credentials; uncertain observer failures keep the run blocked.
 - Rejected repeated run identities across Firestore metadata pages before they can duplicate run or usage summaries.
