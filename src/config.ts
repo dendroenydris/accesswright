@@ -48,6 +48,8 @@ export const defaults = Object.freeze({
   naturalCasesInputMaxBytes: 2 * 1024 * 1024,
   naturalAuditTargetPatches: 50,
   secondCheckerMaxResults: 20000,
+  keyboardProbeMaxControls: 2048,
+  keyboardProbeMaxSteps: 256,
   operationMaxRecords: 10000,
   operationInputMaxBytes: 2 * 1024 * 1024,
   dockerControlTimeoutMs: 120000,

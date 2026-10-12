@@ -28,4 +28,10 @@ describe("persistent runner protocol boundaries", () => {
     expect(sourceRoutesForChanges(["app/layout.tsx"], map, ["/", "/other"])).toEqual(["/", "/other"]);
     expect(sourceRoutesForChanges(["components/New.tsx"], map, ["/", "/other"])).toEqual(["/", "/other"]);
   });
+  it("transports keyboard opt-in without adding it to existing commands", () => {
+    const scan = { action: "scan", baseUrl: "http://accesswright-app:3000", routes: ["/"], generation: "baseline", mobile: false, dark: false, interactions: true };
+    expect(BrowserCommandSchema.parse(scan)).not.toHaveProperty("keyboard");
+    expect(BrowserCommandSchema.parse({ ...scan, keyboard: true })).toHaveProperty("keyboard", true);
+    expect(BrowserCommandSchema.safeParse({ ...scan, keyboard: "true" }).success).toBe(false);
+  });
 });

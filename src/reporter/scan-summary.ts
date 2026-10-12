@@ -11,6 +11,7 @@ export const ScanSummarySchema = z.object({
   coverageComplete: z.boolean(), missingObservations: z.array(z.string()),
   sourceMapping: z.object({ mapped: count, total: count }).strict(),
   probeUnavailable: count,
+  keyboard: z.object({ expectedObservations: count, observedObservations: count, unavailableObservations: count, repeatedSequences: count, unreachedControls: count }).strict().optional(),
   rules: z.array(z.object({ ruleId: z.string(), criterion: z.string(), en301549: z.string().nullable(), before: count, remaining: count, incomplete: count }).strict()),
 }).strict();
 export type ScanSummary = z.infer<typeof ScanSummarySchema>;
@@ -33,6 +34,8 @@ export function summarizeScans(before: readonly BrowserObservation[], after: rea
   add(after.flatMap(page => page.violations), "remaining");
   add(after.flatMap(page => page.incomplete), "incomplete");
   const mapped = development.flatMap(page => page.violations);
+  const keyboardPages = after.filter(page => page.keyboard !== undefined);
+  const expectedKeyboard = before.filter(page => page.keyboard !== undefined);
   return ScanSummarySchema.parse({ countUnit: "finding per route and scan condition",
     routes: [...new Set([...before, ...after].map(page => page.route))].sort(),
     conditions: [...new Set([...before, ...after].map(page => page.condition))].sort(),
@@ -40,6 +43,13 @@ export function summarizeScans(before: readonly BrowserObservation[], after: rea
     coverageComplete: before.length > 0 && missingObservations.length === 0,
     missingObservations, sourceMapping: { mapped: mapped.filter(item => item.source !== null).length, total: mapped.length },
     probeUnavailable: after.reduce((sum, page) => sum + page.probeUnavailable.length, 0),
+    ...(keyboardPages.length === 0 && expectedKeyboard.length === 0 ? {} : { keyboard: {
+      expectedObservations: expectedKeyboard.length, observedObservations: keyboardPages.length,
+      unavailableObservations: expectedKeyboard.filter(page => !keyboardPages.some(item => identity(item) === identity(page))).length +
+        keyboardPages.filter(page => page.keyboard?.forward.stop !== "document-boundary" || page.keyboard.reverse.stop !== "document-boundary").length,
+      repeatedSequences: keyboardPages.reduce((n, page) => n + Number(page.keyboard?.forward.stop === "repeat") + Number(page.keyboard?.reverse.stop === "repeat"), 0),
+      unreachedControls: keyboardPages.reduce((n, page) => n + (page.keyboard?.unreachedControls.length ?? 0), 0),
+    } }),
     rules: [...groups.values()].sort((a, b) => a.ruleId.localeCompare(b.ruleId)),
   });
 }

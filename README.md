@@ -75,6 +75,12 @@ An optional IBM Equal Access engine supplements axe when `.accesswright.yml` con
 
 Reviewed image-name, document-title and missing HTML-language failures map to the corresponding axe identities. Other IBM rules retain an `ibm-` prefix and require human review. Cross-checker dedup requires the same mapped rule and actual DOM node; it keeps the larger occurrence count. Potential/manual/recommendation results remain inconclusive. Engine errors, empty execution or unresolved finding identities fail the scan instead of falling back to axe alone. Actual IBM version metadata enters scan reports and Track N exports; none of these checks proves legal conformity. Browser acceptance of this optional path remains pending.
 
+## Optional keyboard observations
+
+`scan: { keyboard: true }` records bounded forward Tab and reverse Shift+Tab sequences in a separate disposable browser context for each route and condition. It is off by default. Only DOM-order control indices, stop reasons and unreached-control counts are returned; the probe never presses activation keys or clicks controls. Focus handlers may change application state, so its page is kept separate from the verifier's existing browser facts and screenshots.
+
+Repeated focus, navigation, unmapped or nested contexts, reset failure and step exhaustion remain explicit incomplete observations. A repeated sequence is not a certified keyboard trap, and unreached controls can include intentionally nonsequential widgets. Frames, shadow trees, widget activation, meaningful focus order and screen-reader behavior require manual review. Reports retain aggregate unavailable/repeat/unreached counts; this advisory evidence does not change verifier comparisons or certify keyboard accessibility. Actual enabled-path browser acceptance remains pending.
+
 ## Backlog and PR-mode GitHub Action
 
 Backlog publication also requires the target repository's **Allow GitHub Actions to create and approve pull requests** setting and explicit workflow `contents: write` and `pull-requests: write` permissions. A disabled repository setting can return HTTP403 after verified repair commits are created. For GitHub's web-flow commits, recovery requires the expected bot author and a valid signature. Every recovery checks exact verified source and branch ownership before opening a missing PR; human or unattributable changes remain preserved.

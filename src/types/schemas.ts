@@ -40,6 +40,7 @@ export const AccesswrightConfigSchema = z
         mobile: z.boolean().default(true),
         darkScheme: z.boolean().default(false),
         ibm: z.boolean().optional(),
+        keyboard: z.boolean().optional(),
       })
       .strict()
       .default({ mobile: true, darkScheme: false }),

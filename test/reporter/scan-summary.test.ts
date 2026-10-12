@@ -28,3 +28,9 @@ it("retains actual additional checker versions without exporting its private rep
   const page = { ...before, checkerVersion: "4.13.0", ibmCheckerVersion: "4.0.34" };
   expect(summarizeScans([page], [page], [page]).checkerVersions).toEqual(["4.13.0", "ibm-equal-access@4.0.34"]);
 });
+it("keeps missing, repeated and unreached keyboard observations visible without private focus identities", () => {
+  const page = { ...before, keyboard: { scope: "main-document-tab-order" as const, controlCount: 2, forward: { order: [0], stop: "repeat" as const }, reverse: { order: [0], stop: "repeat" as const }, unreachedControls: [1] } };
+  expect(summarizeScans([page], [page], [page]).keyboard).toEqual({ expectedObservations: 1, observedObservations: 1, unavailableObservations: 1, repeatedSequences: 2, unreachedControls: 1 });
+  expect(summarizeScans([page], [before], [page]).keyboard?.unavailableObservations).toBe(1);
+  expect(summarizeScans([before], [before], [before])).not.toHaveProperty("keyboard");
+});

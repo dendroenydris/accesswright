@@ -13,6 +13,7 @@ describe("configuration boundary", () => {
     expect(config.scan.mobile).toBe(true);
     expect(config.model).toBeUndefined();
     expect(config.scan.ibm).toBeUndefined();
+    expect(config.scan.keyboard).toBeUndefined();
   });
   it("enables the second checker only with a boolean operator flag", async () => {
     const dir = await root();
@@ -26,6 +27,11 @@ describe("configuration boundary", () => {
     await writeFile(join(dir, ".accesswright.yml"), "routes:\n  - /posts/one\nscan:\n  mobile: false\nmaxCostUsd: 0.5\n");
     const config = await loadConfig(dir, { offline: true });
     expect(config).toMatchObject({ routes: ["/posts/one"], scan: { mobile: false }, maxCostUsd: 0.5, offline: true });
+  });
+  it("enables keyboard metadata only with an explicit boolean flag", async () => {
+    const dir = await root();await writeFile(join(dir, ".accesswright.yml"), "scan: {keyboard: true}\n");
+    expect((await loadConfig(dir)).scan.keyboard).toBe(true);
+    await writeFile(join(dir, ".accesswright.yml"), "scan: {keyboard: enabled}\n");await expect(loadConfig(dir)).rejects.toThrow();
   });
   it.each(["routes: [//evil.example]", "routes: ['/\\\\evil.example']", "unknown: true", "scan: {mobile: yes}", "routes: [/]\nroutes: [/other]"])("rejects unsafe or ambiguous configuration: %s", async (text) => {
     const dir = await root(); await writeFile(join(dir, ".accesswright.yml"), text);

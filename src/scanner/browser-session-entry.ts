@@ -6,6 +6,7 @@ import { defaults } from "../config.js";
 import { crawlSameOriginPaths } from "../routes/discovery.js";
 import { BrowserCommandSchema, BrowserScanOutputSchema, CrawlOutputSchema } from "../runner/session-protocol.js";
 import { scanBrowserPage } from "./browser-scan.js";
+import { collectKeyboardOrder } from "./keyboard.js";
 import { scanConditions } from "./browser-facts.js";
 import { mapRoutesBounded } from "./bounded-routes.js";
 import type { BrowserObservation } from "./observations.js";
@@ -65,6 +66,12 @@ if (command.action === "ready") {
             page.on("pageerror", error => { runtimeFailures.push(`runtime:${route}:${condition}:${createHash("sha256").update(error.message).digest("hex").slice(0, 16)}`); });
             await navigate(page, route);
             const result = await scanBrowserPage(page, { route, condition, generation: command.generation, evidenceDir, interactionProbes: command.interactions, ...(command.ibm === undefined ? {} : { ibm: command.ibm }) });
+            if (command.keyboard === true) {
+              const keyboardContext = await browser.newContext({ viewport: condition === "mobile-light" ? defaults.mobile : defaults.desktop,
+                colorScheme: condition === "desktop-dark" ? "dark" : "light", serviceWorkers: "block" });
+              try { const keyboardPage = await keyboardContext.newPage(); await navigate(keyboardPage, route); result.keyboard = await collectKeyboardOrder(keyboardPage); }
+              finally { await keyboardContext.close(); }
+            }
             result.probeFailures.push(...runtimeFailures);
             if (condition === "desktop-light") darkSupported = result.darkMediaDetected;
             routeObservations.push(result);

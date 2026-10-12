@@ -3,6 +3,7 @@ import { ScanConditionSchema } from "./browser-facts.js";
 import { SourceIndexEntrySchema } from "./source-index.js";
 import { SourceLocationSchema, ViolationSchema } from "../types/schemas.js";
 import type { PageVerificationState } from "../verifier/per-patch.js";
+import { KeyboardProbeSchema } from "./keyboard.js";
 
 export const AccessibleFactSchema = z.object({
   id: z.string(), role: z.string().nullable(), name: z.string(), text: z.string(),
@@ -27,6 +28,7 @@ export const BrowserObservationSchema = z.object({
   route: z.string().startsWith("/"), condition: ScanConditionSchema,
   checkerVersion: z.string().min(1).optional(),
   ibmCheckerVersion: z.string().regex(/^[0-9A-Za-z.+-]{1,64}$/).optional(),
+  keyboard: KeyboardProbeSchema.optional(),
   documentLanguage: z.string().optional(), documentTitle: z.string().optional(),
   sourceIndex: z.array(SourceIndexEntrySchema).max(20000).optional(),
   violations: z.array(ViolationSchema), incomplete: z.array(ViolationSchema),

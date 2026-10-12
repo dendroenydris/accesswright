@@ -18,6 +18,7 @@
 
 ### Added
 
+- Opt-in forward/reverse keyboard observations on disposable pages with bounded traversal and explicit incomplete scope; advisory metadata leaves verifier comparisons unchanged.
 - Opt-in pinned IBM Equal Access browser engine, reviewed rule mapping, occurrence-preserving cross-checker deduplication and explicit inconclusive/version metadata; enabled-path browser acceptance remains pending.
 - Offline Track N case collection from pinned baseline metadata, occurrence-preserving identities and a blank manual-audit checklist; no private rendered facts or automatic repair scores are retained.
 - Offline paired-label judge calibration with confusion counts, Cohen's kappa, distinct-fix checks and an explicit statistical gate; supplied labels do not authenticate review or alter evaluation results.
