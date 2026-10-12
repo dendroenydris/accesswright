@@ -18,6 +18,7 @@
 
 ### Added
 
+- Read-only closed-day metadata collection with shared Firestore snapshot versions, original-scope accounting reconciliation, actual execution reads and explicit coverage gaps.
 - Read-only settled-usage observation with original global/installation allowance scopes and the server document version time; pending and unknown costs remain null.
 - Single-run, read-only execution observation bound to the durable dispatch claim, fixed Cloud Run job and actual execution identity, with metadata-only output.
 - Offline operational alert preview for terminal job failure rate, settled daily model cost and duration p95, with explicit policies and incomplete-evidence states.

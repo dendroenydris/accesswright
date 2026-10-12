@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { defaults } from "../config.js";
+import { FirestoreMetadataStore } from "./firestore-metadata.js";
 
 import type { QueuedRun } from "./webhook.js";
 
@@ -67,11 +68,13 @@ async function boundedResponse(response: Response): Promise<unknown> {
  * No source, credentials, run-scoped token or provider prompts are persisted.
  */
 export class FirestoreDispatchClaims {
+  private readonly documents: FirestoreMetadataStore<DispatchClaim>;
   private readonly url: string;
   private readonly fetcher: typeof fetch;
   private readonly getAccessToken: () => Promise<string>;
 
   constructor(options: DispatchClaimOptions) {
+    this.documents = new FirestoreMetadataStore(options, metadataSchema);
     const project = projectSchema.parse(options.projectId);
     const collection = collectionSchema.parse(options.collectionId);
     this.url = "https://firestore.googleapis.com/v1/projects/" + project +
@@ -124,6 +127,13 @@ export class FirestoreDispatchClaims {
   async read(id: string): Promise<DispatchClaim | undefined> {
     const result = await this.readVersion(id);
     return result === undefined ? undefined : structuredClone(result.value);
+  }
+
+  async records(readTime: string): Promise<DispatchClaim[]> {
+    return (await this.documents.versions(readTime)).map(({ record, updateTime }) => {
+      if (Date.parse(updateTime) < Date.parse(record.createdAt)) throw new Error("Dispatch version predates its creation timestamp");
+      return record;
+    });
   }
 
   async claim(raw: QueuedRun): Promise<boolean> {

@@ -64,3 +64,15 @@ it("withholds partial listings when the cloud refuses the fixed snapshot, withou
   await expect(metadata.records()).rejects.toThrow(/list failed/);
   expect(queries).toHaveLength(2); expect(queries[1].searchParams.get("readTime")).toBe(queries[0].searchParams.get("readTime"));
 });
+
+it("keeps document versions from the requested snapshot without rereading latest state", async () => {
+  const readTime = "2026-10-12T01:01:00.000Z";
+  expect(await store([{ documents: [document("one")] }]).versions(readTime)).toEqual([
+    { record: { runId: "one", spentUsd: 0.75 }, updateTime: document("one").updateTime },
+  ]);
+});
+
+it("refuses versions newer than the pinned snapshot and invalid read times", async () => {
+  await expect(store([{ documents: [document("one")] }]).versions("2026-10-12T00:59:00.000Z")).rejects.toThrow(/version/);
+  await expect(store([]).versions("invalid")).rejects.toThrow();
+});

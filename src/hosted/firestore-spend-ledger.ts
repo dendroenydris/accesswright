@@ -28,6 +28,12 @@ const recordSchema = z.union([budgetSchema, reservationSchema]);
 type Budget = z.infer<typeof budgetSchema>;
 type Reservation = z.infer<typeof reservationSchema>;
 
+function observeVersion(record: Reservation, updateTime: string, observedAt: string) {
+  if (!z.iso.datetime().safeParse(updateTime).success || Date.parse(updateTime) < Date.parse(record.createdAt) ||
+    Date.parse(updateTime) > Date.parse(observedAt)) throw new Error("Unconfirmed usage observation timestamp");
+  return { id: record.runId, recordedAt: updateTime, state: record.state, costUsd: record.state === "settled" ? record.usage?.costUsd ?? null : null };
+}
+
 export interface FirestoreSpendOptions extends FirestoreMetadataOptions { budgetId: string; installationBudgetId?: string }
 
 /** Shared cumulative cap with one atomic budget/reservation commit before each provider call. */
@@ -112,11 +118,40 @@ export class FirestoreSpendLedger implements SpendLedger {
   /** One scoped call's server-version observation, never reserved or historical spend. */
   async observeReservation(id: string) {
     const { record, updateTime } = await this.readReservation(id);
-    const timestamp = z.iso.datetime().safeParse(updateTime);
-    if (!timestamp.success || Date.parse(updateTime) < Date.parse(record.createdAt) || Date.parse(updateTime) > Date.now()) {
-      throw new Error("Unconfirmed usage observation timestamp");
-    }
-    return { id: record.runId, recordedAt: updateTime, state: record.state, costUsd: record.state === "settled" ? record.usage?.costUsd ?? null : null };
+    return observeVersion(record, updateTime, new Date().toISOString());
+  }
+
+  /** Enumerate original scopes and reconcile every reservation against the same snapshot's cumulative policies. */
+  static async observeCollection(options: FirestoreMetadataOptions, readTime: string) {
+    const documents = await new FirestoreMetadataStore(options, recordSchema).versions(readTime);
+    const budgets = documents.map(document => document.record).filter(record => record.kind === "budget");
+    const reservations = documents.filter(document => document.record.kind === "reservation").map(document => ({
+      record: reservationSchema.parse(document.record), updateTime: document.updateTime,
+    }));
+    const globalMonths = budgets.filter(budget => budget.runId.startsWith(defaults.hostedGlobalBudgetPrefix))
+      .map(budget => budget.runId.slice(defaults.hostedGlobalBudgetPrefix.length));
+    const month = /^\d{4}-(?:0[1-9]|1[0-2])$/;
+    const scoped = reservations.every(({ record }) => {
+      const originalMonth = record.budgetId.slice(defaults.hostedGlobalBudgetPrefix.length);
+      return record.budgetId.startsWith(defaults.hostedGlobalBudgetPrefix) && month.test(originalMonth) &&
+        record.installationBudgetId !== undefined && record.installationBudgetId.startsWith(defaults.hostedInstallationBudgetPrefix) &&
+        new RegExp("^[1-9][0-9]*-" + originalMonth + "$", "u").test(record.installationBudgetId.slice(defaults.hostedInstallationBudgetPrefix.length)) &&
+        budgets.some(budget => budget.runId === record.budgetId) && budgets.some(budget => budget.runId === record.installationBudgetId);
+    });
+    const reconciled = scoped && globalMonths.every(value => month.test(value)) && budgets.every(budget => {
+      if (!budget.runId.startsWith(defaults.hostedGlobalBudgetPrefix) &&
+        (!budget.runId.startsWith(defaults.hostedInstallationBudgetPrefix) ||
+          !/^[1-9][0-9]*-\d{4}-(?:0[1-9]|1[0-2])$/.test(budget.runId.slice(defaults.hostedInstallationBudgetPrefix.length)))) return false;
+      const entries = reservations.map(document => document.record).filter(entry => entry.budgetId === budget.runId || entry.installationBudgetId === budget.runId);
+      const settled = entries.filter(entry => entry.state === "settled"), unsettled = entries.filter(entry => entry.state !== "settled");
+      const equal = (left: number, right: number) => Math.abs(left - right) <= Number.EPSILON * Math.max(1, left, right) * Math.max(1, entries.length);
+      return budget.settledAttempts === settled.length && budget.pendingAttempts === entries.filter(entry => entry.state === "pending").length &&
+        budget.unknownAttempts === entries.filter(entry => entry.state === "unknown").length &&
+        equal(budget.settledUsd, settled.reduce((sum, entry) => sum + (entry.usage?.costUsd ?? 0), 0)) &&
+        equal(budget.reservedUsd, unsettled.reduce((sum, entry) => sum + entry.reservedUsd, 0));
+    });
+    return { reconciled, globalMonths, historicalUsageUnknown: budgets.some(budget => budget.historyUpperBoundUsd > 0),
+      reservations: reservations.map(({ record, updateTime }) => ({ ...observeVersion(record, updateTime, readTime), createdAt: record.createdAt })) };
   }
 
   async settle(id: string, input: LlmUsage): Promise<void> {

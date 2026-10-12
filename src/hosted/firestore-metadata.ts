@@ -178,12 +178,18 @@ export class FirestoreMetadataStore<T extends { runId: string }> {
     return structuredClone(saved);
   }
 
-  async records(): Promise<T[]> {
-    const records: T[] = [];
+  async records(readTime = new Date().toISOString()): Promise<T[]> {
+    return (await this.versions(readTime)).map(document => document.record);
+  }
+
+  /** Values and server versions from one snapshot, including across collections. */
+  async versions(readTime: string): Promise<Array<{ record: T; updateTime: string }>> {
+    z.iso.datetime().parse(readTime);
+    if (Date.parse(readTime) > Date.now()) throw new Error("Firestore snapshot is in the future");
+    const records: Array<{ record: T; updateTime: string }> = [];
     const seen = new Set<string>();
     const seenRunIds = new Set<string>();
     // Independent latest-state pages can miss rows changed between requests.
-    const readTime = new Date().toISOString();
     let token = "";
     for (let page = 0; page < defaults.firestoreMaxListPages; page += 1) {
       const response = await this.request("GET", "?pageSize=" + defaults.firestorePageSize +
@@ -195,10 +201,13 @@ export class FirestoreMetadataStore<T extends { runId: string }> {
       }
       const result = pageSchema.parse(await boundedJson(response));
       for (const doc of result.documents ?? []) {
-        const record = this.decode(doc).record;
+        const decoded = this.decode(doc), record = decoded.record;
+        if (!z.iso.datetime().safeParse(decoded.updateTime).success || Date.parse(decoded.updateTime) > Date.parse(readTime)) {
+          throw new Error("Firestore document version is outside the snapshot");
+        }
         if (seenRunIds.has(record.runId)) throw new Error("Duplicate Firestore run identity");
         seenRunIds.add(record.runId);
-        records.push(record);
+        records.push(decoded);
       }
       token = result.nextPageToken ?? "";
       if (!token) return records;
