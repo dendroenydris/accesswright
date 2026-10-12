@@ -43,8 +43,11 @@ it.skipIf(!image)("downloads pinned input in the generic non-root image, cleans 
     const candidate = HostedCandidateSchema.parse(JSON.parse(await readFile(candidateFile, "utf8")) as unknown);
     await removePlatformMetadata(repoPath);
     const evidence = await mkdtemp(join(tempRoot, "worker-image-download-evidence-"));
-    const receipt = await verifyHostedCandidate({ repoPath, verifiedBaseSha: baseSha, tempRoot: join(root, "trusted-runs"), runtimeRoot: process.cwd(),
+    const verified = await verifyHostedCandidate({ repoPath, verifiedBaseSha: baseSha, tempRoot: join(root, "trusted-runs"), runtimeRoot: process.cwd(),
       reconciled: { usage: { inputTokens: 300, outputTokens: 100, spentUsd: 0.0005 }, unknownUsage: false, providerVerification: "fake-provider" } }, candidate);
+    const receipt = verified?.receipt;
+    expect(verified?.artifact.patches).toEqual(candidate.patches);
+    expect(verified?.artifact.report.fixed).toBe(3);
     expect(receipt?.verifiedBaseSha).toBe(baseSha); expect(await git(["status", "--porcelain", "--untracked-files=all"])).toBe("");
     await writeFile(join(evidence, "result.json"), JSON.stringify({ kind: "owned-generic-image-downloaded-input-independent-docker", image, status: "ready-for-review", baseSha,
       reportDigest: receipt?.reportDigest, acceptedFixes: candidate.report.fixed, ownedDownloadedInputRemoved: true, inputDownloads: 1, cloudApis: "fake", paidCalls: 0, fakeProviderCalls: 1 }), { mode: 0o600, flag: "wx" });

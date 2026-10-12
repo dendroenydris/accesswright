@@ -11,6 +11,7 @@ import type { GitHubSourceAccess } from "./github-source-access.js";
 import { HostedRunWorkflow } from "./run-workflow.js";
 import type { HostedRunStore } from "./run-workflow.js";
 import type { QueuedRun } from "./webhook.js";
+import type { HostedVerifiedCandidateConsumer } from "./verified-publication.js";
 
 /** Trusted host only: separate worker and task ingress, shared durable identities and original source pins. */
 export function createHostedTrustedServices(options: {
@@ -24,6 +25,8 @@ export function createHostedTrustedServices(options: {
   pinOriginalRevision: (run: QueuedRun) => Promise<string>;
   scheduleVerification: (runId: string, reportDigest: string) => Promise<void>;
   authenticateTask: (authorization: string) => Promise<boolean>;
+  /** Trusted-only consumer; deployment must separately authorize repository writes. */
+  onVerifiedCandidate?: HostedVerifiedCandidateConsumer;
   tempRoot: string;
   runtimeRoot: string;
   evidenceRoot: string;
@@ -40,6 +43,7 @@ export function createHostedTrustedServices(options: {
   };
   const coordinator = createHostedCandidateCoordinator({ agent, store: options.candidates, cleanup: options.cleanup,
     evidenceRoot: options.evidenceRoot, scheduleVerification: options.scheduleVerification,
+    ...(options.onVerifiedCandidate ? { onVerifiedCandidate: options.onVerifiedCandidate } : {}),
     resolveCheckout: async runId => {
       const run = await options.agent.runStore.get(runId);
       if (!run) throw new Error("Trusted source run identity is unavailable");

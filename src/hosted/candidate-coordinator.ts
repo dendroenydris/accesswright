@@ -12,7 +12,9 @@ import { clearHostedCandidate } from "./candidate-cleanup.js";
 import type { FirestoreCandidateCleanupStore } from "./candidate-cleanup.js";
 import { eligibleForTrustedVerification, hostedReportDigest } from "./run-workflow.js";
 import { verifyHostedCandidate } from "./trusted-verifier.js";
-import type { HostedVerificationCheckout } from "./trusted-verifier.js";
+import type { HostedVerificationCheckout, HostedVerifiedCandidate } from "./trusted-verifier.js";
+import { hostedVerifiedArtifactDigest } from "./verified-publication.js";
+import type { HostedVerifiedCandidateConsumer } from "./verified-publication.js";
 
 /** Mount behind HostedRunWorkflow's durable staging/verification claims; workers never call the verifier directly. */
 export function createHostedCandidateCoordinator(options: {
@@ -23,11 +25,12 @@ export function createHostedCandidateCoordinator(options: {
   resolveCheckout: (runId: string) => Promise<HostedVerificationCheckout>;
   /** Durably enqueue only the run/report identity before any private upload. */
   scheduleVerification: (runId: string, reportDigest: string) => Promise<void>;
+  onVerifiedCandidate?: HostedVerifiedCandidateConsumer;
   ttlSeconds?: number;
 }) {
   const runSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
   const ttl = z.number().int().min(defaults.hostedMinTtlSeconds).max(defaults.hostedMaxTtlSeconds).parse(options.ttlSeconds ?? defaults.hostedDefaultTtlSeconds);
-  const record = async (runId: string, step: string, status: "ok" | "rejected", digest: string) => {
+  const record = async (runId: string, step: string, status: "ok" | "rejected" | "error", digest: string) => {
     const directory = join(options.evidenceRoot, runId);
     await mkdir(directory, { recursive: true, mode: 0o700 });
     await appendRunRecord(join(directory, "run.jsonl"), { timestamp: new Date().toISOString(), step, status, metadata: { candidateDigest: digest } });
@@ -67,11 +70,17 @@ export function createHostedCandidateCoordinator(options: {
         return null;
       }
       const { candidate, ...reference } = staged;
+      let verified: HostedVerifiedCandidate | null;
       try {
         if (hostedReportDigest(candidate.report) !== digest) return null;
         const reconciled = await options.agent.sealForVerification(runId);
         const checkout = await options.resolveCheckout(runId);
-        try { return await verifyHostedCandidate({ ...checkout, reconciled }, candidate); }
+        try {
+          verified = await verifyHostedCandidate({ ...checkout, reconciled }, candidate);
+          if (verified && (verified.receipt.reportDigest !== digest || verified.receipt.verifiedBaseSha !== checkout.verifiedBaseSha ||
+            verified.artifact.candidateDigest !== staged.candidateDigest || verified.artifact.workerReportDigest !== digest ||
+            verified.artifact.verifiedBaseSha !== checkout.verifiedBaseSha)) throw new Error("Trusted artifact and staged candidate identity mismatch");
+        }
         finally {
           await checkout.release().catch(async (error: unknown) => {
             await record(runId, "hosted-checkout-cleanup-unconfirmed", "rejected", staged.candidateDigest); throw error;
@@ -83,6 +92,16 @@ export function createHostedCandidateCoordinator(options: {
         await clearHostedCandidate(options, runId, reference);
         await record(runId, "hosted-candidate-cleared", "ok", staged.candidateDigest);
       }
+      if (verified && options.onVerifiedCandidate) {
+        try {
+          await options.onVerifiedCandidate(runId, verified.artifact, hostedVerifiedArtifactDigest(verified.artifact));
+          await record(runId, "hosted-verified-artifact-delivered", "ok", staged.candidateDigest);
+        } catch (error) {
+          await record(runId, "hosted-verified-artifact-delivery-unconfirmed", "error", staged.candidateDigest);
+          throw error;
+        }
+      }
+      return verified?.receipt ?? null;
     },
   };
 }

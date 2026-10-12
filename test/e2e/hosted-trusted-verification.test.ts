@@ -54,8 +54,12 @@ it("requires a second real Docker verifier before a private Hosted service accep
     const server = createHostedAgentServer({ agent, store, verifyTrustedResult: async (runId, digest) => {
       if (runId !== "hosted-fixture" || digest !== hostedReportDigest(input.report)) return null;
       independentChecks++;
-      return verifyHostedCandidate({ repoPath, verifiedBaseSha: baseSha, tempRoot: privateTemp, runtimeRoot: process.cwd(),
+      const verified = await verifyHostedCandidate({ repoPath, verifiedBaseSha: baseSha, tempRoot: privateTemp, runtimeRoot: process.cwd(),
         reconciled: await agent.sealForVerification(runId) }, input);
+      expect(verified?.artifact.patches).toEqual(input.patches);
+      expect(verified?.artifact.report.checks).toHaveLength(4);
+      expect(verified?.artifact.report.scanSummary?.coverageComplete).toBe(true);
+      return verified?.receipt ?? null;
     } });
     server.listen(0, "127.0.0.1");
     await once(server, "listening");

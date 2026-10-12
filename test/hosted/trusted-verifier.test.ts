@@ -6,6 +6,8 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { verifyHostedCandidate } from "../../src/hosted/trusted-verifier.js";
 import { hostedReportDigest } from "../../src/hosted/run-workflow.js";
+import { hostedCandidateDigest } from "../../src/hosted/agent-protocol.js";
+import { hostedVerifiedArtifactDigest } from "../../src/hosted/verified-publication.js";
 import type { RepairRuntime } from "../../src/core/repair.js";
 import { planFixTasks } from "../../src/planner/planner.js";
 import type { RunReport } from "../../src/reporter/report.js";
@@ -30,11 +32,17 @@ function observation(violations: Violation[], hidden = false): BrowserObservatio
 class Runtime implements RepairRuntime {
   config = AccesswrightConfigSchema.parse({});
   observations = [observation([violation])];
+  baselineObservations = [observation([violation])];
+  productionBaseline = [observation([violation])];
+  finalObservations = [observation([])];
   finalChecks: ProductionCheckResult[] = ["build", "typecheck", "lint", "tests"].map(check => ({
     check: check as ProductionCheckResult["check"], argv: [], available: true, status: "passed", exitCode: 0, durationMs: 1, failureIds: [],
   }));
   source = source;
   patches: Patch[] = [];
+  journal = { exportPatches: vi.fn((ids: readonly string[]) => Promise.resolve(this.patches.filter(patch => ids.includes(patch.taskId)).map(patch => ({
+    taskId: patch.taskId, changes: patch.changes.map(change => ({ ...change, before: source, after: this.source })),
+  })))) };
   closed = false;
   onFinal: (() => Promise<void>) | undefined;
   evidenceDir: string;
@@ -86,7 +94,10 @@ afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, {
 
 it("produces a digest-bound receipt only after independent patch and production checks", async () => {
   const f = await fixture();
-  expect(await verifyHostedCandidate(f.options, f.input, { prepare: f.prepare })).toEqual({ reportDigest: hostedReportDigest(f.input.report), verifiedBaseSha: f.options.verifiedBaseSha });
+  const verified = await verifyHostedCandidate(f.options, f.input, { prepare: f.prepare });
+  expect(verified?.receipt).toEqual({ reportDigest: hostedReportDigest(f.input.report), verifiedBaseSha: f.options.verifiedBaseSha });
+  expect(verified?.artifact).toMatchObject({ candidateDigest: hostedCandidateDigest(f.input), workerReportDigest: hostedReportDigest(f.input.report),
+    verifiedBaseSha: f.options.verifiedBaseSha, patches: f.input.patches, report: { fixed: 1, status: "verified", applied: false, scanSummary: { coverageComplete: true } } });
   expect(f.runtime.closed).toBe(true);
   expect(await readFile(join(f.options.repoPath, location.file), "utf8")).toBe(source);
   expect(await readdir(f.options.tempRoot)).toEqual([]);
@@ -99,6 +110,33 @@ it("rejects a worker's claimed success when independent browser facts show hidde
   expect(await verifyHostedCandidate(f.options, f.input, { prepare: f.prepare })).toBeNull();
   expect(f.runtime.patches).toEqual([]);
   expect(f.runtime.closed).toBe(true);
+});
+
+it("exports full journal source and rebuilds report facts instead of forwarding worker summaries", async () => {
+  const f = await fixture();
+  f.input.patches[0].changes[0].before = ' aria-bogus="bad"';
+  f.input.patches[0].changes[0].after = "";
+  f.input.report.attempts = 999;
+  f.input.report.needsHuman = 999;
+  f.input.report.checks[0].durationMs = 999;
+  f.input.report.outcomes[0].reason = "private worker summary";
+  const verified = await verifyHostedCandidate(f.options, f.input, { prepare: f.prepare });
+  expect(verified?.artifact.patches[0].changes[0]).toEqual({ path: location.file, before: source, after: source.replace(' aria-bogus="bad"', "") });
+  expect(verified?.artifact.report).toMatchObject({ attempts: 1, needsHuman: 0,
+    outcomes: [{ reason: null }], usage: f.options.reconciled.usage, providerVerification: "not-run" });
+  expect(verified?.artifact.report.checks[0].durationMs).toBe(1);
+  expect(verified?.artifact.report.startedAt).not.toBe(f.input.report.startedAt);
+  expect(f.runtime.journal.exportPatches).toHaveBeenCalledExactlyOnceWith([task.id]);
+  const log = await readFile(join(f.runtime.evidenceDir, "run.jsonl"), "utf8");
+  expect(log).toContain(verified ? hostedVerifiedArtifactDigest(verified.artifact) : "missing");
+  expect(log).not.toContain(source); expect(log).not.toContain("private worker summary");
+});
+
+it("withholds the artifact when journal export fails", async () => {
+  const f = await fixture();
+  f.runtime.journal.exportPatches.mockRejectedValueOnce(new Error("journal replay failed"));
+  await expect(verifyHostedCandidate(f.options, f.input, { prepare: f.prepare })).rejects.toThrow("journal replay failed");
+  expect(f.runtime.closed).toBe(true); expect(await readdir(f.options.tempRoot)).toEqual([]);
 });
 
 it.each(["failed", "unavailable", "contradictory", "duplicate"])("rejects independently %s production evidence", async kind => {

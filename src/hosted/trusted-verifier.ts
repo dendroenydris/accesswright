@@ -9,17 +9,26 @@ import { DockerRepairSession } from "../runner/repair-session.js";
 import { verifyCheckoutProvenance } from "../runner/checkout-provenance.js";
 import type { RepairSessionOptions } from "../runner/repair-session.js";
 import type { ProductionCheckResult } from "../runner/production-checks.js";
-import { RunReportSchema } from "../reporter/report.js";
+import type { PatchJournal } from "../runner/patch-journal.js";
+import type { BrowserObservation } from "../scanner/observations.js";
+import { makeRunReport, RunReportSchema } from "../reporter/report.js";
 import type { RunReport } from "../reporter/report.js";
+import { summarizeScans } from "../reporter/scan-summary.js";
 import { copyTargetSnapshot } from "../sandbox/source-boundary.js";
 import { appendRunRecord } from "../tracer/run-record.js";
-import { HostedCandidateSchema } from "./agent-protocol.js";
+import { HostedCandidateSchema, hostedCandidateDigest } from "./agent-protocol.js";
 import { eligibleForTrustedVerification, hostedReportDigest } from "./run-workflow.js";
 import type { TrustedRunReceipt } from "./run-workflow.js";
+import { HostedVerifiedArtifactSchema, hostedVerifiedArtifactDigest } from "./verified-publication.js";
+import type { HostedVerifiedArtifact } from "./verified-publication.js";
 
 interface VerificationRuntime extends RepairRuntime {
   evidenceDir: string;
   finalChecks: ProductionCheckResult[];
+  journal: Pick<PatchJournal, "exportPatches">;
+  productionBaseline: BrowserObservation[];
+  baselineObservations: BrowserObservation[];
+  finalObservations: BrowserObservation[];
   close(): Promise<void>;
 }
 
@@ -38,12 +47,17 @@ export interface HostedVerificationCheckout extends Omit<HostedVerificationOptio
   release(): Promise<void>;
 }
 
+export interface HostedVerifiedCandidate {
+  receipt: TrustedRunReceipt;
+  artifact: HostedVerifiedArtifact;
+}
+
 /** Replays only claimed patches in a fresh Docker verifier; never calls a provider or publishes. */
 export async function verifyHostedCandidate(
   options: HostedVerificationOptions,
   input: unknown,
   dependencies: { prepare?: (options: RepairSessionOptions) => Promise<VerificationRuntime> } = {},
-): Promise<TrustedRunReceipt | null> {
+): Promise<HostedVerifiedCandidate | null> {
   const parsed = HostedCandidateSchema.safeParse(input);
   const reconciled = RunReportSchema.pick({ usage: true, unknownUsage: true, providerVerification: true }).parse(options.reconciled);
   if (!parsed.success) return null;
@@ -91,11 +105,20 @@ export async function verifyHostedCandidate(
           matching[0].exitCode === 0 && matching[0].failureIds.length === 0;
       }) &&
       (await compareSourceSnapshots(base, after)).length === 0;
+    const receipt = { reportDigest: hostedReportDigest(report), verifiedBaseSha: sha };
+    const artifact = accepted ? HostedVerifiedArtifactSchema.parse({
+      candidateDigest: hostedCandidateDigest(parsed.data), workerReportDigest: receipt.reportDigest, verifiedBaseSha: sha,
+      patches: await session.journal.exportPatches(result.final.acceptedFixIds),
+      report: makeRunReport({ result, startedAt: new Date(started).toISOString(), finishedAt: new Date().toISOString(), applied: false,
+        checks: session.finalChecks, ...reconciled,
+        scanSummary: summarizeScans(session.productionBaseline, session.finalObservations, session.baselineObservations) }),
+    }) : null;
     await appendRunRecord(join(session.evidenceDir, "run.jsonl"), {
       timestamp: new Date().toISOString(), step: "trusted-verification", status: accepted ? "ok" : "rejected",
-      durationMs: Date.now() - started, metadata: { reportDigest: hostedReportDigest(report), baseSha: sha, patchCount: patches.length },
+      durationMs: Date.now() - started, metadata: { reportDigest: receipt.reportDigest, baseSha: sha, patchCount: patches.length,
+        ...(artifact ? { artifactDigest: hostedVerifiedArtifactDigest(artifact) } : {}) },
     });
-    return accepted ? { reportDigest: hostedReportDigest(report), verifiedBaseSha: sha } : null;
+    return artifact ? { receipt, artifact } : null;
   } catch (error) {
     if (session) await appendRunRecord(join(session.evidenceDir, "run.jsonl"), {
       timestamp: new Date().toISOString(), step: "trusted-verification", status: "error", durationMs: Date.now() - started,

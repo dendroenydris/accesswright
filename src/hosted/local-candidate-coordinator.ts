@@ -8,13 +8,16 @@ import type { HostedCandidate } from "./agent-protocol.js";
 import type { HostedPatchAgent } from "./agent-api.js";
 import { eligibleForTrustedVerification, hostedReportDigest } from "./run-workflow.js";
 import { verifyHostedCandidate } from "./trusted-verifier.js";
-import type { HostedVerificationCheckout } from "./trusted-verifier.js";
+import type { HostedVerificationCheckout, HostedVerifiedCandidate } from "./trusted-verifier.js";
+import { hostedVerifiedArtifactDigest } from "./verified-publication.js";
+import type { HostedVerifiedCandidateConsumer } from "./verified-publication.js";
 
 /** Local trusted coordinator only. Pending private payloads are lost on restart; cloud needs durable private staging. */
 export function createLocalHostedCandidateCoordinator(options: {
   agent: Pick<HostedPatchAgent, "sealForVerification">;
   evidenceRoot: string;
   resolveCheckout: (runId: string) => Promise<HostedVerificationCheckout>;
+  onVerifiedCandidate?: HostedVerifiedCandidateConsumer;
   ttlSeconds?: number;
 }) {
   const ttl = z.number().int().min(defaults.hostedMinTtlSeconds).max(defaults.hostedMaxTtlSeconds).parse(options.ttlSeconds ?? defaults.hostedDefaultTtlSeconds);
@@ -73,11 +76,17 @@ export function createLocalHostedCandidateCoordinator(options: {
       if (pending.get(runId) !== staged) return null;
       clearTimeout(staged.timer);
       pending.delete(runId);
+      let verified: HostedVerifiedCandidate | null;
       try {
         if (hostedReportDigest(staged.candidate.report) !== reportDigest) return null;
         const reconciled = await options.agent.sealForVerification(runId);
         const checkout = await options.resolveCheckout(runId);
-        try { return await verifyHostedCandidate({ ...checkout, reconciled }, staged.candidate); }
+        try {
+          verified = await verifyHostedCandidate({ ...checkout, reconciled }, staged.candidate);
+          if (verified && (verified.receipt.reportDigest !== reportDigest || verified.receipt.verifiedBaseSha !== checkout.verifiedBaseSha ||
+            verified.artifact.candidateDigest !== staged.digest || verified.artifact.workerReportDigest !== reportDigest ||
+            verified.artifact.verifiedBaseSha !== checkout.verifiedBaseSha)) throw new Error("Trusted artifact and staged candidate identity mismatch");
+        }
         finally {
           await checkout.release().catch(async (error: unknown) => {
             await record(runId, "hosted-checkout-cleanup-unconfirmed", "rejected", staged.digest); throw error;
@@ -85,6 +94,16 @@ export function createLocalHostedCandidateCoordinator(options: {
           await record(runId, "hosted-checkout-cleared", "ok", staged.digest);
         }
       } finally { await record(runId, "hosted-candidate-cleared", "ok", staged.digest); }
+      if (verified && options.onVerifiedCandidate) {
+        try {
+          await options.onVerifiedCandidate(runId, verified.artifact, hostedVerifiedArtifactDigest(verified.artifact));
+          await record(runId, "hosted-verified-artifact-delivered", "ok", staged.digest);
+        } catch (error) {
+          await record(runId, "hosted-verified-artifact-delivery-unconfirmed", "error", staged.digest);
+          throw error;
+        }
+      }
+      return verified?.receipt ?? null;
     },
   };
 }

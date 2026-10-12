@@ -4,6 +4,7 @@
 
 ### Breaking Changes
 
+- Trusted Hosted replay returns a private verified artifact separately from its metadata-only review receipt.
 - Candidate coordinators require an explicit trusted checkout release; deletion failures withhold verification receipts.
 - Hosted authorization metadata requires an irreversible private-input claim; earlier incomplete records fail validation.
 - Durable candidate coordination requires an explicit trusted cleanup receipt store.
@@ -17,6 +18,7 @@
 
 ### Added
 
+- Trusted full-source publication artifacts rebuilt from independent replay, with candidate/report/base binding and delivery only after confirmed private-source deletion.
 - Executable webhook, agent, task relay and independent verifier roles with durable enqueue, scoped workload identities and checked metadata-network isolation.
 - Trusted service composition with separate worker/task HTTP ingress, persistent original source pins and scoped source access.
 - Generic non-root worker image with an allowlisted public build context and opt-in downloaded-input/independent-Docker acceptance.

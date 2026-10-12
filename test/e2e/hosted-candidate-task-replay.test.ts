@@ -8,6 +8,7 @@ import { execa } from "execa";
 import { expect, it } from "vitest";
 import { defaults } from "../../src/config.js";
 import { HostedCandidateSchema } from "../../src/hosted/agent-protocol.js";
+import { hostedVerifiedArtifactDigest } from "../../src/hosted/verified-publication.js";
 import { createHostedCandidateCoordinator } from "../../src/hosted/candidate-coordinator.js";
 import { FirestoreCandidateCleanupStore } from "../../src/hosted/candidate-cleanup.js";
 import { createHostedCandidateTaskServer } from "../../src/hosted/candidate-task-http.js";
@@ -86,11 +87,19 @@ it("replays a real secretless worker candidate through durable fake-cloud adapte
     };
     const store = new GcsHostedCandidateStore({ bucketName: bucket, fetcher, getAccessToken: () => Promise.resolve("fixture-only-workload"),
       scheduleExpiry: (runId, expiresAt) => { expiries.push({ runId, expiresAt }); return Promise.resolve(); } });
+    let delivered = 0;
     const coordinator = createHostedCandidateCoordinator({ store, cleanup, evidenceRoot: evidence,
       agent: { sealForVerification: () => Promise.resolve({ usage: { inputTokens: 300, outputTokens: 100, spentUsd: 0.0005 }, unknownUsage: false, providerVerification: "fake-provider" }) },
       resolveCheckout: () => Promise.resolve({ repoPath: replayRepo, verifiedBaseSha: baseSha, tempRoot: join(root, "trusted-runs"), runtimeRoot: process.cwd(),
         release: () => rm(replayRepo, { recursive: true, force: true }) }),
-      scheduleVerification: (runId, reportDigest) => { verification.push({ runId, reportDigest }); return Promise.resolve(); } });
+      scheduleVerification: (runId, reportDigest) => { verification.push({ runId, reportDigest }); return Promise.resolve(); },
+      onVerifiedCandidate: async (runId, artifact, digest) => {
+        await expect(access(replayRepo)).rejects.toThrow();
+        expect(objects.size).toBe(0); expect((await cleanup.get(runId))?.status).toBe("cleared");
+        expect(digest).toBe(hostedVerifiedArtifactDigest(artifact)); expect(artifact.patches).toEqual(candidate.patches);
+        expect(artifact.report).toMatchObject({ fixed: 3, providerVerification: "fake-provider", usage: candidate.report.usage, scanSummary: { coverageComplete: true } });
+        delivered++;
+      } });
     const workflow = new HostedRunWorkflow({ store: runs, ...coordinator,
       authenticate: runId => ({ runId, repository: "owned/fixture", installationId: 42 }) });
     await workflow.submitCandidate("worker-fixture", "fixture-token", candidate);
@@ -108,6 +117,7 @@ it("replays a real secretless worker candidate through durable fake-cloud adapte
     await expect(access(replayRepo)).rejects.toThrow();
     expect(objects.size).toBe(0); expect((await new FirestoreCandidateCleanupStore(cleanupMetadata.options).get("worker-fixture"))?.status).toBe("cleared");
     const repeated = await request(); expect(repeated.status).toBe(200); expect(await repeated.json()).toEqual(receipt);
+    expect(delivered).toBe(1);
     expect(await git(["status", "--porcelain", "--untracked-files=all"])).toBe("");
     await writeFile(join(evidence, "result.json"), JSON.stringify({ kind: "owned-worker-fake-cloud-trusted-task-independent-docker", status: "ready-for-review", baseSha,
       reportDigest: verification[0].reportDigest, acceptedFixes: candidate.report.fixed, privateSourceRemoved: true, trustedCheckoutRemoved: true, cleanupConfirmed: true,

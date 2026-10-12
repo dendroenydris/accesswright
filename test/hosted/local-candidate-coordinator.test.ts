@@ -6,7 +6,8 @@ import { defaults } from "../../src/config.js";
 import { createLocalHostedCandidateCoordinator } from "../../src/hosted/local-candidate-coordinator.js";
 import { hostedReportDigest } from "../../src/hosted/run-workflow.js";
 import { verifyHostedCandidate } from "../../src/hosted/trusted-verifier.js";
-import { hostedCandidateFixture } from "../helpers/hosted-candidate.js";
+import { hostedCandidateFixture, hostedVerifiedCandidateFixture } from "../helpers/hosted-candidate.js";
+import type { HostedVerifiedCandidateConsumer } from "../../src/hosted/verified-publication.js";
 
 vi.mock("../../src/hosted/trusted-verifier.js", () => ({ verifyHostedCandidate: vi.fn() }));
 let root: string;
@@ -18,16 +19,18 @@ const sealForVerification = vi.fn(() => Promise.resolve(reconciled));
 const resolveCheckout = vi.fn(() => Promise.resolve(checkout));
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "aw-candidate-coordinator-"));
-  vi.mocked(verifyHostedCandidate).mockResolvedValue({ reportDigest: hostedReportDigest(candidate.report), verifiedBaseSha: checkout.verifiedBaseSha });
+  vi.mocked(verifyHostedCandidate).mockResolvedValue(hostedVerifiedCandidateFixture(candidate, checkout.verifiedBaseSha));
 });
 afterEach(async () => { vi.useRealTimers(); vi.clearAllMocks(); await rm(root, { recursive: true, force: true }); });
-function coordinator(ttlSeconds = 30) { return createLocalHostedCandidateCoordinator({ agent: { sealForVerification }, evidenceRoot: root, resolveCheckout, ttlSeconds }); }
+function coordinator(ttlSeconds = 30, onVerifiedCandidate?: HostedVerifiedCandidateConsumer) { return createLocalHostedCandidateCoordinator({
+  agent: { sealForVerification }, evidenceRoot: root, resolveCheckout, ttlSeconds, ...(onVerifiedCandidate ? { onVerifiedCandidate } : {}),
+}); }
 
 it("seals trusted usage, independently verifies a pinned checkout and clears the private candidate", async () => {
   const service = coordinator();
   vi.mocked(verifyHostedCandidate).mockImplementationOnce(() => {
     expect(release).not.toHaveBeenCalled();
-    return Promise.resolve({ reportDigest: hostedReportDigest(candidate.report), verifiedBaseSha: checkout.verifiedBaseSha });
+    return Promise.resolve(hostedVerifiedCandidateFixture(candidate, checkout.verifiedBaseSha));
   });
   await service.receiveCandidate("run1", candidate);
   const digest = hostedReportDigest(candidate.report);
@@ -47,6 +50,24 @@ it("accepts simultaneous identical staging and rejects changed patch bytes", asy
   await expect(service.receiveCandidate("run1", changed)).rejects.toThrow("Conflicting candidate");
   await service.verifyTrustedResult("run1", hostedReportDigest(candidate.report));
   expect(verifyHostedCandidate).toHaveBeenCalledExactlyOnceWith({ ...checkout, reconciled }, candidate);
+});
+it("delivers only after checkout cleanup, consumes source once and returns metadata only", async () => {
+  const consume = vi.fn(async (runId: string) => {
+    expect(release).toHaveBeenCalledOnce();
+    expect(await service.verifyTrustedResult(runId, hostedReportDigest(candidate.report))).toBeNull();
+    expect(await readFile(join(root, runId, "run.jsonl"), "utf8")).toContain("hosted-candidate-cleared");
+  });
+  const service = coordinator(30, consume); await service.receiveCandidate("run1", candidate);
+  expect(await service.verifyTrustedResult("run1", hostedReportDigest(candidate.report))).toEqual({
+    reportDigest: hostedReportDigest(candidate.report), verifiedBaseSha: checkout.verifiedBaseSha,
+  });
+  expect(consume).toHaveBeenCalledOnce();
+});
+it("never delivers publication source when checkout erasure fails", async () => {
+  const consume = vi.fn(() => Promise.resolve()), service = coordinator(30, consume);
+  await service.receiveCandidate("run1", candidate); release.mockRejectedValueOnce(new Error("erasure failed"));
+  await expect(service.verifyTrustedResult("run1", hostedReportDigest(candidate.report))).rejects.toThrow("erasure failed");
+  expect(consume).not.toHaveBeenCalled();
 });
 it("discards reports ineligible for review without retaining private patches", async () => {
   const service = coordinator(); const invalid = structuredClone(candidate); invalid.report.checks[0].status = "failed";

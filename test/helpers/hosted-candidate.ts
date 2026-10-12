@@ -1,4 +1,7 @@
-import { HostedCandidateSchema } from "../../src/hosted/agent-protocol.js";
+import { HostedCandidateSchema, hostedCandidateDigest } from "../../src/hosted/agent-protocol.js";
+import type { HostedCandidate } from "../../src/hosted/agent-protocol.js";
+import { hostedReportDigest } from "../../src/hosted/run-workflow.js";
+import type { HostedVerifiedCandidate } from "../../src/hosted/trusted-verifier.js";
 
 export function hostedCandidateFixture() {
   return HostedCandidateSchema.parse({
@@ -10,4 +13,11 @@ export function hostedCandidateFixture() {
       final: { acceptedFixIds: ["id-1"], droppedFixIds: [], failures: [] } },
     patches: [{ taskId: "id-1", changes: [{ path: "Button.tsx", before: "private-source-marker", after: "private-repaired-marker" }] }],
   });
+}
+
+export function hostedVerifiedCandidateFixture(candidate: HostedCandidate, verifiedBaseSha: string): HostedVerifiedCandidate {
+  const reportDigest = hostedReportDigest(candidate.report);
+  return { receipt: { reportDigest, verifiedBaseSha }, artifact: {
+    ...structuredClone(candidate), candidateDigest: hostedCandidateDigest(candidate), workerReportDigest: reportDigest, verifiedBaseSha,
+  } };
 }

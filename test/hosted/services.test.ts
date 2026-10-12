@@ -17,7 +17,8 @@ import type { HostedCandidate } from "../../src/hosted/agent-protocol.js";
 import { hostedReportDigest } from "../../src/hosted/run-workflow.js";
 import { createFakeFirestore } from "../helpers/fake-firestore.js";
 import { FakeLlmProvider } from "../helpers/fake-provider.js";
-import { hostedCandidateFixture } from "../helpers/hosted-candidate.js";
+import { hostedCandidateFixture, hostedVerifiedCandidateFixture } from "../helpers/hosted-candidate.js";
+import type { HostedVerifiedCandidateConsumer } from "../../src/hosted/verified-publication.js";
 
 vi.mock("../../src/hosted/checkout.js", () => ({ prepareHostedCheckout: vi.fn() }));
 vi.mock("../../src/hosted/input-bundle.js", () => ({ createHostedInputBundle: vi.fn() }));
@@ -57,9 +58,9 @@ function fixture() {
     tempRoot: root, runtimeRoot: "/fixture/runtime", release }));
   vi.mocked(createHostedInputBundle).mockImplementation(input => Promise.resolve({ runId: input.runId, baseSha: input.verifiedBaseSha,
     files: [{ path: "View.tsx", mode: "100644", blobSha: "a".repeat(40), data: Buffer.from("fixture source").toString("base64") }] }));
-  vi.mocked(verifyHostedCandidate).mockImplementation(input => Promise.resolve({ reportDigest: digest, verifiedBaseSha: input.verifiedBaseSha }));
+  vi.mocked(verifyHostedCandidate).mockImplementation(input => Promise.resolve(hostedVerifiedCandidateFixture(candidate, input.verifiedBaseSha)));
   const provider = new FakeLlmProvider([]), scheduleVerification = vi.fn(() => Promise.resolve());
-  const open = () => {
+  const open = (onVerifiedCandidate?: HostedVerifiedCandidateConsumer) => {
     const services = createHostedTrustedServices({ agent: { model: { provider: "openai", id: "fixture-only" },
       pricing: { inputUsdPerMillion: 1, outputUsdPerMillion: 2 }, maxInputTokens: 1200, maxOutputTokens: 256, maxCostUsdPerRun: 0.02,
       ledgerForRun: () => Promise.reject(new Error("No model calls in this fixture")), provider, providerVerification: "fake-provider",
@@ -67,6 +68,7 @@ function fixture() {
       runs: new FirestoreHostedRunStore(reports.options), checkouts: new FirestoreHostedCheckoutRegistry(pins.options),
       cleanup: new FirestoreCandidateCleanupStore(erasure.options), candidates, sourceAccess: { getInstallationToken },
       pinOriginalRevision, scheduleVerification, authenticateTask: value => Promise.resolve(value === "Bearer fixture-task-oidc"),
+      ...(onVerifiedCandidate ? { onVerifiedCandidate } : {}),
       evidenceRoot: root, tempRoot: root, runtimeRoot: "/fixture/runtime" });
     servers.push(services.agentServer, services.taskServer); return services;
   };
@@ -74,6 +76,19 @@ function fixture() {
 }
 const post = (origin: string, path: string, token: string, body: object) => fetch(origin + path, {
   method: "POST", headers: { authorization: "Bearer " + token, "content-type": "application/json" }, body: JSON.stringify(body),
+});
+
+it("keeps uncertain publication claims durable across restart without another callback or source replay", async () => {
+  const f = fixture(), consume = vi.fn(() => Promise.reject(new Error("GitHub response lost")));
+  const service = f.open(consume), token = await service.registerRunToken(run), origin = await listen(service.agentServer);
+  const staged = await post(origin, "/runs/" + run.runId + "/candidate", token, candidate); expect(staged.status).toBe(202); await staged.arrayBuffer();
+  const taskOrigin = await listen(service.taskServer), path = "/internal/candidates/verify", body = { runId: run.runId, reportDigest: digest };
+  const first = await post(taskOrigin, path, "fixture-task-oidc", body); expect(first.status).toBe(503); await first.arrayBuffer();
+  expect(consume).toHaveBeenCalledOnce(); expect(f.release).toHaveBeenCalledOnce(); expect(f.rows.size).toBe(0);
+  expect((await new FirestoreHostedRunStore(f.reports.options).get(run.runId))?.status).toBe("verifying");
+  const restarted = await listen(f.open(consume).taskServer), repeat = await post(restarted, path, "fixture-task-oidc", body);
+  expect(repeat.status).toBe(503); await repeat.arrayBuffer(); expect(consume).toHaveBeenCalledOnce(); expect(verifyHostedCandidate).toHaveBeenCalledOnce();
+  const metadata = JSON.stringify([...f.reports.records.values()]); expect(metadata).not.toContain("private-source-marker");
 });
 
 it("pins before registering a run and never replaces its original revision or returns a second token", async () => {

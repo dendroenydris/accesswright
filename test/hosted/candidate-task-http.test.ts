@@ -14,7 +14,7 @@ import type { HostedCandidate } from "../../src/hosted/agent-protocol.js";
 import { verifyHostedCandidate } from "../../src/hosted/trusted-verifier.js";
 import { defaults } from "../../src/config.js";
 import { createFakeFirestore } from "../helpers/fake-firestore.js";
-import { hostedCandidateFixture } from "../helpers/hosted-candidate.js";
+import { hostedCandidateFixture, hostedVerifiedCandidateFixture } from "../helpers/hosted-candidate.js";
 
 vi.mock("../../src/hosted/trusted-verifier.js", () => ({ verifyHostedCandidate: vi.fn() }));
 const candidate = hostedCandidateFixture(), digest = hostedReportDigest(candidate.report), generation = "12345678901234567890";
@@ -52,7 +52,7 @@ async function fixture() {
     scheduleVerification: () => Promise.resolve(),
     resolveCheckout: () => Promise.resolve({ repoPath: "/trusted/repo", verifiedBaseSha: "f".repeat(40), tempRoot: root, runtimeRoot: "/trusted/runtime", release: () => Promise.resolve() }) });
   const workflow = new HostedRunWorkflow({ store: runs, authenticate, ...coordinator });
-  vi.mocked(verifyHostedCandidate).mockResolvedValue({ reportDigest: digest, verifiedBaseSha: "f".repeat(40) });
+  vi.mocked(verifyHostedCandidate).mockResolvedValue(hostedVerifiedCandidateFixture(candidate, "f".repeat(40)));
   const authenticateTask = vi.fn((authorization: string) => Promise.resolve(authorization === "Bearer fixture-google-task"));
   const server = createHostedCandidateTaskServer({ workflow, runs: new FirestoreHostedRunStore(runMetadata.options), store, cleanup, authenticateTask, evidenceRoot: root });
   resources.push({ server, root }); server.listen(0, "127.0.0.1"); await once(server, "listening");

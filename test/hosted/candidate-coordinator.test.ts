@@ -9,8 +9,10 @@ import { hostedCandidateDigest } from "../../src/hosted/agent-protocol.js";
 import type { HostedCandidate } from "../../src/hosted/agent-protocol.js";
 import { hostedReportDigest } from "../../src/hosted/run-workflow.js";
 import { verifyHostedCandidate } from "../../src/hosted/trusted-verifier.js";
-import { hostedCandidateFixture } from "../helpers/hosted-candidate.js";
+import { hostedCandidateFixture, hostedVerifiedCandidateFixture } from "../helpers/hosted-candidate.js";
 import { createFakeFirestore } from "../helpers/fake-firestore.js";
+import { hostedVerifiedArtifactDigest } from "../../src/hosted/verified-publication.js";
+import type { HostedVerifiedArtifact, HostedVerifiedCandidateConsumer } from "../../src/hosted/verified-publication.js";
 
 vi.mock("../../src/hosted/trusted-verifier.js", () => ({ verifyHostedCandidate: vi.fn() }));
 let root: string;
@@ -19,7 +21,7 @@ const reconciled = { usage: candidate.report.usage, unknownUsage: false, provide
 const checkout = { repoPath: "/trusted/checkout", verifiedBaseSha: "f".repeat(40), tempRoot: "/trusted/tmp", runtimeRoot: "/trusted/runtime" };
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "aw-durable-candidate-"));
-  vi.mocked(verifyHostedCandidate).mockResolvedValue({ reportDigest: digest, verifiedBaseSha: checkout.verifiedBaseSha });
+  vi.mocked(verifyHostedCandidate).mockResolvedValue(hostedVerifiedCandidateFixture(candidate, checkout.verifiedBaseSha));
 });
 afterEach(async () => { vi.clearAllMocks(); await rm(root, { recursive: true, force: true }); });
 function fixture() {
@@ -41,7 +43,10 @@ function fixture() {
   const sealForVerification = vi.fn(() => Promise.resolve(reconciled)), resolveCheckout = vi.fn(() => Promise.resolve(lease));
   const metadata = createFakeFirestore("candidateCleanup");
   const cleanup = new FirestoreCandidateCleanupStore(metadata.options);
-  const open = (evidenceRoot = root) => createHostedCandidateCoordinator({ agent: { sealForVerification }, store, cleanup, evidenceRoot, resolveCheckout, scheduleVerification });
+  const open = (evidenceRoot = root, onVerifiedCandidate?: HostedVerifiedCandidateConsumer) => createHostedCandidateCoordinator({
+    agent: { sealForVerification }, store, cleanup, evidenceRoot, resolveCheckout, scheduleVerification,
+    ...(onVerifiedCandidate ? { onVerifiedCandidate } : {}),
+  });
   return { rows, store, cleanup, sealForVerification, resolveCheckout, release, lease, scheduleVerification, open };
 }
 
@@ -49,7 +54,7 @@ it("survives coordinator restart, seals service usage, independently replays, an
   const f = fixture(); await f.open().receiveCandidate("run1", candidate);
   vi.mocked(verifyHostedCandidate).mockImplementationOnce(() => {
     expect(f.release).not.toHaveBeenCalled();
-    return Promise.resolve({ reportDigest: digest, verifiedBaseSha: checkout.verifiedBaseSha });
+    return Promise.resolve(hostedVerifiedCandidateFixture(candidate, checkout.verifiedBaseSha));
   });
   expect(await f.open().verifyTrustedResult("run1", digest)).toEqual({ reportDigest: digest, verifiedBaseSha: checkout.verifiedBaseSha });
   expect(verifyHostedCandidate).toHaveBeenCalledExactlyOnceWith({ ...f.lease, reconciled }, candidate);
@@ -60,6 +65,48 @@ it("survives coordinator restart, seals service usage, independently replays, an
   const log = await readFile(join(root, "run1/run.jsonl"), "utf8");
   expect(log).toContain("hosted-candidate-staged"); expect(log).toContain("hosted-checkout-cleared"); expect(log).toContain("hosted-candidate-cleared");
   expect(log).not.toContain("private-source-marker"); expect(log).not.toContain("private-repaired-marker");
+});
+
+it("delivers a digest-bound private artifact only after checkout erasure and durable candidate deletion", async () => {
+  const f = fixture(), trusted = hostedVerifiedCandidateFixture(candidate, checkout.verifiedBaseSha);
+  const consume = vi.fn(async (runId: string, artifact: HostedVerifiedArtifact, artifactDigest: string) => {
+    expect(runId).toBe("run1"); expect(artifact).toEqual(trusted.artifact); expect(artifactDigest).toBe(hostedVerifiedArtifactDigest(trusted.artifact));
+    expect(f.release).toHaveBeenCalledOnce(); expect(f.rows.size).toBe(0);
+    expect((await f.cleanup.get(runId))?.status).toBe("cleared");
+  }) satisfies HostedVerifiedCandidateConsumer;
+  await f.open().receiveCandidate("run1", candidate);
+  expect(await f.open(root, consume).verifyTrustedResult("run1", digest)).toEqual(trusted.receipt);
+  expect(consume).toHaveBeenCalledOnce();
+  expect(await f.open(root, consume).verifyTrustedResult("run1", digest)).toBeNull();
+  expect(consume).toHaveBeenCalledOnce();
+  const log = await readFile(join(root, "run1/run.jsonl"), "utf8");
+  expect(log).toContain("hosted-verified-artifact-delivered"); expect(log).not.toContain("private-source-marker");
+});
+
+it.each(["checkout", "deletion", "confirmation"])("never delivers private publication source on failed %s cleanup", async failure => {
+  const f = fixture(), consume = vi.fn(() => Promise.resolve());
+  await f.open().receiveCandidate("run1", candidate);
+  if (failure === "checkout") f.release.mockRejectedValueOnce(new Error("cleanup unconfirmed"));
+  if (failure === "deletion") f.store.remove.mockRejectedValueOnce(new Error("cleanup unconfirmed"));
+  if (failure === "confirmation") vi.spyOn(f.cleanup, "confirm").mockRejectedValueOnce(new Error("cleanup unconfirmed"));
+  await expect(f.open(root, consume).verifyTrustedResult("run1", digest)).rejects.toThrow("cleanup unconfirmed");
+  expect(consume).not.toHaveBeenCalled();
+});
+
+it("rejects a replay artifact bound to another candidate and still clears owned source", async () => {
+  const f = fixture(), consume = vi.fn(() => Promise.resolve()), wrong = hostedVerifiedCandidateFixture(candidate, checkout.verifiedBaseSha);
+  wrong.artifact.candidateDigest = "0".repeat(64); vi.mocked(verifyHostedCandidate).mockResolvedValueOnce(wrong);
+  await f.open().receiveCandidate("run1", candidate);
+  await expect(f.open(root, consume).verifyTrustedResult("run1", digest)).rejects.toThrow("identity mismatch");
+  expect(consume).not.toHaveBeenCalled(); expect(f.release).toHaveBeenCalledOnce(); expect(f.rows.size).toBe(0);
+});
+
+it("withholds the receipt on uncertain artifact delivery and never retries a consumed candidate", async () => {
+  const f = fixture(), consume = vi.fn(() => Promise.reject(new Error("publication acknowledgment lost")));
+  await f.open().receiveCandidate("run1", candidate);
+  await expect(f.open(root, consume).verifyTrustedResult("run1", digest)).rejects.toThrow("publication acknowledgment lost");
+  expect(await f.open(root, consume).verifyTrustedResult("run1", digest)).toBeNull(); expect(consume).toHaveBeenCalledOnce();
+  expect(await readFile(join(root, "run1/run.jsonl"), "utf8")).toContain("hosted-verified-artifact-delivery-unconfirmed");
 });
 
 it("refuses private writes when metadata verification scheduling fails", async () => {

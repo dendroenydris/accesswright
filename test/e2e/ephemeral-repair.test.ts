@@ -7,6 +7,7 @@ import { expect, it } from "vitest";
 import { defaults } from "../../src/config.js";
 import { createLocalHostedCandidateCoordinator } from "../../src/hosted/local-candidate-coordinator.js";
 import { HostedCandidateSchema } from "../../src/hosted/agent-protocol.js";
+import { hostedVerifiedArtifactDigest } from "../../src/hosted/verified-publication.js";
 import { HostedRunWorkflow, InMemoryHostedRunStore } from "../../src/hosted/run-workflow.js";
 import { RunReportSchema } from "../../src/reporter/report.js";
 import { listSnapshotFiles } from "../../src/runner/patch-journal.js";
@@ -57,11 +58,19 @@ it("runs a non-root worker through a fake HTTP model service and independently r
     const replayRepo = join(root, "replay-repo");
     await cp(repoPath, replayRepo, { recursive: true }); await removePlatformMetadata(replayRepo);
     const evidence = await mkdtemp(join(tempRoot, "ephemeral-worker-evidence-"));
+    let delivered = 0;
     const coordinator = createLocalHostedCandidateCoordinator({ evidenceRoot: evidence,
       // Known usage from the owned fake fixture; production must use the external trusted agent store.
       agent: { sealForVerification: () => Promise.resolve({ usage: { inputTokens: 300, outputTokens: 100, spentUsd: 0.0005 }, unknownUsage: false, providerVerification: "fake-provider" }) },
       resolveCheckout: () => Promise.resolve({ repoPath: replayRepo, verifiedBaseSha: baseSha, tempRoot: join(root, "trusted-runs"), runtimeRoot: process.cwd(),
-        release: () => rm(replayRepo, { recursive: true, force: true }) }) });
+        release: () => rm(replayRepo, { recursive: true, force: true }) }),
+      onVerifiedCandidate: async (runId, artifact, digest) => {
+        await expect(access(replayRepo)).rejects.toThrow();
+        expect(runId).toBe("worker-fixture"); expect(digest).toBe(hostedVerifiedArtifactDigest(artifact));
+        expect(artifact.patches).toEqual(HostedCandidateSchema.parse(candidate).patches);
+        expect(artifact.report).toMatchObject({ fixed: 3, providerVerification: "fake-provider", usage: parsed.usage, scanSummary: { coverageComplete: true } });
+        delivered++;
+      } });
     const store = new InMemoryHostedRunStore();
     const workflow = new HostedRunWorkflow({ store, ...coordinator,
       authenticate: runId => ({ runId, repository: "owned/fixture", installationId: 42 }) });
@@ -71,6 +80,7 @@ it("runs a non-root worker through a fake HTTP model service and independently r
     expect(receipt).toEqual({ runId: "worker-fixture", status: "ready-for-review", verifiedBaseSha: baseSha });
     await expect(access(replayRepo)).rejects.toThrow();
     expect(await coordinator.verifyTrustedResult("worker-fixture", store.get("worker-fixture")?.reportDigest ?? "")).toBeNull();
+    expect(delivered).toBe(1);
     expect(await git(["status", "--porcelain", "--untracked-files=all"])).toBe("");
     await writeFile(join(evidence, "result.json"), JSON.stringify({ kind: "owned-secretless-worker-and-independent-docker-verifier", ...receipt, reportDigest: store.get("worker-fixture")?.reportDigest,
       acceptedFixes: parsed.fixed, privateSourceRemoved: true, trustedCheckoutRemoved: true, paidCalls: 0, fakeProviderCalls: 1 }), { flag: "wx", mode: 0o600 });
