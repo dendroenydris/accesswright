@@ -23,7 +23,8 @@
     "eval": "node dist/src/eval/cli.js",
     "mcp": "node dist/src/mcp/server.js",
     "evidence:de": "node dist/src/reporter/evidence-cli-de.js",
-    "operations:check": "node dist/src/hosted/operation-alert-cli.js"
+    "operations:check": "node dist/src/hosted/operation-alert-cli.js",
+    "operations:execution": "node dist/src/hosted/execution-read-entry.js"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.72",

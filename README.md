@@ -203,6 +203,14 @@ Provider calls use unique ledger reservation IDs, `recordedAt` for the trusted u
 
 Private source, prompts, raw reports, credentials and arbitrary fields are rejected. Live collection from cloud execution/ledger records, Cloud Monitoring delivery and operating-period acceptance remain unverified. This preview changes neither the spending guard nor a run's verifier decision.
 
+## Single-run execution observation (operator only)
+
+`npm run operations:execution -- --run-id <32-character hexadecimal ID>` reads an existing dispatch claim from Firestore, then reads its Cloud Run operation and a fresh actual Execution. It uses the existing agent-role `ACCESSWRIGHT_HOSTED_CONFIG` and attached Google workload identity; it does not require App or model keys. The operator identity needs read access to the configured dispatch collection and Cloud Run resources, including `run.executions.get` ([Execution lookup](https://docs.cloud.google.com/run/docs/reference/rest/v2/projects.locations.jobs.executions/get)). Run only in a trusted Google environment prepared for these reads; this command does not provision access or deploy a service.
+
+Only the configured project, region, job, container and exact run/repository/installation/PR markers are accepted. A terminal observation requires a consistent completion condition, task counts and timestamps. Missing or uncertain evidence stays `unknown`; a launch acknowledgment is never a completed job. Stdout contains run/operation/execution identities, status and observation/start/completion timestamps, without source, repository names, environment values or cloud diagnostics. Local run traces record the read outcome. Exit 0 means a confirmed terminal observation (including failure), 1 means running or unknown, and 2 means invalid or unconfirmed access. The command makes only cloud GET requests, never restarts a job, writes claims, sends model requests or grants publication authority.
+
+This is one-run observation, not a complete daily export or settled-usage collector. Fake API tests cover its read contract; actual cloud identity/IAM and operating-period acceptance remain unverified. Do not infer complete alert coverage from one result.
+
 ## Security and privacy
 
 Run steps always write validated `run.jsonl` metadata. Set `OTEL_EXPORTER_OTLP_ENDPOINT` (a base HTTP/HTTPS address) or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` (the exact trace URL) in the trusted coordinator to additionally export each step through OTLP HTTP. Standard OTLP header and timeout environment variables are supported. Exported spans contain step status/duration, model identity, token/cost counts and a validated prompt hash; arbitrary page metadata, source paths, prompts and images are excluded. Collector failures add a local `trace-export` error without replacing verifier decisions. No collector connection is made without an endpoint. Export is opt-in; review the collector's access and retention policy before configuring it.
