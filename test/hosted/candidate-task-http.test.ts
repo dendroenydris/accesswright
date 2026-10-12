@@ -50,7 +50,7 @@ async function fixture() {
   const coordinator = createHostedCandidateCoordinator({ store, cleanup, evidenceRoot: root,
     agent: { sealForVerification: () => Promise.resolve({ usage: candidate.report.usage, unknownUsage: false, providerVerification: "not-run" }) },
     scheduleVerification: () => Promise.resolve(),
-    resolveCheckout: () => Promise.resolve({ repoPath: "/trusted/repo", verifiedBaseSha: "f".repeat(40), tempRoot: root, runtimeRoot: "/trusted/runtime" }) });
+    resolveCheckout: () => Promise.resolve({ repoPath: "/trusted/repo", verifiedBaseSha: "f".repeat(40), tempRoot: root, runtimeRoot: "/trusted/runtime", release: () => Promise.resolve() }) });
   const workflow = new HostedRunWorkflow({ store: runs, authenticate, ...coordinator });
   vi.mocked(verifyHostedCandidate).mockResolvedValue({ reportDigest: digest, verifiedBaseSha: "f".repeat(40) });
   const authenticateTask = vi.fn((authorization: string) => Promise.resolve(authorization === "Bearer fixture-google-task"));

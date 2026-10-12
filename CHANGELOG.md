@@ -4,6 +4,7 @@
 
 ### Breaking Changes
 
+- Candidate coordinators require an explicit trusted checkout release; deletion failures withhold verification receipts.
 - Hosted authorization metadata requires an irreversible private-input claim; earlier incomplete records fail validation.
 - Durable candidate coordination requires an explicit trusted cleanup receipt store.
 - Private candidate expiry requires the authenticated task's original deadline; absent objects require a prior trusted cleanup receipt.
@@ -16,6 +17,7 @@
 
 ### Added
 
+- Trusted service composition with separate worker/task HTTP ingress, persistent original source pins and scoped source access.
 - Generic non-root worker image with an allowlisted public build context and opt-in downloaded-input/independent-Docker acceptance.
 - Actual tarball installation and npm-command Docker repair acceptance in CI, with zero model usage and original source preservation.
 - Opt-in OTLP HTTP step spans with metadata-only export, local failure evidence and no global tracing registration.

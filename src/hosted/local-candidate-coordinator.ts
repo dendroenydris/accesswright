@@ -8,13 +8,13 @@ import type { HostedCandidate } from "./agent-protocol.js";
 import type { HostedPatchAgent } from "./agent-api.js";
 import { eligibleForTrustedVerification, hostedReportDigest } from "./run-workflow.js";
 import { verifyHostedCandidate } from "./trusted-verifier.js";
-import type { HostedVerificationOptions } from "./trusted-verifier.js";
+import type { HostedVerificationCheckout } from "./trusted-verifier.js";
 
 /** Local trusted coordinator only. Pending private payloads are lost on restart; cloud needs durable private staging. */
 export function createLocalHostedCandidateCoordinator(options: {
   agent: Pick<HostedPatchAgent, "sealForVerification">;
   evidenceRoot: string;
-  resolveCheckout: (runId: string) => Promise<Omit<HostedVerificationOptions, "reconciled">>;
+  resolveCheckout: (runId: string) => Promise<HostedVerificationCheckout>;
   ttlSeconds?: number;
 }) {
   const ttl = z.number().int().min(defaults.hostedMinTtlSeconds).max(defaults.hostedMaxTtlSeconds).parse(options.ttlSeconds ?? defaults.hostedDefaultTtlSeconds);
@@ -77,7 +77,13 @@ export function createLocalHostedCandidateCoordinator(options: {
         if (hostedReportDigest(staged.candidate.report) !== reportDigest) return null;
         const reconciled = await options.agent.sealForVerification(runId);
         const checkout = await options.resolveCheckout(runId);
-        return await verifyHostedCandidate({ ...checkout, reconciled }, staged.candidate);
+        try { return await verifyHostedCandidate({ ...checkout, reconciled }, staged.candidate); }
+        finally {
+          await checkout.release().catch(async (error: unknown) => {
+            await record(runId, "hosted-checkout-cleanup-unconfirmed", "rejected", staged.digest); throw error;
+          });
+          await record(runId, "hosted-checkout-cleared", "ok", staged.digest);
+        }
       } finally { await record(runId, "hosted-candidate-cleared", "ok", staged.digest); }
     },
   };

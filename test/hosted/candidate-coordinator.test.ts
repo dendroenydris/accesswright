@@ -36,22 +36,29 @@ function fixture() {
       expect(generation).toBe(rows.get(runId)?.generation); rows.delete(runId); return Promise.resolve();
     }),
   };
-  const sealForVerification = vi.fn(() => Promise.resolve(reconciled)), resolveCheckout = vi.fn(() => Promise.resolve(checkout));
+  const release = vi.fn(() => Promise.resolve());
+  const lease = { ...checkout, release };
+  const sealForVerification = vi.fn(() => Promise.resolve(reconciled)), resolveCheckout = vi.fn(() => Promise.resolve(lease));
   const metadata = createFakeFirestore("candidateCleanup");
   const cleanup = new FirestoreCandidateCleanupStore(metadata.options);
   const open = (evidenceRoot = root) => createHostedCandidateCoordinator({ agent: { sealForVerification }, store, cleanup, evidenceRoot, resolveCheckout, scheduleVerification });
-  return { rows, store, cleanup, sealForVerification, resolveCheckout, scheduleVerification, open };
+  return { rows, store, cleanup, sealForVerification, resolveCheckout, release, lease, scheduleVerification, open };
 }
 
 it("survives coordinator restart, seals service usage, independently replays, and confirms source deletion before its receipt", async () => {
   const f = fixture(); await f.open().receiveCandidate("run1", candidate);
+  vi.mocked(verifyHostedCandidate).mockImplementationOnce(() => {
+    expect(f.release).not.toHaveBeenCalled();
+    return Promise.resolve({ reportDigest: digest, verifiedBaseSha: checkout.verifiedBaseSha });
+  });
   expect(await f.open().verifyTrustedResult("run1", digest)).toEqual({ reportDigest: digest, verifiedBaseSha: checkout.verifiedBaseSha });
-  expect(verifyHostedCandidate).toHaveBeenCalledExactlyOnceWith({ ...checkout, reconciled }, candidate);
+  expect(verifyHostedCandidate).toHaveBeenCalledExactlyOnceWith({ ...f.lease, reconciled }, candidate);
+  expect(f.release).toHaveBeenCalledOnce();
   expect(f.rows.size).toBe(0); expect(f.store.remove).toHaveBeenCalledExactlyOnceWith("run1", "12345678901234567890");
   expect(await f.cleanup.get("run1")).toMatchObject({ status: "cleared", candidateDigest: hostedCandidateDigest(candidate) });
   expect(await f.open().verifyTrustedResult("run1", digest)).toBeNull();
   const log = await readFile(join(root, "run1/run.jsonl"), "utf8");
-  expect(log).toContain("hosted-candidate-staged"); expect(log).toContain("hosted-candidate-cleared");
+  expect(log).toContain("hosted-candidate-staged"); expect(log).toContain("hosted-checkout-cleared"); expect(log).toContain("hosted-candidate-cleared");
   expect(log).not.toContain("private-source-marker"); expect(log).not.toContain("private-repaired-marker");
 });
 
@@ -86,6 +93,18 @@ it("erases private staging when replay fails and does not blindly repeat verific
   await expect(f.open().verifyTrustedResult("run1", digest)).rejects.toThrow("verifier interrupted");
   expect(f.rows.size).toBe(0); expect(await f.open().verifyTrustedResult("run1", digest)).toBeNull();
   expect(verifyHostedCandidate).toHaveBeenCalledOnce();
+  expect(f.release).toHaveBeenCalledOnce();
+});
+
+it("withholds a replay receipt if the fresh checkout cannot be erased, while clearing the staged candidate", async () => {
+  const f = fixture(); await f.open().receiveCandidate("run1", candidate);
+  f.release.mockRejectedValueOnce(new Error("checkout erasure unconfirmed"));
+  await expect(f.open().verifyTrustedResult("run1", digest)).rejects.toThrow("checkout erasure unconfirmed");
+  expect(f.rows.size).toBe(0); expect((await f.cleanup.get("run1"))?.status).toBe("cleared");
+  expect(await f.open().verifyTrustedResult("run1", digest)).toBeNull();
+  expect(verifyHostedCandidate).toHaveBeenCalledOnce(); expect(f.release).toHaveBeenCalledOnce();
+  expect(await readFile(join(root, "run1/run.jsonl"), "utf8")).not.toContain("hosted-checkout-cleared");
+  expect(await readFile(join(root, "run1/run.jsonl"), "utf8")).toContain("hosted-checkout-cleanup-unconfirmed");
 });
 
 it("withholds successful replay when private deletion is unconfirmed", async () => {

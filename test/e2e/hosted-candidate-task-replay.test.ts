@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import type { Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -54,6 +54,8 @@ it("replays a real secretless worker candidate through durable fake-cloud adapte
     const candidate = HostedCandidateSchema.parse(JSON.parse(await readFile(transfer, "utf8")) as unknown);
     expect(candidate.report).toMatchObject({ fixed: 3, providerVerification: "fake-provider", usage: { inputTokens: 300, outputTokens: 100, spentUsd: 0.0005 } });
     await removePlatformMetadata(repoPath);
+    const replayRepo = join(root, "replay-repo");
+    await cp(repoPath, replayRepo, { recursive: true }); await removePlatformMetadata(replayRepo);
     const evidence = await mkdtemp(join(tempRoot, "hosted-task-replay-evidence-"));
     const cleanupMetadata = createFakeFirestore("cleanup"), runMetadata = createFakeFirestore("runs");
     const cleanup = new FirestoreCandidateCleanupStore(cleanupMetadata.options), runs = new FirestoreHostedRunStore(runMetadata.options);
@@ -86,7 +88,8 @@ it("replays a real secretless worker candidate through durable fake-cloud adapte
       scheduleExpiry: (runId, expiresAt) => { expiries.push({ runId, expiresAt }); return Promise.resolve(); } });
     const coordinator = createHostedCandidateCoordinator({ store, cleanup, evidenceRoot: evidence,
       agent: { sealForVerification: () => Promise.resolve({ usage: { inputTokens: 300, outputTokens: 100, spentUsd: 0.0005 }, unknownUsage: false, providerVerification: "fake-provider" }) },
-      resolveCheckout: () => Promise.resolve({ repoPath, verifiedBaseSha: baseSha, tempRoot: join(root, "trusted-runs"), runtimeRoot: process.cwd() }),
+      resolveCheckout: () => Promise.resolve({ repoPath: replayRepo, verifiedBaseSha: baseSha, tempRoot: join(root, "trusted-runs"), runtimeRoot: process.cwd(),
+        release: () => rm(replayRepo, { recursive: true, force: true }) }),
       scheduleVerification: (runId, reportDigest) => { verification.push({ runId, reportDigest }); return Promise.resolve(); } });
     const workflow = new HostedRunWorkflow({ store: runs, ...coordinator,
       authenticate: runId => ({ runId, repository: "owned/fixture", installationId: 42 }) });
@@ -102,11 +105,12 @@ it("replays a real secretless worker candidate through durable fake-cloud adapte
       headers: { authorization: "Bearer fixture-only-task-identity", "content-type": "application/json" }, body: JSON.stringify(verification[0]) });
     const response = await request(); expect(response.status).toBe(200);
     const receipt: unknown = await response.json(); expect(receipt).toEqual({ runId: "worker-fixture", status: "ready-for-review", verifiedBaseSha: baseSha });
+    await expect(access(replayRepo)).rejects.toThrow();
     expect(objects.size).toBe(0); expect((await new FirestoreCandidateCleanupStore(cleanupMetadata.options).get("worker-fixture"))?.status).toBe("cleared");
     const repeated = await request(); expect(repeated.status).toBe(200); expect(await repeated.json()).toEqual(receipt);
     expect(await git(["status", "--porcelain", "--untracked-files=all"])).toBe("");
     await writeFile(join(evidence, "result.json"), JSON.stringify({ kind: "owned-worker-fake-cloud-trusted-task-independent-docker", status: "ready-for-review", baseSha,
-      reportDigest: verification[0].reportDigest, acceptedFixes: candidate.report.fixed, privateSourceRemoved: true, cleanupConfirmed: true,
+      reportDigest: verification[0].reportDigest, acceptedFixes: candidate.report.fixed, privateSourceRemoved: true, trustedCheckoutRemoved: true, cleanupConfirmed: true,
       cloudApis: "fake", paidCalls: 0, fakeProviderCalls: 1 }), { flag: "wx", mode: 0o600 });
     console.log("Owned durable candidate task replay evidence:", evidence);
   } finally {

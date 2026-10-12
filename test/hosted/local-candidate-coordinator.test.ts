@@ -12,7 +12,8 @@ vi.mock("../../src/hosted/trusted-verifier.js", () => ({ verifyHostedCandidate: 
 let root: string;
 const candidate = hostedCandidateFixture();
 const reconciled = { usage: candidate.report.usage, unknownUsage: false, providerVerification: "not-run" as const };
-const checkout = { repoPath: "/trusted/checkout", verifiedBaseSha: "f".repeat(40), tempRoot: "/trusted/tmp", runtimeRoot: "/trusted/runtime" };
+const release = vi.fn(() => Promise.resolve());
+const checkout = { repoPath: "/trusted/checkout", verifiedBaseSha: "f".repeat(40), tempRoot: "/trusted/tmp", runtimeRoot: "/trusted/runtime", release };
 const sealForVerification = vi.fn(() => Promise.resolve(reconciled));
 const resolveCheckout = vi.fn(() => Promise.resolve(checkout));
 beforeEach(async () => {
@@ -24,12 +25,17 @@ function coordinator(ttlSeconds = 30) { return createLocalHostedCandidateCoordin
 
 it("seals trusted usage, independently verifies a pinned checkout and clears the private candidate", async () => {
   const service = coordinator();
+  vi.mocked(verifyHostedCandidate).mockImplementationOnce(() => {
+    expect(release).not.toHaveBeenCalled();
+    return Promise.resolve({ reportDigest: hostedReportDigest(candidate.report), verifiedBaseSha: checkout.verifiedBaseSha });
+  });
   await service.receiveCandidate("run1", candidate);
   const digest = hostedReportDigest(candidate.report);
   expect(await service.verifyTrustedResult("run1", digest)).toEqual({ reportDigest: digest, verifiedBaseSha: checkout.verifiedBaseSha });
   expect(verifyHostedCandidate).toHaveBeenCalledExactlyOnceWith({ ...checkout, reconciled }, candidate);
   expect(await service.verifyTrustedResult("run1", digest)).toBeNull();
   expect(resolveCheckout).toHaveBeenCalledExactlyOnceWith("run1");
+  expect(release).toHaveBeenCalledOnce();
   const log = await readFile(join(root, "run1/run.jsonl"), "utf8");
   expect(log).toContain("hosted-candidate-staged"); expect(log).toContain("hosted-candidate-cleared");
   expect(log).not.toContain("private-source-marker"); expect(log).not.toContain("private-repaired-marker");
@@ -61,7 +67,17 @@ it("clears mismatched report identity and failed verification without retrying",
   await service.receiveCandidate("run2", candidate);
   vi.mocked(verifyHostedCandidate).mockRejectedValueOnce(new Error("verifier failed"));
   await expect(service.verifyTrustedResult("run2", hostedReportDigest(candidate.report))).rejects.toThrow("verifier failed");
+  expect(release).toHaveBeenCalledOnce();
   expect(await service.verifyTrustedResult("run2", hostedReportDigest(candidate.report))).toBeNull();
+});
+it("withholds a receipt on checkout cleanup failure and never replays the consumed candidate", async () => {
+  const service = coordinator(); await service.receiveCandidate("run1", candidate);
+  release.mockRejectedValueOnce(new Error("checkout erasure unconfirmed"));
+  await expect(service.verifyTrustedResult("run1", hostedReportDigest(candidate.report))).rejects.toThrow("checkout erasure unconfirmed");
+  expect(await service.verifyTrustedResult("run1", hostedReportDigest(candidate.report))).toBeNull();
+  expect(release).toHaveBeenCalledOnce(); expect(verifyHostedCandidate).toHaveBeenCalledOnce();
+  expect(await readFile(join(root, "run1/run.jsonl"), "utf8")).not.toContain("hosted-checkout-cleared");
+  expect(await readFile(join(root, "run1/run.jsonl"), "utf8")).toContain("hosted-checkout-cleanup-unconfirmed");
 });
 it("expires private candidates and bounds the number of pending runs", async () => {
   vi.useFakeTimers(); const service = coordinator();

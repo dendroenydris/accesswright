@@ -12,7 +12,7 @@ import { clearHostedCandidate } from "./candidate-cleanup.js";
 import type { FirestoreCandidateCleanupStore } from "./candidate-cleanup.js";
 import { eligibleForTrustedVerification, hostedReportDigest } from "./run-workflow.js";
 import { verifyHostedCandidate } from "./trusted-verifier.js";
-import type { HostedVerificationOptions } from "./trusted-verifier.js";
+import type { HostedVerificationCheckout } from "./trusted-verifier.js";
 
 /** Mount behind HostedRunWorkflow's durable staging/verification claims; workers never call the verifier directly. */
 export function createHostedCandidateCoordinator(options: {
@@ -20,7 +20,7 @@ export function createHostedCandidateCoordinator(options: {
   store: Pick<GcsHostedCandidateStore, "put" | "get" | "remove">;
   cleanup: Pick<FirestoreCandidateCleanupStore, "claim" | "confirm" | "get">;
   evidenceRoot: string;
-  resolveCheckout: (runId: string) => Promise<Omit<HostedVerificationOptions, "reconciled">>;
+  resolveCheckout: (runId: string) => Promise<HostedVerificationCheckout>;
   /** Durably enqueue only the run/report identity before any private upload. */
   scheduleVerification: (runId: string, reportDigest: string) => Promise<void>;
   ttlSeconds?: number;
@@ -71,7 +71,13 @@ export function createHostedCandidateCoordinator(options: {
         if (hostedReportDigest(candidate.report) !== digest) return null;
         const reconciled = await options.agent.sealForVerification(runId);
         const checkout = await options.resolveCheckout(runId);
-        return await verifyHostedCandidate({ ...checkout, reconciled }, candidate);
+        try { return await verifyHostedCandidate({ ...checkout, reconciled }, candidate); }
+        finally {
+          await checkout.release().catch(async (error: unknown) => {
+            await record(runId, "hosted-checkout-cleanup-unconfirmed", "rejected", staged.candidateDigest); throw error;
+          });
+          await record(runId, "hosted-checkout-cleared", "ok", staged.candidateDigest);
+        }
       } finally {
         // A replay success is withheld if private-source deletion cannot be confirmed.
         await clearHostedCandidate(options, runId, reference);
