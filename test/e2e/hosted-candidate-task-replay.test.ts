@@ -38,6 +38,7 @@ it("replays a real secretless worker candidate through durable fake-cloud adapte
     await git(["init"]); await git(["add", "--", ...files]); await git(["commit", "-m", "fixture"]);
     const baseSha = await git(["rev-parse", "HEAD"]);
     await copyTargetSnapshot(repoPath, input);
+    console.log("Owned replay stage: container-create", new Date().toISOString());
     await createDetachedContainer({ name, detach: true, image: defaults.dockerImage, noNewPrivileges: true, command: ["sleep", "infinity"], extraVolumes: [
       { hostPath: join(process.cwd(), "dist"), containerPath: "/accesswright/dist", readOnly: true },
       { hostPath: await realpath(join(process.cwd(), "node_modules")), containerPath: "/accesswright/node_modules", readOnly: true },
@@ -47,8 +48,10 @@ it("replays a real secretless worker candidate through durable fake-cloud adapte
     created = true; await dockerControl(["start", name]);
     await dockerExec(name, ["mkdir", "-p", "/workspace", "/tmp/accesswright"]);
     await dockerExec(name, ["chown", "-R", "pwuser:pwuser", "/workspace", "/tmp/accesswright"]);
+    console.log("Owned replay stage: worker-start", new Date().toISOString());
     const job = await dockerExecResult(name, ["node", "/accesswright/dist/test/e2e/ephemeral-repair-entry.js"], {
       user: "pwuser", environment: { ACCESSWRIGHT_ISOLATED_WORKER: "1" }, timeoutMs: defaults.installTimeoutMs + defaults.productionCheckTimeoutMs });
+    console.log("Owned replay stage: worker-complete", new Date().toISOString());
     expect(job.stderr).toBe(""); expect(job.exitCode).toBe(0);
     expect(JSON.parse(job.stdout)).toMatchObject({ privateSourceRemoved: true, paidCalls: 0, fakeProviderCalls: 1 });
     const transfer = join(root, "candidate.json"); await dockerCopyToHost(name, "/tmp/owned-candidate.json", transfer);
@@ -112,7 +115,9 @@ it("replays a real secretless worker candidate through durable fake-cloud adapte
     const address = service.address(); if (!address || typeof address === "string") throw new Error("No owned task listener");
     const request = () => fetch("http://127.0.0.1:" + address.port + "/internal/candidates/verify", { method: "POST",
       headers: { authorization: "Bearer fixture-only-task-identity", "content-type": "application/json" }, body: JSON.stringify(verification[0]) });
+    console.log("Owned replay stage: independent-verifier-start", new Date().toISOString());
     const response = await request(); expect(response.status).toBe(200);
+    console.log("Owned replay stage: independent-verifier-complete", new Date().toISOString());
     const receipt: unknown = await response.json(); expect(receipt).toEqual({ runId: "worker-fixture", status: "ready-for-review", verifiedBaseSha: baseSha });
     await expect(access(replayRepo)).rejects.toThrow();
     expect(objects.size).toBe(0); expect((await new FirestoreCandidateCleanupStore(cleanupMetadata.options).get("worker-fixture"))?.status).toBe("cleared");
@@ -124,11 +129,13 @@ it("replays a real secretless worker candidate through durable fake-cloud adapte
       cloudApis: "fake", paidCalls: 0, fakeProviderCalls: 1 }), { flag: "wx", mode: 0o600 });
     console.log("Owned durable candidate task replay evidence:", evidence);
   } finally {
+    console.log("Owned replay stage: cleanup-start", new Date().toISOString());
     try { if (service) await new Promise<void>(resolve => service?.close(() => resolve())); }
     finally {
       objects.clear();
       try { if (created) await stopDockerContainer(name); }
       finally { await rm(root, { recursive: true, force: true }); }
     }
+    console.log("Owned replay stage: cleanup-complete", new Date().toISOString());
   }
 });
