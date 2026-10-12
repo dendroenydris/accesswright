@@ -18,6 +18,7 @@
 
 ### Added
 
+- Case-scoped fake agentic-auditing harness with a digest-checked rubric, read-only evidence actions, paired axe/expert metrics, budget guards and private-fact-free outputs.
 - Fake-provider-only B2, local-guidance retrieval and bounded source-tool-loop evaluation variants behind separate frozen protocols, shared budgets and unchanged verification gates.
 - Opt-in forward/reverse keyboard observations on disposable pages with bounded traversal and explicit incomplete scope; advisory metadata leaves verifier comparisons unchanged.
 - Opt-in pinned IBM Equal Access browser engine, reviewed rule mapping, occurrence-preserving cross-checker deduplication and explicit inconclusive/version metadata; enabled-path browser acceptance remains pending.

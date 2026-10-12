@@ -52,6 +52,7 @@ export const defaults = Object.freeze({
   keyboardProbeMaxSteps: 256,
   evalToolLoopMaxSteps: 6,
   evalRetrievedGuidanceMaxDocuments: 2,
+  agentAuditMaxCases: 100,
   operationMaxRecords: 10000,
   operationInputMaxBytes: 2 * 1024 * 1024,
   dockerControlTimeoutMs: 120000,

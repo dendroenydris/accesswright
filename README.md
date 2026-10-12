@@ -273,6 +273,14 @@ The eval library accepts `B2`, `A-retrieval` and `A-tool-loop` only with explici
 
 `A-retrieval` substitutes lexical retrieval of at most two documents from the existing reviewed guidance table for static rule lookup; the actual table has a corpus digest. It is not an external WCAG index or learned fix memory. Paired reports compare each variant with A only on matching completed case/seed opportunities; blocked and unsupported observations remain unmeasured. Fake-provider tests establish harness behavior, not repair effectiveness or an ablation win. Real experiments and broader retrieval still require separate acceptance.
 
+## Agentic auditing experiment (fake provider only)
+
+`runAgentAuditExperiment(input, options)` in `dist/src/eval/agentic-audit.js` supplies a case-scoped audit harness with an injected fake provider, shared `BudgetLedger`, explicit prices, absolute JSONL trace path, frozen rubric text and a read-only evidence callback. The strict input binds protocol/implementation/rubric digests, model metadata, observation time and distinct preselected expert-case IDs with WCAG criteria, nullable expert labels and axe labels. The actual rubric text must match its digest; supplied labels and other digests still require independent provenance review.
+
+The model may read bounded transient page facts/images once per case and report a boolean finding after observing them. It receives neither expert nor axe labels, and cannot edit source, invoke shell commands, navigate or activate controls. Known usage is retained; unknown usage blocks subsequent calls, and uncertain trace writes stop without retry. Returned results and step traces contain metadata, not raw page facts or screenshots. The caller must provide trustworthy evidence and clear its own private inputs.
+
+Precision/recall and confusion counts compare agent and axe on the same expert-labeled cases with measured agent outcomes. Missing expert labels, unavailable evidence, caps and unknown attempts remain unmeasured; a zero metric denominator yields null. This restricted, fake-only experiment is not a whole-page auditor, calibrated judge, replication of published auditing results or a verifier/publication gate. Real expert cases and live model/browser acceptance remain unverified.
+
 ## Natural violations: Track N tooling (offline)
 
 `naturalScanMetadata(scope, observations)` in `dist/src/eval/natural-cases.js` projects existing unpatched baseline browser observations into metadata in memory. It hashes repository-local routes, selectors and source locations; HTML, page text, accessibility trees, source paths and screenshots are discarded. The caller must establish the pinned baseline and remove private observations after use. This helper does not launch a browser or authenticate that a scan came from that revision.
