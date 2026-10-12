@@ -16,6 +16,7 @@
 
 ### Added
 
+- Actual tarball installation and npm-command Docker repair acceptance in CI, with zero model usage and original source preservation.
 - Opt-in OTLP HTTP step spans with metadata-only export, local failure evidence and no global tracing registration.
 - CLI help without repository access, Docker or model credentials, and a typed library entry for installed packages.
 - Target-repository support extended from Next.js 15.5-16 to Next.js 12-16; Docker fixtures for Next 12.3.7, 13.5.11 and 14.2.35 (Pages Router) and 13.5.11 and 14.2.35 (App Router) map and repair through webpack source mapping.
