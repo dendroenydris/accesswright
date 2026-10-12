@@ -13,6 +13,19 @@ it("generates all eight reversible P0 mutation types from real JSX syntax", () =
     expect(mutation.sourceHash).toMatch(/^[a-f0-9]{64}$/);
   }
 });
+it.each(["\n", "\r\n"])("preserves original BOM-prefixed source offsets with %j line endings", newline => {
+  const original = "\uFEFF" + source.replaceAll("\n", newline);
+  const mutations = generateMutations(file, original);
+  expect(mutations.length).toBeGreaterThan(0);
+  for (const mutation of mutations) {
+    expect(original.slice(mutation.start, mutation.end)).toBe(mutation.before);
+    const precedingLines = original.slice(0, mutation.start).split("\n");
+    expect(mutation.source).toMatchObject({ line: precedingLines.length, column: (precedingLines.at(-1)?.length ?? 0) + 1 });
+    const changed = applyMutations(original, [mutation]);
+    expect(changed.startsWith("\uFEFF")).toBe(true);
+    expect(reverseMutations(changed, [mutation])).toBe(original);
+  }
+});
 it("does not mistake comments, string literals or computed attributes for editable ground truth", () => {
   const text = 'const fake = "<img alt=label />"; /* <button aria-label="Save"/> */ export const Picture = () => <img alt={user.name} src="/x" />;';
   expect(generateMutations(file, text).filter(item => ["remove-alt", "remove-button-name"].includes(item.operator))).toEqual([]);

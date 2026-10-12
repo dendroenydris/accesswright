@@ -33,6 +33,8 @@ export function generateMutations(file: string, source: string): Mutation[] {
   if (Buffer.byteLength(source) > 2000000) throw new Error("Source exceeds the evaluation AST bound");
   const project = new Project({ useInMemoryFileSystem: true, skipAddingFilesFromTsConfig: true });
   const parsed = project.createSourceFile(file, source);
+  // ts-morph removes the leading BOM from compiler positions.
+  const bomOffset = source.startsWith("\uFEFF") ? 1 : 0;
   const nodes: Opening[] = [...parsed.getDescendantsOfKind(SyntaxKind.JsxOpeningElement), ...parsed.getDescendantsOfKind(SyntaxKind.JsxSelfClosingElement)].sort((a, b) => a.getStart() - b.getStart());
   const mutations: Mutation[] = [];
   for (const node of nodes) {
@@ -42,7 +44,8 @@ export function generateMutations(file: string, source: string): Mutation[] {
     const position = parsed.getLineAndColumnAtPos(start);
     const add = (operator: Operator, after: string, referenceValue: string | null = null) => {
       if (before === after) return;
-      mutations.push(MutationSchema.parse({ id: hash(`${file}\0${start}\0${operator}\0${hash(source)}`), sourceHash: hash(source), file, component: componentIdentity(node, file), operator, ruleId: rules[operator], source: { file, ...position }, start, end, before, after, tagName, referenceValue, literalId: literal(node, "id") }));
+      const originalStart = start + bomOffset;
+      mutations.push(MutationSchema.parse({ id: hash(`${file}\0${originalStart}\0${operator}\0${hash(source)}`), sourceHash: hash(source), file, component: componentIdentity(node, file), operator, ruleId: rules[operator], source: { file, line: position.line, column: position.column + (position.line === 1 ? bomOffset : 0) }, start: originalStart, end: end + bomOffset, before, after, tagName, referenceValue, literalId: literal(node, "id") }));
     };
     const removeAttribute = (name: string, operator: Operator) => {
       const value = literal(node, name), attribute = node.getAttribute(name);

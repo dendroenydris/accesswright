@@ -61,6 +61,7 @@
 
 ### Fixed
 
+- Preserved original BOM-prefixed source offsets and locations in evaluation mutations without weakening exact-source checks.
 - Excluded blocked and unsupported evaluation cases from repair rates, valid unique coverage and paired comparisons while retaining their costs and diagnostic evidence.
 - Recognized GitHub-signed web-flow commits authored by the expected bot during verified PR recovery and duplicate-run checks, retaining human-commit protection.
 - Identified preserved unattributable repair branches in Action errors without exposing arbitrary diagnostics.
