@@ -5,7 +5,8 @@ import { FirestoreMetadataStore } from "../../src/hosted/firestore-metadata.js";
 
 const schema = z.object({ runId: z.string(), spentUsd: z.number().nonnegative() }).strict();
 function document(runId: string) {
-  return { updateTime: "2026-10-12T01:00:00.000Z", fields: { payload: { stringValue: JSON.stringify({ runId, spentUsd: 0.75 }) } } };
+  return { name: "projects/accesswright-dev-123/databases/(default)/documents/authorizations/" + runId,
+    updateTime: "2026-10-12T01:00:00.000Z", fields: { payload: { stringValue: JSON.stringify({ runId, spentUsd: 0.75 }) } } };
 }
 function store(pages: unknown[]) {
   let page = 0;
@@ -17,6 +18,41 @@ function store(pages: unknown[]) {
 
 it("rejects repeated run identities within a metadata page instead of duplicating recorded cost", async () => {
   await expect(store([{ documents: [document("same"), document("same")] }]).records()).rejects.toThrow(/Duplicate.*run/i);
+});
+
+it.each([undefined, "projects/other-project/databases/(default)/documents/authorizations/one",
+  "projects/accesswright-dev-123/databases/other-db/documents/authorizations/one",
+  "projects/accesswright-dev-123/databases/(default)/documents/other/one",
+  "projects/accesswright-dev-123/databases/(default)/documents/authorizations/misfiled",
+  "projects/accesswright-dev-123/databases/%28default%29/documents/authorizations/one",
+])("refuses an unbound document resource (%s) in both single reads and snapshot pages", async name => {
+  const doc = { ...document("one"), name };
+  await expect(store([doc]).get("one")).rejects.toThrow();
+  await expect(store([{ documents: [doc] }]).records()).rejects.toThrow();
+});
+
+it.each(["(default)", "named-db"])("uses canonical %s resource names in atomic writes with unchanged preconditions", async databaseId => {
+  const metadata = new FirestoreMetadataStore({ projectId: "accesswright-dev-123", databaseId, collectionId: "authorizations",
+    getAccessToken: () => Promise.resolve("fixture-identity"), fetcher: (input, init) => {
+      expect(input instanceof URL ? input.href : typeof input === "string" ? input : input.url)
+        .toContain("/databases/" + encodeURIComponent(databaseId) + "/documents:commit");
+      if (typeof init?.body !== "string") throw new Error("Missing atomic metadata payload");
+      const writes = z.object({ writes: z.array(z.object({ update: z.object({ name: z.string() }), currentDocument: z.unknown() })) })
+        .parse(JSON.parse(init.body) as unknown).writes;
+      expect(writes.map(write => write.update.name)).toEqual(["one", "two"].map(id =>
+        "projects/accesswright-dev-123/databases/" + databaseId + "/documents/authorizations/" + id));
+      expect(writes.map(write => write.currentDocument)).toEqual([{ exists: false }, { updateTime: document("two").updateTime }]);
+      return Promise.resolve(Response.json({ writeResults: writes.map(() => ({ updateTime: document("one").updateTime })),
+        commitTime: document("one").updateTime }));
+    } }, schema);
+  await metadata.commit([{ record: { runId: "one", spentUsd: 0 }, updateTime: null },
+    { record: { runId: "two", spentUsd: 0.75 }, updateTime: document("two").updateTime }]);
+});
+
+it.each(["insert", "update"] as const)("rejects a %s acknowledgment bound to a different document", async operation => {
+  const wrong = { ...document("one"), name: document("other").name };
+  const metadata = store(operation === "insert" ? [wrong] : [document("one"), wrong]);
+  await expect(operation === "insert" ? metadata.insert({ runId: "one", spentUsd: 0.75 }) : metadata.update("one", record => record)).rejects.toThrow();
 });
 
 it("rejects repeated run identities across distinct metadata pages", async () => {

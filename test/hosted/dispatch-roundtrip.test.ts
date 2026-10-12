@@ -20,6 +20,7 @@ it("survives dispatcher restart: one durable Firestore claim, one Cloud Run job 
     const id = method === "POST" ? uri.searchParams.get("documentId") ?? "" : uri.pathname.split("/").at(-1) ?? "";
     const current = records.get(id);
     const doc = (value: { payload: string; rev: number }) => ({
+      name: "projects/accesswright-dev-123/databases/(default)/documents/accesswrightLaunchClaims/" + id,
       updateTime: "2026-10-09T13:00:" + String(value.rev).padStart(2, "0") + ".000Z",
       fields: { payload: { stringValue: value.payload } },
     });

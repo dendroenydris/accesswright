@@ -22,6 +22,7 @@ function fixture() {
     calls.push(method + " " + key);
     function doc(value: { value: string; version: number }) {
       return {
+        name: "projects/accesswright-dev-123/databases/(default)/documents/accesswrightLaunchClaims/" + key,
         updateTime: "2026-10-09T12:00:" + String(value.version).padStart(2, "0") + ".000Z",
         fields: { payload: { stringValue: value.value } },
       };

@@ -7,6 +7,7 @@ const databaseSchema = z.union([z.literal("(default)"), z.string().regex(/^[a-zA
 const collectionSchema = z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,62}$/);
 const runIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 const documentSchema = z.object({
+  name: z.string().min(1),
   updateTime: z.string().min(10).max(60).regex(/^[0-9TZ.:+-]+$/),
   fields: z.object({
     payload: z.object({ stringValue: z.string().max(defaults.firestoreRecordMaxBytes) }).passthrough(),
@@ -74,7 +75,8 @@ export class FirestoreMetadataStore<T extends { runId: string }> {
     const doc = documentSchema.parse(input);
     const record = this.schema.parse(JSON.parse(doc.fields.payload.stringValue) as unknown);
     runIdSchema.parse(record.runId);
-    if (expectedId !== undefined && record.runId !== expectedId) {
+    if (doc.name !== this.collectionUrl.slice("https://firestore.googleapis.com/v1/".length) + "/" + record.runId ||
+      (expectedId !== undefined && record.runId !== expectedId)) {
       throw new Error("Firestore returned mismatched run identity");
     }
     return { record, updateTime: doc.updateTime };

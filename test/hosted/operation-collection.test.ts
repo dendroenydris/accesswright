@@ -43,7 +43,7 @@ async function fixture() {
       { name: "ACCESSWRIGHT_REPOSITORY", value: run.repository }, { name: "ACCESSWRIGHT_INSTALLATION_ID", value: "42" },
       { name: "ACCESSWRIGHT_PR_NUMBER" }, { name: "ACCESSWRIGHT_RUN_TOKEN", value: "PRIVATE_TOKEN" }] }] } };
   const directory: Record<string, unknown>[] = [{ name: execution, job, createTime: run.createdAt }];
-  let directoryDenied = false;
+  let directoryDenied = false, misplacedLedgerRow = false;
   const fetcher: typeof fetch = (input, init) => {
     const uri = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url); calls.push(uri);
     expect(init?.method).toBe("GET"); expect(init?.body).toBeUndefined(); expect(init?.redirect).toBe("error");
@@ -54,7 +54,9 @@ async function fixture() {
       const offset = Number(uri.searchParams.get("pageToken") ?? 0), entries = uri.pathname.endsWith("/dispatch") ? claims : rows;
       if (pageFailure && offset > 0) return Promise.resolve(new Response("PRIVATE_ERROR", { status: 403 }));
       vi.setSystemTime(new Date("2026-10-12T10:01:00.000Z"));
-      return Promise.resolve(Response.json({ documents: entries.slice(offset, offset + 1).map(entry => ({ updateTime: uri.pathname.endsWith("/dispatch") ? "2026-10-12T09:00:00.000Z" : version,
+      return Promise.resolve(Response.json({ documents: entries.slice(offset, offset + 1).map(entry => ({
+        name: decodeURIComponent(uri.pathname.slice("/v1/".length)) + "/" + (misplacedLedgerRow && uri.pathname.endsWith("/spending") ? "misfiled" : String(entry.runId)),
+        updateTime: uri.pathname.endsWith("/dispatch") ? "2026-10-12T09:00:00.000Z" : version,
         fields: { payload: { stringValue: JSON.stringify(entry) } } })), ...(offset + 1 < entries.length ? { nextPageToken: String(offset + 1) } : {}) }));
     }
     expect(uri.origin).toBe("https://run.googleapis.com");
@@ -66,6 +68,7 @@ async function fixture() {
   };
   return { root, rows, claims, calls, actual, directory, fetcher, config: config(root), failDirectory: () => { directoryDenied = true; },
     setVersion: (value: string) => { version = value; }, failPage: () => { pageFailure = true; },
+    misplaceLedgerRow: () => { misplacedLedgerRow = true; },
     failExecution: () => { executionFailure = true; }, pendingOperation: () => { operationDone = false; },
     collect: () => collectHostedOperations(config(root), "2026-10-11", { fetcher }),
     close: () => rm(root, { recursive: true, force: true }) };
@@ -84,6 +87,17 @@ it("collects a closed day from one pinned metadata snapshot and fresh actual exe
     const trace = await readFile(join(f.root, "evidence", "operations", "2026-10-11", "run.jsonl"), "utf8");
     expect(trace).toContain("hosted-operations-execution-read"); expect(trace).toContain("hosted-operations-collect-result");
     expect(JSON.stringify(result) + trace).not.toMatch(/PRIVATE_|owner\/private|promptHash|reservedUsd|budgetId|access_token|ACCESSWRIGHT_RUN_TOKEN/);
+  } finally { await f.close(); }
+});
+
+it("refuses a ledger payload under a different document ID instead of emitting healthy accounting", async () => {
+  const f = await fixture(); f.misplaceLedgerRow();
+  try {
+    await expect(f.collect()).rejects.toThrow(/identity/);
+    expect(f.calls.some(url => url.origin === "https://run.googleapis.com")).toBe(false);
+    const trace = await readFile(join(f.root, "evidence", "operations", "2026-10-11", "run.jsonl"), "utf8");
+    expect(trace).toContain('"step":"hosted-operations-collect-result","status":"error"');
+    expect(trace).not.toMatch(/PRIVATE_|owner\/private|misfiled/);
   } finally { await f.close(); }
 });
 

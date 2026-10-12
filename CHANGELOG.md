@@ -75,6 +75,7 @@
 
 ### Fixed
 
+- Bound Firestore metadata reads and saved acknowledgments to the configured document resource and payload identity, refusing misplaced or cross-scope rows before collection or claim recovery.
 - Allowed operational snapshots of closed UTC days to be read after midnight while retaining day boundaries and incomplete-evidence checks.
 - Pinned Firestore metadata pagination to one read time so concurrent updates cannot silently mix pages; rejected snapshots return no partial listing.
 - Kept completed Cloud Run operations with absent results unknown and rejected contradictory results instead of inferring success.
