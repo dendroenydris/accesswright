@@ -10,6 +10,22 @@ export interface AccessibleNodeFact {
   interactive: boolean;
   headingLevel?: number;
   protectedContent?: boolean;
+  /** Set only by the runner for nodes whose text already differed between unpatched baseline scans. */
+  volatileText?: boolean;
+}
+
+// Clocks and dates change between scans of the same unpatched page; digits never decide whether content was removed.
+function comparableText(text: string): string {
+  return text.replace(/\d+/g, "#");
+}
+
+function counts(violations: readonly Violation[]): Map<string, number> {
+  const result = new Map<string, number>();
+  for (const violation of violations) {
+    const identity = violationIdentity(violation);
+    result.set(identity, (result.get(identity) ?? 0) + 1);
+  }
+  return result;
 }
 
 export interface PageVerificationState {
@@ -79,7 +95,12 @@ function verifyAriaTree(
       return reject("aria-tree", `Informative content became decorative at ${previous.id}`);
     }
 
-    if (previous.text.length > 0 && previous.text !== current.text) {
+    if (previous.text.length > 0 && current.text.length === 0) {
+      return reject("aria-tree", `Visible text changed or disappeared at ${previous.id}`);
+    }
+
+    // User-approved 2026-10-12: tolerate digit changes and text that already varied in the unpatched baseline.
+    if (previous.text.length > 0 && previous.volatileText !== true && comparableText(previous.text) !== comparableText(current.text)) {
       return reject(
         "aria-tree",
         `Visible text changed or disappeared at ${previous.id}`,
@@ -129,21 +150,21 @@ function verifyAriaTree(
 export function verifyPerPatch(
   input: PerPatchVerificationInput,
 ): PerPatchVerificationResult {
-  const targetIdentities = new Set(input.task.violations.map(violationIdentity));
-  const afterIdentities = new Set(input.after.violations.map(violationIdentity));
+  // Masked identities can be shared by several elements, so every comparison counts occurrences.
+  const targets = counts(input.task.violations);
+  const before = counts(input.before.violations);
+  const after = counts(input.after.violations);
   const unresolved = new Set((input.after.incomplete ?? []).map(violationIdentity));
 
-  for (const target of targetIdentities) {
-    if (afterIdentities.has(target)) {
+  for (const [target, fixed] of targets) {
+    if ((after.get(target) ?? 0) > Math.max(0, (before.get(target) ?? fixed) - fixed)) {
       return reject("target", `Target violation remains: ${target}`);
     }
     if (unresolved.has(target)) return reject("target", `Target became inconclusive rather than resolved: ${target}`);
   }
 
-  const beforeIdentities = new Set(input.before.violations.map(violationIdentity));
-  for (const violation of input.after.violations) {
-    const identity = violationIdentity(violation);
-    if (!beforeIdentities.has(identity)) {
+  for (const [identity, count] of after) {
+    if (count > (before.get(identity) ?? 0)) {
       return reject("new-violation", `New violation introduced: ${identity}`);
     }
   }

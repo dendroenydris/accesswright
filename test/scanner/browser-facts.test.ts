@@ -31,3 +31,15 @@ describe("browser-derived accessibility facts", () => {
     expect(scanConditions({ mobile: false, darkScheme: false })).toEqual(["desktop-light"]);
   });
 });
+
+it("masks random hex tokens in violation identities but keeps ordinary selectors distinct", () => {
+  const key = (target: string) => violationKey({ ruleId: "aria-valid-attr-value", route: "/", target: [target] });
+  expect(key('div[aria-owns="rmiz-modal-45a54583162e"]')).toBe(key('div[aria-owns="rmiz-modal-5d854068c5c8"]'));
+  expect(key(".works_work__jFBSt:nth-child(2)")).not.toBe(key(".works_work__jFBSt:nth-child(3)"));
+  expect(key('a[href="https://github.com/deadbeef"]')).not.toBe(key('a[href="https://github.com/cafebabe"]'));
+});
+
+it("masks all-digit random hex tokens too (mk965 rmiz-modal-117890541168)", () => {
+  const key = (target: string) => violationKey({ ruleId: "aria-valid-attr-value", route: "/moment", target: [target] });
+  expect(key('div[aria-owns="rmiz-modal-117890541168"]')).toBe(key('div[aria-owns="rmiz-modal-45a54583162e"]'));
+});

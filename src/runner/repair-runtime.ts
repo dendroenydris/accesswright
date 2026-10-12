@@ -69,6 +69,7 @@ export class RepairSession<TSandbox extends RepairTransport> {
   private currentFixSet = "";
   private finalResult: FinalVerificationResult | null = null;
   private sourceChanged = false;
+  private readonly volatileText = new Set<string>();
   private readonly privateDiagnostics: boolean;
   private readonly retainEvidence: boolean;
 
@@ -138,6 +139,8 @@ export class RepairSession<TSandbox extends RepairTransport> {
       const crawled = initial === "/" ? CrawlOutputSchema.parse(await session.browser({ action: "crawl", baseUrl: sandbox.baseUrl })).paths : config.routes;
       session.routes = [...new Set([...materializeRoutes(fileRoutes, crawled).map(route => route.urlPath), ...config.routes])].sort().slice(0, defaults.maxRoutes);
       session.productionBaseline = await session.scan(session.routes, "production-baseline");
+      // A second unpatched scan reveals text that changes on its own (animations); only those nodes skip text equality.
+      session.learnVolatileText(session.productionBaseline, await session.scan(session.routes, "production-baseline-confirm"));
       await session.target({ action: "stop" });
       const existingConfigs = configNames.filter(path => files.includes(path));
       if (existingConfigs.length > 1) throw new UnsupportedRepositoryError("Multiple Next configuration files are ambiguous", evidenceDir);
@@ -152,10 +155,13 @@ export class RepairSession<TSandbox extends RepairTransport> {
       await session.target({ action: "start", mode: "dev" });
       await session.ready(initial);
       session.observations = await session.scan(session.routes, "dev-baseline");
+      // A third unpatched sample catches rotating content that matched by chance in the two production scans.
+      session.learnVolatileText(session.productionBaseline, session.observations);
       // Routes with findings are observed twice. Unstable findings remain evidence, not silently accepted fixes.
       const unstableRoutes = session.observations.filter(page => page.violations.length > 0).map(page => page.route);
       if (unstableRoutes.length > 0) {
         const confirmed = await session.scan([...new Set(unstableRoutes)], "dev-baseline-confirm");
+        session.learnVolatileText(session.observations, confirmed);
         session.updateObservations(confirmed);
       }
       session.baselineObservations = structuredClone(session.observations);
@@ -245,6 +251,7 @@ export class RepairSession<TSandbox extends RepairTransport> {
     }
     const output = BrowserScanOutputSchema.parse({ observations });
     validateRouteScanChunk(routes, output.observations, this.config.scan.mobile);
+    this.markVolatileText(output.observations);
     await this.sandbox.syncEvidence(output.observations.flatMap(page => [page.screenshot, ...page.contexts.map(context => context.screenshot)].filter((name): name is string => name !== null)));
     await recordPrivateScan(this.evidenceDir, generation, output.observations, this.retainEvidence);
     await this.recordStep("scan", "ok", started, { routeCount: routes.length, observationCount: output.observations.length, generation });
@@ -256,6 +263,20 @@ export class RepairSession<TSandbox extends RepairTransport> {
     const map: Record<string, string[]> = {};
     for (const page of this.observations) for (const file of page.sourceFiles) map[file] = [...new Set([...(map[file] ?? []), page.route])];
     return sourceRoutesForChanges(paths, map, this.routes);
+  }
+
+  /** Only unpatched baseline scans feed this set, so a candidate patch cannot make its own text changes volatile. */
+  private learnVolatileText(first: readonly BrowserObservation[], second: readonly BrowserObservation[]): void {
+    const text = new Map(first.flatMap(page => page.aria.map(node => [node.id, node.text] as const)));
+    for (const node of second.flatMap(page => page.aria)) {
+      const previous = text.get(node.id);
+      if (previous !== undefined && previous !== node.text) this.volatileText.add(node.id);
+    }
+    this.markVolatileText([...first, ...second, ...this.productionBaseline, ...this.observations]);
+  }
+
+  private markVolatileText(observations: readonly BrowserObservation[]): void {
+    for (const node of observations.flatMap(page => page.aria)) if (this.volatileText.has(node.id)) node.volatileText = true;
   }
 
   updateObservations(after: readonly BrowserObservation[]): void {

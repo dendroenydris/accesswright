@@ -48,6 +48,14 @@ export function scanConditions(options: { mobile: boolean; darkScheme: boolean }
   return ["desktop-light", ...(options.mobile ? ["mobile-light" as const] : []), ...(options.darkScheme ? ["desktop-dark" as const] : [])];
 }
 
+// Libraries such as react-medium-image-zoom put a fresh random hex token into ids on every page load, so the same
+// element gets a new selector per scan. Masking keeps its identity stable (a target that merely changed its random id
+// is not "resolved"); verifiers compare masked identities as multisets. User-approved verifier change, 2026-10-12.
+// ponytail: hex-token heuristic; learn volatile selector tokens from repeated baseline scans if other id schemes appear.
+// Random hex can be all digits (mk965 "rmiz-modal-117890541168"), so only a digit is required.
+const volatileSelectorToken = /(?<![0-9a-z])(?=[0-9a-f]*\d)[0-9a-f]{8,}(?![0-9a-z])/gi;
+
 export function violationKey(violation: { ruleId: string; route: string; target: readonly string[]; condition?: string }): string {
-  return [violation.ruleId, violation.route, violation.condition ?? "desktop-light", violation.target.join(" >> ")].join("|");
+  const target = violation.target.join(" >> ").replace(volatileSelectorToken, "<volatile>");
+  return [violation.ruleId, violation.route, violation.condition ?? "desktop-light", target].join("|");
 }

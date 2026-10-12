@@ -197,3 +197,52 @@ describe("verifyPerPatch", () => {
     ).toMatchObject({ accepted: false, check: "probe" });
   });
 });
+
+describe("volatile baseline identities and text (mk965 rmiz ids, clocks, typing animations)", () => {
+  const zoom = (token: string) => violation("aria-valid-attr-value", `div[aria-owns="rmiz-modal-${token}"]`);
+  const contrast = task("color-contrast");
+
+  it("does not treat a fresh random id on reload as a new violation", () => {
+    expect(verifyPerPatch({ task: contrast, before: state([violation("color-contrast", "#target"), zoom("45a54583162e")]), after: state([zoom("5d854068c5c8")]) }))
+      .toEqual({ accepted: true, check: "ok", reason: null });
+  });
+
+  it("still rejects one extra violation on another element with the same masked selector", () => {
+    expect(verifyPerPatch({ task: contrast, before: state([violation("color-contrast", "#target"), zoom("45a54583162e")]), after: state([zoom("5d854068c5c8"), zoom("e658c765a188")]) }))
+      .toMatchObject({ accepted: false, check: "new-violation" });
+  });
+
+  it("does not count a target as fixed when it only received a new random id", () => {
+    const target = zoom("45a54583162e");
+    const fix: FixTask = { ...task("aria-valid-attr-value"), violations: [target] };
+    expect(verifyPerPatch({ task: fix, before: state([target]), after: state([zoom("5d854068c5c8")]) }))
+      .toMatchObject({ accepted: false, check: "target" });
+  });
+
+  it("accepts fixing one of several elements that share a masked selector, and rejects fixing none", () => {
+    const first = zoom("45a54583162e"), second = zoom("1818daa8ccb8");
+    const fix: FixTask = { ...task("aria-valid-attr-value"), violations: [first] };
+    expect(verifyPerPatch({ task: fix, before: state([first, second]), after: state([zoom("d4984d4c2828")]) })).toMatchObject({ accepted: true });
+    expect(verifyPerPatch({ task: fix, before: state([first, second]), after: state([zoom("d4984d4c2828"), zoom("e658c765a188")]) }))
+      .toMatchObject({ accepted: false, check: "target" });
+  });
+
+  it("ignores digit-only text changes such as clocks", () => {
+    expect(verifyPerPatch({ task: task(), before: state([violation()], [node({ text: "10:48 AM" })]), after: state([], [node({ text: "10:52 AM" })]) }))
+      .toMatchObject({ accepted: true });
+  });
+
+  it("still rejects removed or replaced words, and emptied text even on volatile nodes", () => {
+    expect(verifyPerPatch({ task: task(), before: state([violation()], [node({ text: "Delete account" })]), after: state([], [node({ text: "Delete" })]) }))
+      .toMatchObject({ accepted: false, check: "aria-tree" });
+    expect(verifyPerPatch({ task: task(), before: state([violation()], [node({ text: "I'm ali", volatileText: true })]), after: state([], [node({ text: "" })]) }))
+      .toMatchObject({ accepted: false, check: "aria-tree" });
+  });
+
+  it("skips text equality only for nodes learned as volatile from unpatched baselines", () => {
+    expect(verifyPerPatch({ task: task(), before: state([violation()], [node({ text: "I'm ali", volatileText: true })]), after: state([], [node({ text: "I'm alia" })]) }))
+      .toMatchObject({ accepted: true });
+    expect(verifyPerPatch({ task: task(), before: state([violation()], [node({ text: "I'm ali" })]), after: state([], [node({ text: "I'm alia" })]) }))
+      .toMatchObject({ accepted: false, check: "aria-tree" });
+  });
+});

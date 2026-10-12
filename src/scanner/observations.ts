@@ -8,6 +8,7 @@ export const AccessibleFactSchema = z.object({
   id: z.string(), role: z.string().nullable(), name: z.string(), text: z.string(),
   interactive: z.boolean(), headingLevel: z.number().int().positive().optional(),
   protectedContent: z.boolean().optional(),
+  volatileText: z.boolean().optional(),
 }).strict();
 const artifactName = z.string().regex(/^[a-zA-Z0-9_-]+\.png$/);
 export const RenderedContextSchema = z.object({

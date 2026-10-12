@@ -78,6 +78,7 @@
 - Bound Firestore metadata reads and saved acknowledgments to the configured document resource and payload identity, refusing misplaced or cross-scope rows before collection or claim recovery.
 - Allowed operational snapshots of closed UTC days to be read after midnight while retaining day boundaries and incomplete-evidence checks.
 - Pinned Firestore metadata pagination to one read time so concurrent updates cannot silently mix pages; rejected snapshots return no partial listing.
+- Verifier no longer blocks pages whose unpatched production build differs between loads: random hex tokens in selectors (e.g. react-medium-image-zoom ids) are masked in violation identities, all identity comparisons count occurrences so an extra violation on the same masked selector is still rejected, digits are ignored in visible-text comparison, and text that differs between unpatched baseline samples skips only the text-equality check. A target that merely received a new random id is no longer treated as fixed.
 - Kept completed Cloud Run operations with absent results unknown and rejected contradictory results instead of inferring success.
 - Enforced the existing Firestore dispatch-response byte limit during streaming reads and cancelled oversized bodies before full buffering.
 - Recorded Hosted model outcomes and known usage in per-run JSONL traces without source or credentials; uncertain observer failures keep the run blocked.
