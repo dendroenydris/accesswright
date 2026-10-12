@@ -35,7 +35,7 @@ export async function collectHostedOperations(input: unknown, day: string, optio
     const usage = await FirestoreSpendLedger.observeCollection({ projectId: config.projectId, collectionId: config.collections.spending, getAccessToken, ...options }, readTime);
     await appendRunRecord(record, { timestamp: new Date().toISOString(), step: "hosted-operations-usage-read", status: usage.reconciled ? "ok" : "skipped", metadata: { count: usage.reservations.length } });
     const observedJobs: z.infer<typeof OperationSnapshotSchema>["jobs"] = [];
-    const operations = new Set<string>();
+    const operations = new Set<string>(), observedExecutions = new Set<string>();
     let unresolvedJobs = 0, excludedJobs = 0;
     for (const claim of inventory) {
       if (Date.parse(claim.createdAt) > Date.parse(readTime) || !config.repositories.some(repository => repository.toLowerCase() === claim.repository.toLowerCase())) {
@@ -57,21 +57,39 @@ export async function collectHostedOperations(input: unknown, day: string, optio
           (Date.parse(observation.finishedAt) < start || Date.parse(observation.finishedAt) >= end))) { excludedJobs += 1; continue; }
         if (observation.status === "unknown") unresolvedJobs += 1;
         observedJobs.push({ runId: claim.runId, status: observation.status, startedAt: observation.startedAt, finishedAt: observation.finishedAt });
+        if (observation.execution !== null) observedExecutions.add(observation.execution);
       } catch {
         unresolvedJobs += 1;
         await appendRunRecord(record, { timestamp: new Date().toISOString(), step: "hosted-operations-execution-read", status: "error" });
       }
     }
+    let executionInventory: Awaited<ReturnType<CloudRunJobInvoker["listExecutionInventory"]>> | null = null;
+    try {
+      executionInventory = await jobs.listExecutionInventory();
+      await appendRunRecord(record, { timestamp: executionInventory.observedAt, step: "hosted-operations-inventory-read", status: "ok",
+        metadata: { count: executionInventory.executions.length } });
+    } catch {
+      executionInventory = null;
+      await appendRunRecord(record, { timestamp: new Date().toISOString(), step: "hosted-operations-inventory-read", status: "error" });
+    }
+    const listedNames = new Set(executionInventory?.executions.map(execution => execution.name));
+    const unmatchedExecutionIds = executionInventory === null ? null : executionInventory.executions.filter(execution =>
+      Date.parse(execution.createTime) < end && (execution.startTime === undefined || Date.parse(execution.startTime) < end) &&
+      (execution.completionTime === undefined || (Date.parse(execution.completionTime) >= start && Date.parse(execution.completionTime) < end)) &&
+      !observedExecutions.has(execution.name)).map(execution => execution.name);
+    const missingExecutionIds = executionInventory === null ? null : [...observedExecutions].filter(name => !listedNames.has(name));
     const unsettledBeforeClose = usage.reservations.filter(call => call.state !== "settled" && Date.parse(call.createdAt) < end).length;
     const selectedMonthPolicyPresent = usage.globalMonths.includes(day.slice(0, 7));
     const snapshot = OperationSnapshotSchema.parse({ schemaVersion: 1, day, observedAt: new Date().toISOString(),
-      // shortcut: retained claims do not prove fleet retention; require an independent execution inventory before healthy job alerts.
+      // shortcut: paginated resource lists do not prove historical retention; require independent window coverage before healthy job alerts.
       complete: { jobs: false, calls: usage.reconciled && selectedMonthPolicyPresent && !usage.historicalUsageUnknown && unsettledBeforeClose === 0 },
       jobs: observedJobs,
       calls: usage.reservations.filter(call => Date.parse(call.recordedAt) >= start && Date.parse(call.recordedAt) < end)
         .map(call => ({ id: call.id, recordedAt: call.recordedAt, state: call.state, costUsd: call.costUsd })),
     });
     const coverage = { readTime, claims: inventory.length, unresolvedJobs, excludedJobs, jobInventory: "unverified-retention" as const,
+      executionInventory: { observedAt: executionInventory?.observedAt ?? null, listed: executionInventory?.executions.length ?? null,
+        unmatchedExecutionIds, missingExecutionIds },
       reservations: usage.reservations.length, unsettledBeforeClose, accountingConsistent: usage.reconciled,
       historicalUsageUnknown: usage.historicalUsageUnknown, selectedMonthPolicyPresent };
     await appendRunRecord(record, { timestamp: snapshot.observedAt, step: "hosted-operations-collect-result", status: "skipped",

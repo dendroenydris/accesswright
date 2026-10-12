@@ -73,6 +73,8 @@ export const defaults = Object.freeze({
   hostedJobDispatchDeadlineSeconds: 30,
   hostedDispatchResponseMaxBytes: 12000,
   cloudRunResponseMaxBytes: 12000,
+  cloudRunExecutionPageSize: 25,
+  cloudRunExecutionMaxListPages: 40,
   hostedExpiryDeadlineSeconds: 30,
   hostedMaxFeedbackChars: 4096,
   hostedMaxImages: 1,

@@ -34,6 +34,20 @@ const executionSchema = z.object({
     env: z.array(z.object({ name: z.string(), value: z.string().optional(), valueSource: z.unknown().optional() })) })) }),
 });
 
+const inventoryExecutionSchema = z.object({
+  name: z.string().max(250), job: z.string().max(250), createTime: z.iso.datetime(),
+  startTime: z.iso.datetime().optional(), completionTime: z.iso.datetime().optional(),
+  deleteTime: z.iso.datetime().optional(), expireTime: z.iso.datetime().optional(),
+}).refine(entry => Date.parse(entry.createTime) <= Date.now() &&
+  [entry.startTime, entry.completionTime, entry.deleteTime].every(time => time === undefined ||
+    (Date.parse(time) >= Date.parse(entry.createTime) && Date.parse(time) <= Date.now())) &&
+  (entry.startTime === undefined || entry.completionTime === undefined || Date.parse(entry.completionTime) >= Date.parse(entry.startTime)) &&
+  (entry.expireTime === undefined || Date.parse(entry.expireTime) >= Date.parse(entry.deleteTime ?? entry.createTime)), "Invalid execution inventory timestamp");
+const inventoryPageSchema = z.object({
+  executions: z.array(inventoryExecutionSchema).max(defaults.cloudRunExecutionPageSize).optional(),
+  nextPageToken: z.string().max(4096).optional(),
+});
+
 async function readBoundedResponse(response: Response): Promise<unknown> {
   if (Number(response.headers.get("content-length") ?? 0) > defaults.cloudRunResponseMaxBytes) {
     await response.body?.cancel();
@@ -150,6 +164,29 @@ export class CloudRunJobInvoker {
       throw new Error("Cloud Run operation inspect failed (HTTP " + response.status + ")");
     }
     return readBoundedResponse(response);
+  }
+
+  /** Retained resource directory only; listing cannot prove a complete historical window or terminal outcomes. */
+  async listExecutionInventory() {
+    const executions: z.infer<typeof inventoryExecutionSchema>[] = [];
+    const names = new Set<string>(), tokens = new Set<string>(), prefix = this.jobName + "/executions/";
+    const query = new URLSearchParams({ pageSize: String(defaults.cloudRunExecutionPageSize), showDeleted: "true",
+      fields: "executions(name,job,createTime,startTime,completionTime,deleteTime,expireTime),nextPageToken" });
+    for (let page = 0; page < defaults.cloudRunExecutionMaxListPages; page += 1) {
+      const result = inventoryPageSchema.parse(await this.readResource(this.jobName + "/executions?" + query.toString()));
+      for (const execution of result.executions ?? []) {
+        if (execution.job !== this.jobName || !execution.name.startsWith(prefix) ||
+          !/^[A-Za-z0-9_-]+$/.test(execution.name.slice(prefix.length)) || names.has(execution.name)) {
+          throw new Error("Cloud Run inventory execution identity is mismatched or repeated");
+        }
+        names.add(execution.name); executions.push(execution);
+      }
+      const token = result.nextPageToken ?? "";
+      if (!token) return { observedAt: new Date().toISOString(), executions };
+      if (tokens.has(token)) throw new Error("Cloud Run inventory repeated a pagination token");
+      tokens.add(token); query.set("pageToken", token);
+    }
+    throw new Error("Cloud Run inventory exceeds page limit");
   }
 
   /** Read-only evidence from a fresh Execution GET; never a retry or publication authority. */

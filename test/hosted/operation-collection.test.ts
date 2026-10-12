@@ -42,6 +42,8 @@ async function fixture() {
     template: { containers: [{ name: "accesswright", env: [{ name: "ACCESSWRIGHT_RUN_ID", value: run.runId },
       { name: "ACCESSWRIGHT_REPOSITORY", value: run.repository }, { name: "ACCESSWRIGHT_INSTALLATION_ID", value: "42" },
       { name: "ACCESSWRIGHT_PR_NUMBER" }, { name: "ACCESSWRIGHT_RUN_TOKEN", value: "PRIVATE_TOKEN" }] }] } };
+  const directory: Record<string, unknown>[] = [{ name: execution, job, createTime: run.createdAt }];
+  let directoryDenied = false;
   const fetcher: typeof fetch = (input, init) => {
     const uri = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url); calls.push(uri);
     expect(init?.method).toBe("GET"); expect(init?.body).toBeUndefined(); expect(init?.redirect).toBe("error");
@@ -56,12 +58,13 @@ async function fixture() {
         fields: { payload: { stringValue: JSON.stringify(entry) } } })), ...(offset + 1 < entries.length ? { nextPageToken: String(offset + 1) } : {}) }));
     }
     expect(uri.origin).toBe("https://run.googleapis.com");
+    if (uri.pathname === "/v2/" + job + "/executions") return Promise.resolve(directoryDenied ? new Response("PRIVATE_ERROR", { status: 403 }) : Response.json({ executions: directory }));
     if (executionFailure) return Promise.resolve(new Response("PRIVATE_ERROR", { status: 403 }));
     if (uri.pathname === "/v2/" + operation) return Promise.resolve(Response.json({ name: operation, done: operationDone,
       ...(operationDone ? { response: { name: execution } } : {}) }));
     expect(uri.pathname).toBe("/v2/" + execution); return Promise.resolve(Response.json(actual));
   };
-  return { root, rows, claims, calls, actual, fetcher, config: config(root),
+  return { root, rows, claims, calls, actual, directory, fetcher, config: config(root), failDirectory: () => { directoryDenied = true; },
     setVersion: (value: string) => { version = value; }, failPage: () => { pageFailure = true; },
     failExecution: () => { executionFailure = true; }, pendingOperation: () => { operationDone = false; },
     collect: () => collectHostedOperations(config(root), "2026-10-11", { fetcher }),
@@ -152,7 +155,49 @@ it("does not inspect claims created after the selected day or count their start 
   const f = await fixture(); f.claims[0].createdAt = "2026-10-12T01:00:00.000Z";
   try {
     const result = await f.collect(); expect(result.snapshot.jobs).toEqual([]); expect(result.coverage.excludedJobs).toBe(1);
-    expect(f.calls.some(url => url.origin === "https://run.googleapis.com")).toBe(false);
+    expect(f.calls.filter(url => url.origin === "https://run.googleapis.com").map(url => url.pathname)).toEqual(["/v2/" + job + "/executions"]);
+  } finally { await f.close(); }
+});
+
+it("reports the actual resource directory and unmatched/deleted identities without turning list completion into healthy coverage", async () => {
+  const f = await fixture();
+  f.directory.push({ name: job + "/executions/unmatched", job, createTime: "2026-10-11T01:00:00.000Z",
+    completionTime: "2026-10-11T02:00:00.000Z", deleteTime: "2026-10-11T03:00:00.000Z", expireTime: "2099-10-11T03:00:00.000Z" });
+  try {
+    const result = await f.collect();
+    expect(result.coverage.executionInventory).toMatchObject({ listed: 2, unmatchedExecutionIds: [job + "/executions/unmatched"], missingExecutionIds: [] });
+    expect(result.snapshot.jobs).toHaveLength(1); expect(result.snapshot.complete.jobs).toBe(false);
+    expect(await readFile(join(f.root, "evidence", "operations", "2026-10-11", "run.jsonl"), "utf8")).toContain("hosted-operations-inventory-read");
+  } finally { await f.close(); }
+});
+
+it("reports confirmed executions missing from the later resource directory, rather than silently treating an empty directory as complete", async () => {
+  const f = await fixture(); f.directory.length = 0;
+  try {
+    const result = await f.collect(); expect(result.coverage.executionInventory).toMatchObject({ listed: 0, missingExecutionIds: [execution], unmatchedExecutionIds: [] });
+    expect(result.snapshot.jobs[0].status).toBe("succeeded"); expect(result.snapshot.complete.jobs).toBe(false);
+  } finally { await f.close(); }
+});
+
+it.each(["denied", "invalid", "duplicate"])("preserves confirmed jobs/costs but leaves directory counts null after %s inventory", async fault => {
+  const f = await fixture();
+  if (fault === "denied") f.failDirectory();
+  if (fault === "invalid") f.directory[0].job = "projects/other-project/locations/europe-west3/jobs/worker";
+  if (fault === "duplicate") f.directory.push({ ...f.directory[0] });
+  try {
+    const result = await f.collect(); expect(result.coverage.executionInventory).toEqual({ observedAt: null, listed: null, missingExecutionIds: null, unmatchedExecutionIds: null });
+    expect(result.snapshot.jobs[0].status).toBe("succeeded"); expect(result.snapshot.calls[0].costUsd).toBe(0.25); expect(result.snapshot.complete.jobs).toBe(false);
+  } finally { await f.close(); }
+});
+
+it("excludes directory resources belonging to other days but retains untimed resources as unmatched", async () => {
+  const f = await fixture();
+  f.directory.push({ name: job + "/executions/next-day", job, createTime: "2026-10-12T01:00:00.000Z" },
+    { name: job + "/executions/previous-day", job, createTime: "2026-10-09T01:00:00.000Z", completionTime: "2026-10-10T01:00:00.000Z" },
+    { name: job + "/executions/not-started", job, createTime: "2026-10-11T01:00:00.000Z" });
+  try {
+    const result = await f.collect(); expect(result.coverage.executionInventory.unmatchedExecutionIds).toEqual([job + "/executions/not-started"]);
+    expect(result.snapshot.jobs).toHaveLength(1);
   } finally { await f.close(); }
 });
 

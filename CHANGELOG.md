@@ -18,6 +18,7 @@
 
 ### Added
 
+- Read-only Cloud Run execution-directory reconciliation with unmatched and missing resource identities; uncertain listings remain null and do not grant complete historical coverage.
 - Read-only closed-day metadata collection with shared Firestore snapshot versions, original-scope accounting reconciliation, actual execution reads and explicit coverage gaps.
 - Read-only settled-usage observation with original global/installation allowance scopes and the server document version time; pending and unknown costs remain null.
 - Single-run, read-only execution observation bound to the durable dispatch claim, fixed Cloud Run job and actual execution identity, with metadata-only output.
