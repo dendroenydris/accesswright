@@ -18,6 +18,7 @@
 
 ### Added
 
+- Offline paired-label judge calibration with confusion counts, Cohen's kappa, distinct-fix checks and an explicit statistical gate; supplied labels do not authenticate review or alter evaluation results.
 - Read-only Cloud Run execution-directory reconciliation with unmatched and missing resource identities; uncertain listings remain null and do not grant complete historical coverage.
 - Read-only closed-day metadata collection with shared Firestore snapshot versions, original-scope accounting reconciliation, actual execution reads and explicit coverage gaps.
 - Read-only settled-usage observation with original global/installation allowance scopes and the server document version time; pending and unknown costs remain null.

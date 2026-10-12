@@ -253,6 +253,21 @@ Evaluation outputs carry both the frozen protocol digest and a digest of an immu
 
 A frozen development deterministic smoke on 2026-10-07 selected four public repositories and produced five eligible seeded cases across three verified-compatible repositories: three semantically correct fixes, two unresolved cases, zero changed clean controls out of 368 observed, and USD 0 model spend. One fourth repository was unsupported because the unmodified production build failed. This `max-cases=2` smoke is **not** the 300-case Track S test result and is not a live B1/A1/A comparison.
 
+## Judge calibration (offline)
+
+Compare supplied human and judge labels before using a judge in reported semantic metrics:
+
+```sh
+npm run build
+npm run judge:calibrate -- --labels /absolute/path/paired-labels.json
+```
+
+The strict JSON input has `schemaVersion: 1`, SHA256 `protocolDigest`, `implementationDigest` and `rubricDigest`, `repairModel` and `judgeModel` (only `provider`, `id` and optional `reasoningEffort`), an ISO UTC `labeledAt`, and `pairs`. Each pair contains only SHA256 `caseId` and `fixDigest`, plus boolean `humanCorrect` and `judgeCorrect`. Bind each fix digest to the exact case, base and complete candidate; use one frozen rubric for all pairs. Human labels require review of accuracy, page relevance, concision, hallucinations and whether an image is decorative. Source, prompts, screenshots, endpoint URLs and credentials are excluded from this file.
+
+The output includes a confusion matrix with humans as rows and the judge as columns, observed/chance agreement and [Cohen's kappa](https://garfield.library.upenn.edu/classics1986/A1986AXF2600001.pdf). The planned statistical gate requires at least 100 distinct labeled fixes and kappa ≥ 0.6. Empty or one-category agreement has undefined kappa and cannot pass. Duplicate fix digests fail; repeated cases are counted separately from distinct fixes. A same-model judge is explicitly marked as a limitation.
+
+Exit 0 means the supplied labels meet the statistical gate, 1 means they do not, and 2 means invalid input. The label-set digest binds the metadata and labels; it does not authenticate human review, provider execution, blinding or representative sampling. This offline calculation makes no model calls, does not modify evaluation cells or verifier decisions, and does not itself authorize calibrated-judge metrics. Real human labels and independent provenance review remain required.
+
 ## Deutscher technischer Prüfbericht (lokal)
 
 A German-language evidence template is available for an existing **aggregate** run report. It is not a WCAG / EN 301 549 / EAA legal conformity certification. A reviewed list of accepted fix commits is required; missing or contradictory evidence fails closed. The command never contacts a cloud service and refuses to overwrite existing output:

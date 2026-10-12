@@ -21,6 +21,7 @@
     "build:integration": "tsc -p tsconfig.integration.json",
     "test:integration": "npm run build:integration && vitest run --config vitest.integration.config.ts",
     "eval": "node dist/src/eval/cli.js",
+    "judge:calibrate": "node dist/src/eval/judge-calibration.js",
     "mcp": "node dist/src/mcp/server.js",
     "evidence:de": "node dist/src/reporter/evidence-cli-de.js",
     "operations:check": "node dist/src/hosted/operation-alert-cli.js",
