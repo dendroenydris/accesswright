@@ -181,6 +181,7 @@ export class FirestoreMetadataStore<T extends { runId: string }> {
   async records(): Promise<T[]> {
     const records: T[] = [];
     const seen = new Set<string>();
+    const seenRunIds = new Set<string>();
     let token = "";
     for (let page = 0; page < defaults.firestoreMaxListPages; page += 1) {
       const response = await this.request("GET", "?pageSize=" + defaults.firestorePageSize +
@@ -190,7 +191,12 @@ export class FirestoreMetadataStore<T extends { runId: string }> {
         throw new Error("Firestore metadata list failed (HTTP " + response.status + ")");
       }
       const result = pageSchema.parse(await boundedJson(response));
-      records.push(...(result.documents ?? []).map(doc => this.decode(doc).record));
+      for (const doc of result.documents ?? []) {
+        const record = this.decode(doc).record;
+        if (seenRunIds.has(record.runId)) throw new Error("Duplicate Firestore run identity");
+        seenRunIds.add(record.runId);
+        records.push(record);
+      }
       token = result.nextPageToken ?? "";
       if (!token) return records;
       if (seen.has(token)) throw new Error("Firestore repeated a pagination token");
