@@ -13,6 +13,8 @@ import { FakeLlmProvider } from "../helpers/fake-provider.js";
 import { hostedCandidateFixture } from "../helpers/hosted-candidate.js";
 import type { QueuedRun } from "../../src/hosted/webhook.js";
 import { assertHostedVerifierNetwork } from "../../src/hosted/verifier-network.js";
+import { FirestoreSpendLedger } from "../../src/hosted/firestore-spend-ledger.js";
+import { RunRecordSchema } from "../../src/tracer/run-record.js";
 
 vi.mock("../../src/hosted/verifier-network.js", () => ({ assertHostedVerifierNetwork: vi.fn() }));
 
@@ -91,6 +93,11 @@ function fixture() {
       if (uri.pathname === "/repos/owner/repo/collaborators/reviewer/permission") return Response.json({ permission: "write", user: { login: "reviewer" } });
     }
     if (uri.origin === "https://firestore.googleapis.com") {
+      if (uri.pathname.endsWith("/documents:commit")) {
+        const body = JSON.parse(typeof init?.body === "string" ? init.body : "{}") as { writes: Array<{ update: { name: string } }> };
+        const name = body.writes[0]?.update.name.split("/documents/")[1]?.split("/")[0], store = stores.get(name ?? "");
+        if (store) return store.fetcher(input, init);
+      }
       const name = uri.pathname.split("/documents/")[1]?.split("/")[0], store = stores.get(name ?? "");
       if (store) return store.fetcher(input, init);
     }
@@ -171,6 +178,33 @@ it("pins the PR head before worker authorization and only polls scheduled finish
   expect(finish.status).toBe(202); expect(await finish.json()).toMatchObject({ status: "recorded" });
   expect(f.calls.some(uri => uri.includes("storage.googleapis.com"))).toBe(false); expect(f.provider.requests).toHaveLength(0);
   expect(await readFile(join(root, "evidence", run.runId, "run.jsonl"), "utf8")).not.toContain("fixture-github-source");
+});
+
+it("records a settled fake model call through the executable agent role without raw source or App/run credentials", async () => {
+  const f = fixture(), spending = f.stores.get("spending");
+  if (!spending) throw new Error("Fixture spending store missing");
+  const month = new Date().toISOString().slice(0, 7);
+  for (const budgetId of ["global-" + month, "installation-42-" + month]) {
+    await FirestoreSpendLedger.initialize({ ...spending.options, budgetId }, { maxUsd: 1, history: [] });
+  }
+  const source = { file: "Controls.tsx", line: 1, column: 1 };
+  const task = { id: "button-name:save", ruleId: "button-name", criterion: "4.1.2", kind: "semantic", route: "llm", source, routes: ["/"],
+    violations: [{ ruleId: "button-name", impact: "serious", route: "/", target: ["#save"], html: "PRIVATE_SOURCE_CANARY", failureSummary: "No name", condition: "desktop-light", source }] };
+  const provider = new FakeLlmProvider([{ object: { taskId: task.id, changes: [{ path: source.file, before: "PRIVATE_SOURCE_CANARY", after: '<button aria-label="Save" />' }] },
+    usage: { inputTokens: 300, outputTokens: 100, costUsd: 0.0005 } }]);
+  const service = createHostedServiceRuntime({ ...f.agent, role: "agent" }, { environment: f.environment, fetcher: f.fetcher, provider });
+  if (!service.registerRunToken) throw new Error("Agent registration missing");
+  const authorization = await service.registerRunToken(run), origin = await listen(service.server);
+  const response = await post(origin, "/runs/" + run.runId + "/tasks/" + encodeURIComponent(task.id) + "/patch", authorization, { task,
+    context: { component: { ...source, sourceExcerpt: "PRIVATE_SOURCE_CANARY" }, callSites: [],
+      page: { title: "Private title", surroundingText: "Save changes", caption: null, linkTarget: null }, screenshotPath: null } });
+  const result: unknown = await response.json();
+  expect(result, JSON.stringify(result)).toMatchObject({ status: "accepted" }); expect(response.status).toBe(200);
+  const text = await readFile(join(root, "evidence", run.runId, "run.jsonl"), "utf8");
+  const records = text.trim().split("\n").map(line => RunRecordSchema.parse(JSON.parse(line) as unknown)).filter(record => record.step === "llm");
+  expect(records).toHaveLength(1); expect(records[0]).toMatchObject({ status: "ok", usage: { costUsd: 0.0005 }, model: { id: "fixture-only" } });
+  expect(text).not.toMatch(/PRIVATE_SOURCE_CANARY|Private title|Save changes|Controls\.tsx/);
+  expect(text).not.toContain(authorization); expect(text).not.toContain(privateKey); expect(provider.requests).toHaveLength(1);
 });
 
 it("authenticates task-to-relay-to-verifier separately and requires the durable blocked result when no candidate exists", async () => {

@@ -7,6 +7,7 @@ import { defaults } from "../config.js";
 import { AiSdkLlmProvider, resolveApiKey } from "../llm/ai-sdk-provider.js";
 import type { LlmProvider } from "../llm/types.js";
 import { resolveExecutionModel } from "../llm/execution-policy.js";
+import { createJsonlLlmRunObserver } from "../llm/run-record.js";
 import { LlmModelConfigSchema } from "../types/schemas.js";
 import { appendRunRecord } from "../tracer/run-record.js";
 import { HostedPatchAgent } from "./agent-api.js";
@@ -112,7 +113,8 @@ export function createHostedServiceRuntime(input: unknown, options: { environmen
   const agentOptions: HostedPatchAgentOptions = { model, pricing: config.pricing, maxInputTokens: config.maxInputTokens,
     maxOutputTokens: config.maxOutputTokens, maxCostUsdPerRun: config.maxCostUsdPerRun, provider,
     providerVerification: options.provider ? "fake-provider" : "provider-api", runStore: new FirestoreHostedAgentRunStore(metadata(config.collections.agentRuns)),
-    ledgerForRun: run => openMonthlyHostedSpend(metadata(config.collections.spending), run.installationId) };
+    ledgerForRun: run => openMonthlyHostedSpend(metadata(config.collections.spending), run.installationId),
+    observeCall: createJsonlLlmRunObserver(join(config.workRoot, "evidence")) };
   const checkouts = new FirestoreHostedCheckoutRegistry(metadata(config.collections.checkoutPins));
   const identity = (run: Pick<HostedRunRecord, "runId" | "repository" | "installationId">) => ({ runId: run.runId, repository: run.repository, installationId: run.installationId });
   const pinOriginalRevision = (run: QueuedRun) => sourceAccess.pinRunRevision(identity(run), run.pullNumber);

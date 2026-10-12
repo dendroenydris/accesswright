@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -7,10 +7,20 @@ import { z } from "zod";
 
 import { LlmClient } from "../../src/llm/client.js";
 import { LlmStructuredOutputError } from "../../src/llm/errors.js";
-import { createJsonlLlmObserver } from "../../src/llm/run-record.js";
+import { createJsonlLlmObserver, createJsonlLlmRunObserver } from "../../src/llm/run-record.js";
 import { FakeLlmProvider } from "../helpers/fake-provider.js";
 
 describe("LLM run recording", () => {
+  it("creates only validated per-run evidence directories and keeps run files separate", async () => {
+    const root = await mkdtemp(join(tmpdir(), "accesswright-llm-run-record-"));
+    try {
+      expect(() => createJsonlLlmRunObserver("relative")).toThrow(/absolute/);
+      const observe = createJsonlLlmRunObserver(root), event = { taskType: "fixture", promptHash: "a".repeat(64), model: { provider: "openai", id: "fixture-only" }, status: "ok" as const };
+      await expect(observe("../escape", event)).rejects.toThrow();
+      await observe("one", event); await observe("two", event);
+      for (const id of ["one", "two"]) expect((await readFile(join(root, id, "run.jsonl"), "utf8")).trim().split("\n")).toHaveLength(1);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
   it("records model, usage, cost, and prompt hash without raw prompt or secrets", async () => {
     const directory = await mkdtemp(join(tmpdir(), "accesswright-llm-record-"));
     const path = join(directory, "run.jsonl");

@@ -1,3 +1,4 @@
+import { createJsonlLlmRunObserver } from "../llm/run-record.js";
 import { HostedPatchAgent } from "./agent-api.js";
 import type { HostedPatchAgentOptions, HostedRunRecord } from "./agent-api.js";
 import { createHostedAgentServer } from "./agent-http.js";
@@ -31,7 +32,7 @@ export function createHostedTrustedServices(options: {
   runtimeRoot: string;
   evidenceRoot: string;
 }) {
-  const agent = new HostedPatchAgent(options.agent);
+  const agent = new HostedPatchAgent({ ...options.agent, observeCall: createJsonlLlmRunObserver(options.evidenceRoot) });
   const identity = (run: Pick<HostedRunRecord, "runId" | "repository" | "installationId">) => ({
     runId: run.runId, repository: run.repository, installationId: run.installationId,
   });

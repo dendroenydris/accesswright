@@ -5,6 +5,7 @@ import { defaults } from "../config.js";
 import { calculateUsageCost } from "../llm/ai-sdk-provider.js";
 import type { ModelPricing } from "../llm/ai-sdk-provider.js";
 import { LlmClient } from "../llm/client.js";
+import type { LlmCallEvent } from "../llm/client.js";
 import { DurableBudgetProvider } from "../llm/durable-provider.js";
 import type { SpendLedger } from "../llm/durable-spend.js";
 import { getRepairGuidance } from "../llm/guidance.js";
@@ -30,6 +31,8 @@ export interface HostedPatchAgentOptions {
   provider: LlmProvider;
   providerVerification: Exclude<RunReport["providerVerification"], "not-run">;
   runStore: HostedAgentRunStore;
+  /** Trusted coordinator observer; raw context and authorization are never emitted. */
+  observeCall?: (runId: string, event: LlmCallEvent) => Promise<void> | void;
 }
 
 export interface RunRegistration {
@@ -211,7 +214,7 @@ export class HostedPatchAgent {
         ledger: await this.options.ledgerForRun(claimed.record),
         model: this.options.model, pricing: this.options.pricing,
         maxInputTokens: this.options.maxInputTokens,
-      }));
+      }), event => this.options.observeCall?.(runId, event));
       clientStarted = true;
       const result = await client.callStructured({
         taskType: "hosted-semantic-repair",

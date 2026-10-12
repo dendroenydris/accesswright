@@ -69,6 +69,7 @@
 
 ### Fixed
 
+- Recorded Hosted model outcomes and known usage in per-run JSONL traces without source or credentials; uncertain observer failures keep the run blocked.
 - Rejected repeated run identities across Firestore metadata pages before they can duplicate run or usage summaries.
 - Preserved original BOM-prefixed source offsets and locations in evaluation mutations without weakening exact-source checks.
 - Excluded blocked and unsupported evaluation cases from repair rates, valid unique coverage and paired comparisons while retaining their costs and diagnostic evidence.
