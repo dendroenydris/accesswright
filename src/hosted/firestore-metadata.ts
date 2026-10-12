@@ -182,9 +182,12 @@ export class FirestoreMetadataStore<T extends { runId: string }> {
     const records: T[] = [];
     const seen = new Set<string>();
     const seenRunIds = new Set<string>();
+    // Independent latest-state pages can miss rows changed between requests.
+    const readTime = new Date().toISOString();
     let token = "";
     for (let page = 0; page < defaults.firestoreMaxListPages; page += 1) {
       const response = await this.request("GET", "?pageSize=" + defaults.firestorePageSize +
+        "&readTime=" + encodeURIComponent(readTime) +
         (token ? "&pageToken=" + encodeURIComponent(token) : ""));
       if (!response.ok) {
         await response.body?.cancel();

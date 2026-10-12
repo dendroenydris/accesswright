@@ -72,6 +72,7 @@
 
 ### Fixed
 
+- Pinned Firestore metadata pagination to one read time so concurrent updates cannot silently mix pages; rejected snapshots return no partial listing.
 - Kept completed Cloud Run operations with absent results unknown and rejected contradictory results instead of inferring success.
 - Enforced the existing Firestore dispatch-response byte limit during streaming reads and cancelled oversized bodies before full buffering.
 - Recorded Hosted model outcomes and known usage in per-run JSONL traces without source or credentials; uncertain observer failures keep the run blocked.
