@@ -40,6 +40,41 @@ it("reports matched B1/A1/A denominators separately from unpaired coverage and r
   expect(report.pairedComparisons[0]?.results[0]?.unpairedCaseOpportunities).toBe(1);
 });
 
+it("keeps cases from blocked baselines unknown while retaining their costs and failure reasons", () => {
+  const blocked = EvalCellSchema.parse({ ...base, status: "blocked", reason: "Unpatched production baseline did not reproduce" });
+  const unsupported = EvalCellSchema.parse({ ...base, batch: 1, status: "unsupported", reason: "Original build unsupported", cases: [] });
+  const report = aggregateEvaluation([blocked, unsupported]);
+  expect(report.groups[0]).toMatchObject({
+    eligibleCases: 0, uniqueCases: 0, checkerAccepted: 0, correctlyFixed: 0, falseFixes: 0,
+    correctFixRate: null, checkerAcceptanceRate: null, completedCells: 0,
+    blockedCells: 1, unsupportedCells: 1, unmeasuredCases: 1, spentUsd: 0.002,
+  });
+  const markdown = renderEvaluationReport(report);
+  expect(markdown).toContain("1 blocked and 1 unsupported");
+  expect(markdown).toContain("1 unmeasured case opportunities");
+  expect(markdown).toContain(blocked.reason ?? "impossible");
+});
+
+it("scores completed unresolved repairs while counting repeated seeds as one unique source case", () => {
+  const completed = EvalCellSchema.parse(base);
+  const repeated = EvalCellSchema.parse({ ...base, seed: 2, cases: [{ ...base.cases[0], semanticallyCorrect: true, correctlyFixed: true }] });
+  const blocked = EvalCellSchema.parse({ ...base, seed: 3, status: "blocked", reason: "baseline drift" });
+  expect(aggregateEvaluation([completed, repeated, blocked]).groups[0]).toMatchObject({
+    eligibleCases: 2, uniqueCases: 1, checkerAccepted: 2, correctlyFixed: 1,
+    correctFixRate: 0.5, falseFixes: 1, unmeasuredCases: 1,
+  });
+});
+
+it("does not pair a blocked system observation with completed repairs", () => {
+  const cells = ["B1", "A1", "A"].map(system => EvalCellSchema.parse({
+    ...base, system, ...(system === "A1" ? { status: "blocked", reason: "baseline drift" } : {}),
+  }));
+  const comparison = aggregateEvaluation(cells).pairedComparisons[0];
+  expect(comparison?.pairedCaseOpportunities).toBe(0);
+  expect(comparison?.results.map(result => result.correctFixRate)).toEqual([null, null, null]);
+  expect(comparison?.results.map(result => result.unpairedCaseOpportunities)).toEqual([1, 0, 1]);
+});
+
 it("rejects transport provenance inconsistent with the configured evaluation mode", () => {
   expect(() => EvalCellSchema.parse({ ...base, providerMode: "fake" })).toThrow();
   expect(() => aggregateEvaluation([base, { ...base, system: "B1", model: { provider: "openai", id: "another" } }])).toThrow(/model/i);
