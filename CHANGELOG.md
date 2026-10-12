@@ -18,6 +18,7 @@
 
 ### Added
 
+- Offline Track N case collection from pinned baseline metadata, occurrence-preserving identities and a blank manual-audit checklist; no private rendered facts or automatic repair scores are retained.
 - Offline paired-label judge calibration with confusion counts, Cohen's kappa, distinct-fix checks and an explicit statistical gate; supplied labels do not authenticate review or alter evaluation results.
 - Read-only Cloud Run execution-directory reconciliation with unmatched and missing resource identities; uncertain listings remain null and do not grant complete historical coverage.
 - Read-only closed-day metadata collection with shared Firestore snapshot versions, original-scope accounting reconciliation, actual execution reads and explicit coverage gaps.

@@ -253,6 +253,21 @@ Evaluation outputs carry both the frozen protocol digest and a digest of an immu
 
 A frozen development deterministic smoke on 2026-10-07 selected four public repositories and produced five eligible seeded cases across three verified-compatible repositories: three semantically correct fixes, two unresolved cases, zero changed clean controls out of 368 observed, and USD 0 model spend. One fourth repository was unsupported because the unmodified production build failed. This `max-cases=2` smoke is **not** the 300-case Track S test result and is not a live B1/A1/A comparison.
 
+## Natural violations: Track N tooling (offline)
+
+`naturalScanMetadata(scope, observations)` in `dist/src/eval/natural-cases.js` projects existing unpatched baseline browser observations into metadata in memory. It hashes repository-local routes, selectors and source locations; HTML, page text, accessibility trees, source paths and screenshots are discarded. The caller must establish the pinned baseline and remove private observations after use. This helper does not launch a browser or authenticate that a scan came from that revision.
+
+```sh
+npm run build
+npm run track-n:collect -- --scan /absolute/path/natural-scan-metadata.json
+```
+
+The strict input has `schemaVersion: 1`, SHA256 `protocolDigest`, `repositoryDigest` and `implementationDigest`, a 40-character `baseSha`, ISO UTC `observedAt`, `checkerVersion`, and `pages`. Each page contains SHA256 `routeDigest`, `condition` (`desktop-light`, `mobile-light` or `desktop-dark`), `incompleteCount` and `violations`. Each violation contains `ruleId`, nullable axe `impact`, SHA256 `targetDigest` and nullable `sourceDigest`. Use the in-memory helper to produce this input; the CLI rejects raw browser dumps and private fields. Inputs must be bounded regular files at absolute paths; symlinks are refused. Exit 2 means invalid input.
+
+Stdout contains the natural cases, reviewed technical rule references, inconclusive counts and an editable JSON `labelingSheet`. Duplicate route/condition scans are rejected; repeated instances at the same location get distinct occurrence IDs. Cases observed under different scan conditions remain separate observations, not independent repair trials. Digests bind metadata and identify cases; they neither anonymize predictable values against guessing nor authenticate evidence.
+
+All review cells start as null. In a private workspace, bind each reviewed accepted patch to its full patch digest and verifier evidence, record a hashed rater identity and UTC review time, then complete the written semantic/content/keyboard checklist and screen-reader spot checks. Keep additional rows if one case receives separate accepted patches, and avoid counting one multi-case patch more than once toward the planned 50-patch, single-rater audit. This tool performs no human review, repair, model call, scoring or publication, and does not modify frozen Track S fixtures or evaluation cells. Real Track N collection and the manual audit remain unverified.
+
 ## Judge calibration (offline)
 
 Compare supplied human and judge labels before using a judge in reported semantic metrics:
