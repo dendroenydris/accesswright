@@ -175,6 +175,10 @@ In the agent role, `finish` polls the separately scheduled verifier without cons
 
 **Not deployment-ready:** role composition and HTTP tests use fake cloud APIs and fixture-signed Google tokens. Actual Google token/ingress/IAM behavior, private GitHub App source access, storage deletion policy, host firewall enforcement, spending-policy provisioning, cloud dashboard IAM, actual Hosted GitHub publication, release workflow, deployed alerts and the planned operations period remain incomplete. Production use requires a controlled operator deployment and explicit authorization; the local code is not a completed Hosted App.
 
+## Hosted infrastructure preparation
+
+[`deploy/terraform`](deploy/terraform/README.md) describes the existing GCP service, secretless worker, queue, private storage and workload-account shape. It includes pinned tooling and mock-provider plan tests; it does not deploy services, enable billing/APIs, write secret values or provision the native Docker verifier host. Real project inputs, a reviewed plan and separate deployment authorization are still required. No cloud plan or apply has been performed.
+
 ## Private operator dashboard (local, read-only)
 
 The `app/` Next.js App Router application now renders Firestore aggregate run metadata, with a paginated run table, individual run details, statuses, checks and reconciled spending. It refuses to display unknown document fields, raw source, prompts, reports, screenshots and secrets. The Firestore client uses a fixed Google HTTPS endpoint and Cloud Run's workload-identity metadata token; no service-account key is bundled. The local HTTP auth gate fails closed without an operator username and a sufficiently long password. **This additional Basic gate is not a substitute for Google Cloud IAM/IAP and private ingress.** Production deployment and authentication have not been authorized or verified.
