@@ -28,15 +28,15 @@ export const OperationSnapshotSchema = z.object({
 }).strict().superRefine((snapshot, context) => {
   const start = Date.parse(snapshot.day + "T00:00:00.000Z"), end = start + 86400000;
   const observed = Date.parse(snapshot.observedAt);
-  if (!Number.isFinite(start) || new Date(start).toISOString().slice(0, 10) !== snapshot.day || observed < start || observed > end) {
-    context.addIssue({ code: "custom", message: "Observation must be inside the selected UTC day or its closing midnight" });
+  if (!Number.isFinite(start) || new Date(start).toISOString().slice(0, 10) !== snapshot.day || observed < start) {
+    context.addIssue({ code: "custom", message: "Observation must be on or after the selected UTC day" });
   }
   if (new Set(snapshot.jobs.map(job => job.runId)).size !== snapshot.jobs.length ||
     new Set(snapshot.calls.map(call => call.id)).size !== snapshot.calls.length) {
     context.addIssue({ code: "custom", message: "Duplicate job or provider-call identity" });
   }
   for (const job of snapshot.jobs) {
-    if (Date.parse(job.startedAt) > observed || (job.finishedAt !== null &&
+    if (Date.parse(job.startedAt) >= end || Date.parse(job.startedAt) > observed || (job.finishedAt !== null &&
       (Date.parse(job.finishedAt) < start || Date.parse(job.finishedAt) >= end || Date.parse(job.finishedAt) > observed))) {
       context.addIssue({ code: "custom", message: "Job evidence is outside the observation window" });
     }

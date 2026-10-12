@@ -73,6 +73,7 @@
 
 ### Fixed
 
+- Allowed operational snapshots of closed UTC days to be read after midnight while retaining day boundaries and incomplete-evidence checks.
 - Pinned Firestore metadata pagination to one read time so concurrent updates cannot silently mix pages; rejected snapshots return no partial listing.
 - Kept completed Cloud Run operations with absent results unknown and rejected contradictory results instead of inferring success.
 - Enforced the existing Firestore dispatch-response byte limit during streaming reads and cancelled oversized bodies before full buffering.

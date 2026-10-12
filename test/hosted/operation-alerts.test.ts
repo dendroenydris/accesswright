@@ -67,6 +67,28 @@ it("accepts a job crossing UTC midnight by its completion day and counts calls b
   expect(() => evaluateOperationAlerts({ ...snapshot, jobs: [{ ...crossing, finishedAt: "2026-10-11T23:59:58.000Z" }] }, policy)).toThrow();
 });
 
+it("evaluates a closed UTC day after midnight without treating partial or unknown evidence as complete", () => {
+  const late = { ...snapshot, observedAt: "2026-10-13T08:00:00.000Z", jobs: [job("one", 10), job("two", 20)], calls: [call] };
+  expect(evaluateOperationAlerts(late, policy)).toMatchObject({ day: snapshot.day, observedAt: late.observedAt,
+    completedJobs: 2, settledUsd: 0.75, alerts: { failureRate: "ok", p95DurationMs: "ok", dailyCostUsd: "ok" } });
+  expect(evaluateOperationAlerts({ ...late, complete: { jobs: false, calls: false } }, policy).alerts)
+    .toEqual({ failureRate: "insufficient-data", p95DurationMs: "insufficient-data", dailyCostUsd: "insufficient-data" });
+  expect(evaluateOperationAlerts({ ...late, calls: [{ ...call, state: "unknown", costUsd: null }] }, policy).alerts.dailyCostUsd)
+    .toBe("insufficient-data");
+});
+
+it("keeps the selected day boundary when an observation arrives on a later day", () => {
+  const late = { ...snapshot, observedAt: "2026-10-14T08:00:00.000Z" };
+  for (const timestamp of ["2026-10-13T00:00:00.000Z", "2026-10-13T02:00:00.000Z"]) {
+    expect(() => evaluateOperationAlerts({ ...late, calls: [{ ...call, recordedAt: timestamp }] }, policy)).toThrow(/window/);
+    expect(() => evaluateOperationAlerts({ ...late, jobs: [{ ...job("one", 10), finishedAt: timestamp }] }, policy)).toThrow(/window/);
+    for (const status of ["running", "unknown"]) {
+      expect(() => evaluateOperationAlerts({ ...late, jobs: [{ runId: "later", status, startedAt: timestamp, finishedAt: null }] }, policy)).toThrow(/window/);
+    }
+  }
+  expect(() => evaluateOperationAlerts({ ...snapshot, observedAt: "2026-10-11T23:59:59.999Z" }, policy)).toThrow(/Observation/);
+});
+
 it("rejects duplicate, nonfinite or private metadata instead of silently dropping it", () => {
   expect(() => evaluateOperationAlerts({ ...snapshot, jobs: [job("same", 1), job("same", 1)] }, policy)).toThrow(/Duplicate/);
   expect(() => evaluateOperationAlerts({ ...snapshot, calls: [call, call] }, policy)).toThrow(/Duplicate/);

@@ -11,7 +11,7 @@ it("reads bounded metadata offline without changing inputs, accessing network or
   const fetcher = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("No cloud calls allowed"));
   try {
     const snapshot = join(root, "snapshot.json"), policy = join(root, "policy.json");
-    const raw = JSON.stringify({ schemaVersion: 1, day: "2026-10-12", observedAt: "2026-10-13T00:00:00.000Z", complete: { jobs: false, calls: false }, jobs: [], calls: [] });
+    const raw = JSON.stringify({ schemaVersion: 1, day: "2026-10-12", observedAt: "2026-10-13T08:00:00.000Z", complete: { jobs: false, calls: false }, jobs: [], calls: [] });
     await writeFile(snapshot, raw);
     await writeFile(policy, JSON.stringify({ failureRate: 0.2, dailyCostUsd: 1, p95DurationMs: 1000, minimumCompletedJobs: 1 }));
     const args = ["--snapshot", snapshot, "--policy", policy];

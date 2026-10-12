@@ -182,6 +182,8 @@ The policy requires `failureRate` (0–1), `dailyCostUsd`, `p95DurationMs` and `
 
 Snapshot format:
 
+`observedAt` may be later than the selected UTC day so a closed day can be checked after midnight. Completed jobs and recorded calls must still belong to `day`; running or unknown jobs must have started before that day's closing midnight. Delayed reading does not make partial or unknown evidence complete.
+
 ```json
 {
   "schemaVersion": 1,
