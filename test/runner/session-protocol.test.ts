@@ -16,6 +16,12 @@ describe("persistent runner protocol boundaries", () => {
     const env = targetProcessEnvironment({ PATH: "/usr/bin", HOME: "/home/pwuser", OPENAI_API_KEY: "fixture", GITHUB_TOKEN: "fixture", NODE_OPTIONS: "--require=/malicious.js" });
     expect(env).toEqual({ PATH: "/workspace/node_modules/.accesswright-tools/node_modules/.bin:/usr/bin", HOME: "/home/pwuser", CI: "1", NEXT_TELEMETRY_DISABLED: "1" });
   });
+  it("transports the optional second-checker flag without enabling it by default", () => {
+    const scan = { action: "scan", baseUrl: "http://accesswright-app:3000", routes: ["/"], generation: "baseline", mobile: false, dark: false, interactions: true };
+    expect(BrowserCommandSchema.parse(scan)).not.toHaveProperty("ibm");
+    expect(BrowserCommandSchema.parse({ ...scan, ibm: true })).toHaveProperty("ibm", true);
+    expect(BrowserCommandSchema.safeParse({ ...scan, ibm: "true" }).success).toBe(false);
+  });
   it("rescans mapped component routes and all routes for shared layouts or new unmapped files", () => {
     const map = { "components/Button.tsx": ["/", "/settings"], "app/other/page.tsx": ["/other"] };
     expect(sourceRoutesForChanges(["components/Button.tsx"], map, ["/", "/settings", "/other"])).toEqual(["/", "/settings"]);

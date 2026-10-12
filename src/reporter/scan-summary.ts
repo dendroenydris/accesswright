@@ -36,7 +36,7 @@ export function summarizeScans(before: readonly BrowserObservation[], after: rea
   return ScanSummarySchema.parse({ countUnit: "finding per route and scan condition",
     routes: [...new Set([...before, ...after].map(page => page.route))].sort(),
     conditions: [...new Set([...before, ...after].map(page => page.condition))].sort(),
-    checkerVersions: [...new Set([...before, ...after].map(page => page.checkerVersion ?? "unknown"))].sort(),
+    checkerVersions: [...new Set([...before, ...after].flatMap(page => [page.checkerVersion ?? "unknown", ...(page.ibmCheckerVersion ? [`ibm-equal-access@${page.ibmCheckerVersion}`] : [])]))].sort(),
     coverageComplete: before.length > 0 && missingObservations.length === 0,
     missingObservations, sourceMapping: { mapped: mapped.filter(item => item.source !== null).length, total: mapped.length },
     probeUnavailable: after.reduce((sum, page) => sum + page.probeUnavailable.length, 0),

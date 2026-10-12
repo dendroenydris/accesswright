@@ -22,6 +22,7 @@ const scopeSchema = z.object({
   schemaVersion: z.literal(1), protocolDigest: digest, repositoryDigest: digest,
   baseSha: z.string().regex(/^[a-f0-9]{40}$/), implementationDigest: digest,
   observedAt: z.iso.datetime(), checkerVersion: z.string().regex(/^[0-9A-Za-z.+-]{1,64}$/),
+  ibmCheckerVersion: z.string().regex(/^[0-9A-Za-z.+-]{1,64}$/).optional(),
 }).strict();
 export const NaturalScanMetadataSchema = scopeSchema.extend({
   pages: z.array(z.object({
@@ -39,7 +40,7 @@ export function naturalScanMetadata(scope: unknown, observations: readonly Brows
   const metadata = scopeSchema.parse(scope);
   const pages = observations.map(input => {
     const page = BrowserObservationSchema.parse(input);
-    if (page.checkerVersion !== metadata.checkerVersion || page.violations.some(item =>
+    if (page.checkerVersion !== metadata.checkerVersion || page.ibmCheckerVersion !== metadata.ibmCheckerVersion || page.violations.some(item =>
       item.route !== page.route || (item.condition !== undefined && item.condition !== page.condition))) throw new Error("Conflicting baseline observation");
     return { routeDigest: hash(page.route), condition: page.condition, incompleteCount: page.incomplete.length,
       violations: page.violations.map(item => ({ ruleId: item.ruleId, impact: item.impact,
@@ -69,6 +70,7 @@ export function collectNaturalCases(input: unknown) {
   return { schemaVersion: 1 as const, track: "N" as const, provenance: "supplied-baseline-metadata" as const,
     protocolDigest: data.protocolDigest, repositoryDigest: data.repositoryDigest, baseSha: data.baseSha,
     implementationDigest: data.implementationDigest, observedAt: data.observedAt, checkerVersion: data.checkerVersion,
+    ...(data.ibmCheckerVersion === undefined ? {} : { ibmCheckerVersion: data.ibmCheckerVersion }),
     scanDigest: hash({ ...data, pages }), observedPages: pages.length,
     incompleteFindings: pages.reduce((n, page) => n + page.incompleteCount, 0), cases,
     labelingSheet: { targetAcceptedPatches: defaults.naturalAuditTargetPatches, plannedRaters: 1,

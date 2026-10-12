@@ -12,6 +12,14 @@ describe("configuration boundary", () => {
     const config = await loadConfig(await root());
     expect(config.scan.mobile).toBe(true);
     expect(config.model).toBeUndefined();
+    expect(config.scan.ibm).toBeUndefined();
+  });
+  it("enables the second checker only with a boolean operator flag", async () => {
+    const dir = await root();
+    await writeFile(join(dir, ".accesswright.yml"), "scan: {ibm: true}\n");
+    expect((await loadConfig(dir)).scan.ibm).toBe(true);
+    await writeFile(join(dir, ".accesswright.yml"), "scan: {ibm: enabled}\n");
+    await expect(loadConfig(dir)).rejects.toThrow();
   });
   it("loads actual YAML and overrides with explicit CLI options", async () => {
     const dir = await root();

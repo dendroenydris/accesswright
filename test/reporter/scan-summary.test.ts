@@ -24,3 +24,7 @@ it("marks a missing route or condition as incomplete coverage rather than a clea
   expect(summary.coverageComplete).toBe(false);
   expect(summary.missingObservations).toEqual(["/|desktop-light"]);
 });
+it("retains actual additional checker versions without exporting its private report", () => {
+  const page = { ...before, checkerVersion: "4.13.0", ibmCheckerVersion: "4.0.34" };
+  expect(summarizeScans([page], [page], [page]).checkerVersions).toEqual(["4.13.0", "ibm-equal-access@4.0.34"]);
+});

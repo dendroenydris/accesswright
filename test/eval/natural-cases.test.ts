@@ -61,6 +61,9 @@ it("projects real observation shapes in memory and excludes private rendered/sou
   for (const value of ["private-route", "private-target", "private html", "private summary", "private-component.tsx", "private tree", "private title", "private-image.png", "private-file.tsx"]) expect(output).not.toContain(value);
   expect(JSON.stringify(observation)).toBe(before);
   expect(() => naturalScanMetadata(scope, [{ ...observation, checkerVersion: "other" }])).toThrow(/Conflicting/);
+  expect(() => naturalScanMetadata(scope, [{ ...observation, ibmCheckerVersion: "4.0.34" }])).toThrow(/Conflicting/);
+  const secondary = naturalScanMetadata({ ...scope, ibmCheckerVersion: "4.0.34" }, [{ ...observation, ibmCheckerVersion: "4.0.34" }]);
+  expect(collectNaturalCases(secondary).ibmCheckerVersion).toBe("4.0.34");
   expect(() => naturalScanMetadata(scope, [{ ...observation, violations: [{ ...violation, route: "/other" }] }])).toThrow(/Conflicting/);
   expect(() => naturalScanMetadata(scope, [{ ...observation, violations: [{ ...violation, condition: "mobile-light" }] }])).toThrow(/Conflicting/);
 });

@@ -6,7 +6,9 @@ import type { Page } from "playwright";
 import { z } from "zod";
 import { contrastRatio } from "../fixers/contrast.js";
 import { isSourcePath } from "../types/schemas.js";
+import type { Violation } from "../types/schemas.js";
 import { normalizeAxeResults } from "./scan.js";
+import { mergeCheckerFindings, scanIbmPage } from "./ibm.js";
 import { extractSourceLocationFromHtml } from "./source-location.js";
 import { collectSourceIndex } from "./source-index.js";
 import { mergeBrowserFacts } from "./browser-facts.js";
@@ -53,6 +55,7 @@ export interface BrowserScanOptions {
   generation: string;
   evidenceDir: string;
   interactionProbes?: boolean;
+  ibm?: boolean;
 }
 
 function findDomMarkers(root: DomNode): Map<string, { backend: number; nodeId: number }> {
@@ -245,8 +248,15 @@ export async function scanBrowserPage(page: Page, options: BrowserScanOptions): 
   if (options.condition === "desktop-dark") builder = builder.withRules(["color-contrast"]);
   const rawAnalysis = await builder.analyze();
   const analyzed = normalizeAxeResults(options.route, rawAnalysis);
-  const violations = analyzed.violations.map(item => ({ ...item, condition: options.condition }));
-  const incomplete = analyzed.incomplete.map(item => ({ ...item, condition: options.condition }));
+  let violations: Violation[] = analyzed.violations.map(item => ({ ...item, condition: options.condition }));
+  let incomplete: Violation[] = analyzed.incomplete.map(item => ({ ...item, condition: options.condition }));
+  let ibmCheckerVersion: string | undefined;
+  if (options.ibm === true) {
+    const second = await scanIbmPage(page, options.route, options.condition, violations);
+    violations = mergeCheckerFindings(violations, second.violations);
+    incomplete = mergeCheckerFindings(incomplete, second.incomplete);
+    ibmCheckerVersion = second.version;
+  }
   const facts = await collectAccessibleFacts(page, `${options.route}|${options.condition}`, options.interactionProbes ?? true);
   const contexts: RenderedContext[] = [];
   const title = await page.title();
@@ -307,6 +317,7 @@ export async function scanBrowserPage(page: Page, options: BrowserScanOptions): 
     return extractSourceLocationFromHtml(html)?.file;
   }).filter((file): file is string => file !== undefined && isSourcePath(file)))].sort();
   return BrowserObservationSchema.parse({ route: options.route, condition: options.condition, checkerVersion: rawAnalysis.testEngine.version, violations, incomplete,
+    ...(ibmCheckerVersion === undefined ? {} : { ibmCheckerVersion }),
     aria: facts.aria, probeFailures: facts.probeFailures, probeUnavailable: facts.probeUnavailable, sourceIndex, documentLanguage, documentTitle: title,
     sourceFiles, ariaTree: await page.locator("body").ariaSnapshot(), contexts, screenshot, darkMediaDetected: palette.darkMediaDetected });
 }

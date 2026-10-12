@@ -233,6 +233,7 @@ export class RepairSession<TSandbox extends RepairTransport> {
         const part = BrowserScanOutputSchema.parse(await this.browser({
           action: "scan", baseUrl: this.sandbox.baseUrl, routes: chunk, generation,
           mobile: this.config.scan.mobile, dark: this.config.scan.darkScheme, interactions: true,
+          ...(this.config.scan.ibm === undefined ? {} : { ibm: this.config.scan.ibm }),
         }));
         validateRouteScanChunk(chunk, part.observations, this.config.scan.mobile);
         observations.push(...part.observations);
@@ -254,7 +255,7 @@ export class RepairSession<TSandbox extends RepairTransport> {
     this.markVolatileText(output.observations);
     await this.sandbox.syncEvidence(output.observations.flatMap(page => [page.screenshot, ...page.contexts.map(context => context.screenshot)].filter((name): name is string => name !== null)));
     await recordPrivateScan(this.evidenceDir, generation, output.observations, this.retainEvidence);
-    await this.recordStep("scan", "ok", started, { routeCount: routes.length, observationCount: output.observations.length, generation });
+    await this.recordStep("scan", "ok", started, { routeCount: routes.length, observationCount: output.observations.length, generation, ibm: this.config.scan.ibm === true });
     this.sourceChanged = false;
     return output.observations;
   }

@@ -69,6 +69,12 @@ offline: true
 
 A model configuration additionally specifies `provider`, the exact model `id`, and optional `reasoningEffort`. Keys are read from the coordinator environment. Paid calls require an explicit operator `--max-cost-usd` and both `--input-usd-per-million` and `--output-usd-per-million`; the default allowance is zero. A repository cannot increase that allowance or redirect credentials to a custom endpoint without explicit operator trust. The library also provides a durable cumulative spending ledger for development/evaluation: pre-call reservations survive crashes, and unknown usage is not treated as free.
 
+## Optional second checker
+
+An optional IBM Equal Access engine supplements axe when `.accesswright.yml` contains `scan: { ibm: true }`. It is off by default. The pinned local `accessibility-checker-engine@4.0.34` runs inside the browser container with no remote rule download. This dependency remains [Apache-2.0 licensed](https://github.com/IBMa/equal-access/blob/main-4.x/LICENSE), separate from Accesswright's MIT code; retain IBM's license and attribution when redistributing engine assets.
+
+Reviewed image-name, document-title and missing HTML-language failures map to the corresponding axe identities. Other IBM rules retain an `ibm-` prefix and require human review. Cross-checker dedup requires the same mapped rule and actual DOM node; it keeps the larger occurrence count. Potential/manual/recommendation results remain inconclusive. Engine errors, empty execution or unresolved finding identities fail the scan instead of falling back to axe alone. Actual IBM version metadata enters scan reports and Track N exports; none of these checks proves legal conformity. Browser acceptance of this optional path remains pending.
+
 ## Backlog and PR-mode GitHub Action
 
 Backlog publication also requires the target repository's **Allow GitHub Actions to create and approve pull requests** setting and explicit workflow `contents: write` and `pull-requests: write` permissions. A disabled repository setting can return HTTP403 after verified repair commits are created. For GitHub's web-flow commits, recovery requires the expected bot author and a valid signature. Every recovery checks exact verified source and branch ownership before opening a missing PR; human or unattributable changes remain preserved.
@@ -262,7 +268,7 @@ npm run build
 npm run track-n:collect -- --scan /absolute/path/natural-scan-metadata.json
 ```
 
-The strict input has `schemaVersion: 1`, SHA256 `protocolDigest`, `repositoryDigest` and `implementationDigest`, a 40-character `baseSha`, ISO UTC `observedAt`, `checkerVersion`, and `pages`. Each page contains SHA256 `routeDigest`, `condition` (`desktop-light`, `mobile-light` or `desktop-dark`), `incompleteCount` and `violations`. Each violation contains `ruleId`, nullable axe `impact`, SHA256 `targetDigest` and nullable `sourceDigest`. Use the in-memory helper to produce this input; the CLI rejects raw browser dumps and private fields. Inputs must be bounded regular files at absolute paths; symlinks are refused. Exit 2 means invalid input.
+The strict input has `schemaVersion: 1`, SHA256 `protocolDigest`, `repositoryDigest` and `implementationDigest`, a 40-character `baseSha`, ISO UTC `observedAt`, `checkerVersion`, optional `ibmCheckerVersion`, and `pages`. Each page contains SHA256 `routeDigest`, `condition` (`desktop-light`, `mobile-light` or `desktop-dark`), `incompleteCount` and `violations`. Each violation contains `ruleId`, nullable axe `impact`, SHA256 `targetDigest` and nullable `sourceDigest`. Use the in-memory helper to produce this input; the CLI rejects raw browser dumps and private fields. Inputs must be bounded regular files at absolute paths; symlinks are refused. Exit 2 means invalid input.
 
 Stdout contains the natural cases, reviewed technical rule references, inconclusive counts and an editable JSON `labelingSheet`. Duplicate route/condition scans are rejected; repeated instances at the same location get distinct occurrence IDs. Cases observed under different scan conditions remain separate observations, not independent repair trials. Digests bind metadata and identify cases; they neither anonymize predictable values against guessing nor authenticate evidence.
 

@@ -31,6 +31,7 @@
     "operations:collect": "node dist/src/hosted/operation-collect-entry.js"
   },
   "dependencies": {
+    "accessibility-checker-engine": "4.0.34",
     "@ai-sdk/anthropic": "4.0.72",
     "@ai-sdk/deepseek": "3.0.59",
     "@ai-sdk/openai": "4.0.84",

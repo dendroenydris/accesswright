@@ -47,6 +47,7 @@ export const defaults = Object.freeze({
   naturalCasesMaxFindings: 10000,
   naturalCasesInputMaxBytes: 2 * 1024 * 1024,
   naturalAuditTargetPatches: 50,
+  secondCheckerMaxResults: 20000,
   operationMaxRecords: 10000,
   operationInputMaxBytes: 2 * 1024 * 1024,
   dockerControlTimeoutMs: 120000,

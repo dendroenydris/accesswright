@@ -64,7 +64,7 @@ if (command.action === "ready") {
             const runtimeFailures: string[] = [];
             page.on("pageerror", error => { runtimeFailures.push(`runtime:${route}:${condition}:${createHash("sha256").update(error.message).digest("hex").slice(0, 16)}`); });
             await navigate(page, route);
-            const result = await scanBrowserPage(page, { route, condition, generation: command.generation, evidenceDir, interactionProbes: command.interactions });
+            const result = await scanBrowserPage(page, { route, condition, generation: command.generation, evidenceDir, interactionProbes: command.interactions, ...(command.ibm === undefined ? {} : { ibm: command.ibm }) });
             result.probeFailures.push(...runtimeFailures);
             if (condition === "desktop-light") darkSupported = result.darkMediaDetected;
             routeObservations.push(result);

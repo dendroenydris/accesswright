@@ -7,7 +7,7 @@ const baseUrl = z.enum(["http://accesswright-app:3000", "http://127.0.0.1:3000"]
 export const BrowserCommandSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("ready"), baseUrl, route: AccesswrightConfigSchema.shape.routes.unwrap().element }).strict(),
   z.object({ action: z.literal("crawl"), baseUrl, maxDepth: z.number().int().min(0).max(5).default(defaults.crawlDepth), maxPages: z.number().int().positive().max(defaults.maxRoutes).default(defaults.maxRoutes) }).strict(),
-  z.object({ action: z.literal("scan"), baseUrl, routes: AccesswrightConfigSchema.shape.routes.unwrap().min(1).max(defaults.maxRoutes), generation: z.string().regex(/^[a-zA-Z0-9_-]+$/).max(100), mobile: z.boolean(), dark: z.boolean(), interactions: z.boolean() }).strict(),
+  z.object({ action: z.literal("scan"), baseUrl, routes: AccesswrightConfigSchema.shape.routes.unwrap().min(1).max(defaults.maxRoutes), generation: z.string().regex(/^[a-zA-Z0-9_-]+$/).max(100), mobile: z.boolean(), dark: z.boolean(), interactions: z.boolean(), ibm: z.boolean().optional() }).strict(),
 ]);
 export type BrowserCommand = z.infer<typeof BrowserCommandSchema>;
 export const BrowserScanOutputSchema = z.object({ observations: z.array(BrowserObservationSchema) }).strict();
