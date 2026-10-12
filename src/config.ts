@@ -40,6 +40,8 @@ export const defaults = Object.freeze({
   googleMetadataRefreshSkewSeconds: 60,
   googleIdentityMaxTokenBytes: 16 * 1024,
   hostedServicePort: 8080,
+  operationMaxRecords: 10000,
+  operationInputMaxBytes: 2 * 1024 * 1024,
   dockerControlTimeoutMs: 120000,
   dockerCopyTimeoutMs: 600000,
   readyTimeoutMs: 120000,

@@ -161,13 +161,47 @@ The verifier role requires a dedicated native Linux host and local rootful Docke
 
 In the agent role, `finish` polls the separately scheduled verifier without consuming its claim. The relay client requires both the exact HTTP result and matching durable terminal metadata; a successful HTTP response alone cannot authorize review. Job-task creation also checks exact full metadata after a 409, rather than treating a reserved deleted name as a live task.
 
-**Not deployment-ready:** role composition and HTTP tests use fake cloud APIs and fixture-signed Google tokens. Actual Google token/ingress/IAM behavior, private GitHub App source access, storage deletion policy, generic-image acceptance, host firewall enforcement, spending-policy provisioning, cloud dashboard IAM, verified-patch publication, release workflow, alerts and the planned operations period remain incomplete. Production use requires a controlled operator deployment and explicit authorization; the local code is not a completed Hosted App.
+**Not deployment-ready:** role composition and HTTP tests use fake cloud APIs and fixture-signed Google tokens. Actual Google token/ingress/IAM behavior, private GitHub App source access, storage deletion policy, host firewall enforcement, spending-policy provisioning, cloud dashboard IAM, actual Hosted GitHub publication, release workflow, deployed alerts and the planned operations period remain incomplete. Production use requires a controlled operator deployment and explicit authorization; the local code is not a completed Hosted App.
 
 ## Private operator dashboard (local, read-only)
 
 The `app/` Next.js App Router application now renders Firestore aggregate run metadata, with a paginated run table, individual run details, statuses, checks and reconciled spending. It refuses to display unknown document fields, raw source, prompts, reports, screenshots and secrets. The Firestore client uses a fixed Google HTTPS endpoint and Cloud Run's workload-identity metadata token; no service-account key is bundled. The local HTTP auth gate fails closed without an operator username and a sufficiently long password. **This additional Basic gate is not a substitute for Google Cloud IAM/IAP and private ingress.** Production deployment and authentication have not been authorized or verified.
 
 For a normal local dependency installation: `npm ci --prefix app --ignore-scripts`, `npm run check --prefix app`, `npm run build --prefix app`, then `npm run test:smoke --prefix app`. Supply `ACCESSWRIGHT_DASHBOARD_USERNAME`, `ACCESSWRIGHT_DASHBOARD_PASSWORD`, `ACCESSWRIGHT_GCP_PROJECT_ID` and `ACCESSWRIGHT_FIRESTORE_RUN_COLLECTION` via trusted server configuration for an actual instance. The smoke script starts only a localhost server with fixture credentials and verifies an unauthenticated 401, authenticated HTML, and failure-closed operation without a cloud backend. Firestore adapter tests mock Google APIs; no real cloud read has been performed. In the T7-mounted Mac test environment, `node_modules` and `.next` are symlinks to T7; the local build additionally uses `NODE_PATH` pointing at the mounted dashboard dependency directory.
+
+## Operational alert preview (offline)
+
+An operator can check a trusted metadata snapshot locally without cloud access or sending notifications:
+
+```sh
+npm run build
+npm run operations:check -- --snapshot /absolute/path/snapshot.json --policy /absolute/path/policy.json
+```
+
+The policy requires `failureRate` (0–1), `dailyCostUsd`, `p95DurationMs` and `minimumCompletedJobs`. Thresholds are operator decisions; none are supplied automatically. An alert breaches only when its measured value is greater than the threshold. Exit codes: 0 for all checks within policy, 1 for a breach or insufficient evidence, 2 for invalid inputs. Input files must be bounded regular files with absolute paths; symlinks are refused. Only aggregate counts, values, policy and alert states go to stdout.
+
+Snapshot format:
+
+```json
+{
+  "schemaVersion": 1,
+  "day": "2026-10-12",
+  "observedAt": "2026-10-12T12:00:00.000Z",
+  "complete": { "jobs": false, "calls": false },
+  "jobs": [
+    { "runId": "run-1", "status": "unknown", "startedAt": "2026-10-12T10:00:00.000Z", "finishedAt": null }
+  ],
+  "calls": [
+    { "id": "call-1", "recordedAt": "2026-10-12T10:01:00.000Z", "state": "unknown", "costUsd": null }
+  ]
+}
+```
+
+Jobs must come from independently confirmed terminal execution results, not a launch-operation acknowledgment, worker success flag or verification receipt. Job statuses are `succeeded`, `failed`, `running` or `unknown`; only terminal jobs have `finishedAt`. Completed jobs belong to the UTC day of completion, including jobs that started earlier. Failure rate and nearest-rank p95 use completed jobs only; running and unknown counts remain visible. Partial job coverage, unknown outcomes or too few completed jobs withhold a healthy result.
+
+Provider calls use unique ledger reservation IDs, `recordedAt` for the trusted usage observation, `state` (`settled`, `pending`, `unknown`) and `costUsd` (settled usage only; otherwise null). Costs belong to that observation's UTC day. Historical upper bounds and reservations are not billed or settled spend and must not be copied into `costUsd`. Unknown or partial usage withholds a healthy cost result; a known sum already above policy still alerts. This is token-price accounting, not a provider invoice. Duplicate identities and out-of-window records fail validation. `complete` is an operator assertion about the supplied window, not authenticated evidence; input validation grants no publication or spending authority. Do not set it to true for a paginated partial export or missing startup/terminal records.
+
+Private source, prompts, raw reports, credentials and arbitrary fields are rejected. Live collection from cloud execution/ledger records, Cloud Monitoring delivery and operating-period acceptance remain unverified. This preview changes neither the spending guard nor a run's verifier decision.
 
 ## Security and privacy
 

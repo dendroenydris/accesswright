@@ -18,6 +18,7 @@
 
 ### Added
 
+- Offline operational alert preview for terminal job failure rate, settled daily model cost and duration p95, with explicit policies and incomplete-evidence states.
 - Trusted full-source publication artifacts rebuilt from independent replay, with candidate/report/base binding and delivery only after confirmed private-source deletion.
 - Executable webhook, agent, task relay and independent verifier roles with durable enqueue, scoped workload identities and checked metadata-network isolation.
 - Trusted service composition with separate worker/task HTTP ingress, persistent original source pins and scoped source access.
