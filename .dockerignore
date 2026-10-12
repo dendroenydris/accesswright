@@ -1,0 +1,9 @@
+*
+!Dockerfile.worker
+!package.json
+!package-lock.json
+!tsconfig.json
+!tsconfig.build.json
+!src
+!src/**
+**/._*

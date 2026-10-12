@@ -16,6 +16,7 @@
 
 ### Added
 
+- Generic non-root worker image with an allowlisted public build context and opt-in downloaded-input/independent-Docker acceptance.
 - Actual tarball installation and npm-command Docker repair acceptance in CI, with zero model usage and original source preservation.
 - Opt-in OTLP HTTP step spans with metadata-only export, local failure evidence and no global tracing registration.
 - CLI help without repository access, Docker or model credentials, and a typed library entry for installed packages.

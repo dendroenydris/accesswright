@@ -1,0 +1,15 @@
+FROM mcr.microsoft.com/playwright:v1.63.0-noble AS build
+WORKDIR /accesswright
+COPY package.json package-lock.json tsconfig.json tsconfig.build.json ./
+COPY src ./src
+RUN npm ci --ignore-scripts --no-audit --no-fund && npm run build && npm prune --omit=dev --ignore-scripts --no-audit --no-fund
+
+FROM mcr.microsoft.com/playwright:v1.63.0-noble
+WORKDIR /accesswright
+COPY --from=build /accesswright/package.json ./
+COPY --from=build /accesswright/node_modules ./node_modules
+COPY --from=build /accesswright/dist ./dist
+RUN printf 'accesswright-secretless-worker-v1\n' > .isolated-worker && chmod -R go-w /accesswright && mkdir -p /workspace /input /tmp/accesswright && chown pwuser:pwuser /workspace /input /tmp/accesswright
+ENV HOME=/home/pwuser ACCESSWRIGHT_ISOLATED_WORKER=1 CI=1 NEXT_TELEMETRY_DISABLED=1 NODE_ENV=production
+USER pwuser
+CMD ["node", "/accesswright/dist/src/hosted/worker-download-entry.js"]
