@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { defaults } from "../config.js";
 
 import type { QueuedRun } from "./webhook.js";
 
@@ -36,13 +37,27 @@ interface ReadClaim {
 }
 
 async function boundedResponse(response: Response): Promise<unknown> {
-  if (Number(response.headers.get("content-length") ?? "0") > 12000) {
+  const maximum = defaults.hostedDispatchResponseMaxBytes;
+  if (Number(response.headers.get("content-length") ?? "0") > maximum) {
     await response.body?.cancel();
     throw new Error("Firestore dispatch metadata response exceeds size limit");
   }
-  const text = await response.text();
-  if (Buffer.byteLength(text) > 12000) throw new Error("Firestore dispatch metadata response exceeds size limit");
-  return JSON.parse(text) as unknown;
+  if (!response.body) throw new Error("Firestore dispatch metadata response is empty");
+  const reader = response.body.getReader(), chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const part = await reader.read();
+      if (part.done) break;
+      total += part.value.byteLength;
+      if (total > maximum) {
+        await reader.cancel();
+        throw new Error("Firestore dispatch metadata response exceeds size limit");
+      }
+      chunks.push(part.value);
+    }
+  } finally { reader.releaseLock(); }
+  return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
 }
 
 /**

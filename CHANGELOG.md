@@ -69,6 +69,7 @@
 
 ### Fixed
 
+- Enforced the existing Firestore dispatch-response byte limit during streaming reads and cancelled oversized bodies before full buffering.
 - Recorded Hosted model outcomes and known usage in per-run JSONL traces without source or credentials; uncertain observer failures keep the run blocked.
 - Rejected repeated run identities across Firestore metadata pages before they can duplicate run or usage summaries.
 - Preserved original BOM-prefixed source offsets and locations in evaluation mutations without weakening exact-source checks.

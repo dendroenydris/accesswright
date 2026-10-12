@@ -71,6 +71,7 @@ export const defaults = Object.freeze({
   hostedMaxStagedCandidates: 20,
   hostedVerificationDeadlineSeconds: 1800,
   hostedJobDispatchDeadlineSeconds: 30,
+  hostedDispatchResponseMaxBytes: 12000,
   hostedExpiryDeadlineSeconds: 30,
   hostedMaxFeedbackChars: 4096,
   hostedMaxImages: 1,

@@ -1,4 +1,5 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
+import { defaults } from "../../src/config.js";
 
 import { FirestoreDispatchClaims } from "../../src/hosted/firestore-dispatch-claims.js";
 import type { QueuedRun } from "../../src/hosted/webhook.js";
@@ -86,4 +87,20 @@ it("rejects unsafe firestore collections and never retries unknown metadata fail
   });
   await expect(store.claim(run)).rejects.toThrow(/503/);
   expect(tries).toBe(1);
+});
+
+it("cancels an oversized dispatch response while streaming without buffering its full body", async () => {
+  const cancel = vi.fn(); let pulls = 0;
+  const response = new Response(new ReadableStream<Uint8Array>({
+    pull(controller) {
+      pulls++;
+      if (pulls === 1) controller.enqueue(new Uint8Array(defaults.hostedDispatchResponseMaxBytes + 1));
+      else controller.close();
+    }, cancel,
+  }, { highWaterMark: 0 }));
+  const text = vi.spyOn(response, "text");
+  const store = new FirestoreDispatchClaims({ projectId: "accesswright-dev-123", collectionId: "claims",
+    getAccessToken: () => Promise.resolve("fixture"), fetcher: () => Promise.resolve(response) });
+  await expect(store.read(run.runId)).rejects.toThrow(/size limit/);
+  expect(cancel).toHaveBeenCalledOnce(); expect(pulls).toBe(1); expect(text).not.toHaveBeenCalled();
 });
