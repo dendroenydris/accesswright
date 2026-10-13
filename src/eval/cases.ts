@@ -58,7 +58,23 @@ export function injectedTargets(cases: readonly RenderedCase[], injected: readon
   return { eligible, excluded };
 }
 
-export function scoreCases(cases: readonly RenderedCase[], after: readonly BrowserObservation[], finalGatePassed: boolean) {
+type ReferenceFacts = { role: string | null; name: string; text: string; interactive: boolean };
+const sameFacts = (node: ReferenceFacts, reference: ReferenceFacts) =>
+  node.role === reference.role && node.interactive === reference.interactive && node.name === reference.name && node.text === reference.text;
+
+/**
+ * Node ids built from React useId values or DOM paths can change between builds (8starlabs/ui: `#base-ui-_R_6jadlb_`
+ * became `#base-ui-_R_39l7b_`). When the id is gone, count nodes with identical facts instead: the fixed page must keep
+ * at least as many as the unpatched baseline page, so a deleted or renamed node still fails.
+ */
+function restored(reference: ReferenceFacts & { nodeId: string }, page: BrowserObservation, baselinePage: BrowserObservation | undefined): boolean {
+  const node = page.aria.find(node => node.id === reference.nodeId);
+  if (node !== undefined) return sameFacts(node, reference);
+  const count = page.aria.filter(node => sameFacts(node, reference)).length;
+  return count > 0 && count >= (baselinePage?.aria.filter(node => sameFacts(node, reference)).length ?? Number.POSITIVE_INFINITY);
+}
+
+export function scoreCases(cases: readonly RenderedCase[], after: readonly BrowserObservation[], finalGatePassed: boolean, baseline: readonly BrowserObservation[] = []) {
   return cases.map(item => {
     const scopeComplete = item.references.every(reference => after.some(page => page.route === reference.route && page.condition === reference.condition));
     const unresolved = after.some(page => [...page.violations, ...page.incomplete].some(violation => matches(item, page, violation)));
@@ -67,8 +83,7 @@ export function scoreCases(cases: readonly RenderedCase[], after: readonly Brows
       const page = after.find(page => page.route === reference.route && page.condition === reference.condition);
       if (!page) return false;
       if (item.mutation.operator === "remove-lang") return page.documentLanguage === reference.language && Boolean(reference.language);
-      const node = page.aria.find(node => node.id === reference.nodeId);
-      return node !== undefined && node.role === reference.role && node.interactive === reference.interactive && node.name === reference.name && node.text === reference.text;
+      return restored(reference, page, baseline.find(item => item.route === reference.route && item.condition === reference.condition));
     });
     return { id: item.mutation.id, operator: item.mutation.operator, checkerAccepted, semanticallyCorrect, correctlyFixed: checkerAccepted && semanticallyCorrect };
   });

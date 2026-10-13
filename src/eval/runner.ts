@@ -211,7 +211,7 @@ async function executeCell(options: EvalRunOptions, runtimeDistRoot: string, bas
       onVerification: (task, verdict) => { cell.verification.push({ taskId: task.id, caseIds: eligible.filter(item => taskMatchesCases(task, [item])).map(item => item.mutation.id), accepted: verdict.accepted, check: verdict.check }); },
     });
     cell.providerEvidence = providerCalls ? options.providerFactory ? "fake-provider" : "provider-api" : "not-run";
-    cell.cases = scoreCases(eligible, session.finalObservations, result.status === "verified");
+    cell.cases = scoreCases(eligible, session.finalObservations, result.status === "verified", session.productionBaseline);
     const editedFiles = session.journal.fixes.filter(fix => result.final.acceptedFixIds.includes(fix.id)).flatMap(fix => fix.patch.changes.map(change => change.path));
     const allowedFiles = new Set(session.baselineObservations.flatMap(page => page.violations.map(violation => violation.source?.file).filter((file): file is string => file !== undefined)));
     cell.controls = compareCleanControls(session.productionBaseline, session.finalObservations, eligible, editedFiles, allowedFiles);

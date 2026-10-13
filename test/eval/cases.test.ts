@@ -34,3 +34,15 @@ it("excludes unmapped and originally violating controls before looking at repair
   const broken = { ...page, violations: [violation], contexts: [{ target: ["#save"], source: mutation.source, mapping: "direct" as const, pageTitle: "Test", surroundingText: "", imageCaption: null, linkTarget: null, screenshot: null, nodeId: "/|desktop-light|#save", foreground: "#000000", background: "#ffffff", contrastTarget: 4.5, palette: [] }] };
   expect(freezeRenderedCases([mutation], [broken]).eligible).toEqual([]);
 });
+it("finds a restored node whose generated id changed, but still fails a deleted duplicate (8starlabs/ui useId ids)", () => {
+  const frozen = freezeRenderedCases([mutation], [page]).eligible;
+  const node = page.aria[0];
+  if (!node) throw new Error("Missing test node");
+  const renamed = { ...page, aria: [{ ...node, id: "/|desktop-light|#base-ui-_R_39l7b_" }] };
+  const baseline = { ...page, aria: [{ ...node, id: "/|desktop-light|#base-ui-_R_6jadlb_" }] };
+  expect(scoreCases(frozen, [renamed], true)[0]?.correctlyFixed).toBe(false);
+  expect(scoreCases(frozen, [renamed], true, [baseline])[0]?.correctlyFixed).toBe(true);
+  const twoInBaseline = { ...baseline, aria: [{ ...node, id: "/|desktop-light|#a" }, { ...node, id: "/|desktop-light|#b" }] };
+  expect(scoreCases(frozen, [renamed], true, [twoInBaseline])[0]?.correctlyFixed).toBe(false);
+  expect(scoreCases(frozen, [{ ...renamed, aria: [{ ...node, id: "/|desktop-light|#c", name: "Wrong action" }] }], true, [baseline])[0]?.correctlyFixed).toBe(false);
+});

@@ -82,6 +82,7 @@
 
 ### Fixed
 
+- Evaluation scoring no longer counts a restored node as a false fix when its generated id (React useId) or DOM path changed between builds; it falls back to counting nodes with identical role, name, text and interactivity, which must not drop below the unpatched baseline page.
 - Bound Firestore metadata reads and saved acknowledgments to the configured document resource and payload identity, refusing misplaced or cross-scope rows before collection or claim recovery.
 - Allowed operational snapshots of closed UTC days to be read after midnight while retaining day boundaries and incomplete-evidence checks.
 - Pinned Firestore metadata pagination to one read time so concurrent updates cannot silently mix pages; rejected snapshots return no partial listing.
