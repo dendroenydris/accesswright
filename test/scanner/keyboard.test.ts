@@ -15,15 +15,15 @@ function fixture(values: unknown[], navigateAt?: number) {
 afterEach(() => { vi.unstubAllGlobals(); });
 
 it("records real key sequences in both directions and retains unreached DOM controls", async () => {
-  const f = fixture([3, true, 0, 2, -1, true, 2, 0, -1]);
+  const f = fixture([3, true, 0, 2, -1, true, 0, -1]);
   const result = await collectKeyboardOrder(f.page);
   expect(result).toMatchObject({ controlCount: 3, forward: { order: [0, 2], stop: "document-boundary" }, reverse: { order: [2, 0], stop: "document-boundary" }, unreachedControls: [1] });
-  expect(f.press).toHaveBeenCalledTimes(6);
+  expect(f.press).toHaveBeenCalledTimes(5);
   expect(f.press).toHaveBeenNthCalledWith(1, "Tab");expect(f.press).toHaveBeenNthCalledWith(4, "Shift+Tab");
   expect(f.dispose).toHaveBeenCalledOnce();expect(JSON.stringify(result)).not.toContain("http://app");
 });
 it("reports repeats as incomplete observations, not a certified focus trap or a pass", async () => {
-  const f = fixture([2, true, 0, 0, true, 0, 0]);
+  const f = fixture([2, true, 0, 0, true, 0]);
   const result = await collectKeyboardOrder(f.page);
   expect(result.forward).toEqual({ order: [0], stop: "repeat" });expect(result.unreachedControls).toEqual([1]);
   expect(result).not.toHaveProperty("passed");expect(result).not.toHaveProperty("trap");

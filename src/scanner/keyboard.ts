@@ -27,15 +27,27 @@ export async function collectKeyboardOrder(page: Page): Promise<KeyboardProbe> {
   }));
   try {
     const count = z.number().int().nonnegative().max(defaults.keyboardProbeMaxControls).parse(await controls.evaluate(elements => elements.length));
-    const walk = async (key: "Tab" | "Shift+Tab"): Promise<z.infer<typeof direction>> => {
+    const walk = async (key: "Tab" | "Shift+Tab", startAt?: number): Promise<z.infer<typeof direction>> => {
       const order: number[] = [];
-      const reset = await controls.evaluate(() => {
-        const body = document.body, original = body.getAttribute("tabindex");
-        try { body.setAttribute("tabindex", "-1"); body.focus({ preventScroll: true }); return document.activeElement === body; }
-        finally { if (original === null) body.removeAttribute("tabindex"); else body.setAttribute("tabindex", original); }
-      });
-      if (!z.boolean().parse(reset)) return { order, stop: "reset-unavailable" };
-      for (let step = 0; step < defaults.keyboardProbeMaxSteps; step++) {
+      if (startAt === undefined) {
+        const reset = await controls.evaluate(() => {
+          const body = document.body, original = body.getAttribute("tabindex");
+          try { body.setAttribute("tabindex", "-1"); body.focus({ preventScroll: true }); return document.activeElement === body; }
+          finally { if (original === null) body.removeAttribute("tabindex"); else body.setAttribute("tabindex", original); }
+        });
+        if (!z.boolean().parse(reset)) return { order, stop: "reset-unavailable" };
+      } else {
+        const focused = await controls.evaluate((elements, id) => {
+          const target = elements[id];
+          if (target === undefined || !target.isConnected) return false;
+          target.focus({ preventScroll: true });
+          return document.activeElement === target;
+        }, startAt);
+        if (page.url() !== url) return { order, stop: "navigation" };
+        if (!z.boolean().parse(focused)) return { order, stop: "reset-unavailable" };
+        order.push(startAt);
+      }
+      for (let step = order.length; step < defaults.keyboardProbeMaxSteps; step++) {
         await page.keyboard.press(key);
         if (page.url() !== url) return { order, stop: "navigation" };
         const focused = z.number().int().min(-3).max(defaults.keyboardProbeMaxControls - 1).parse(await controls.evaluate(elements => {
@@ -54,7 +66,9 @@ export async function collectKeyboardOrder(page: Page): Promise<KeyboardProbe> {
       }
       return { order, stop: "step-limit" };
     };
-    const forward = await walk("Tab"), reverse = page.url() === url ? await walk("Shift+Tab") : { order: [], stop: "navigation" as const };
+    const forward = await walk("Tab"), lastForwardControl = forward.order.at(-1);
+    const reverse = page.url() !== url ? { order: [], stop: "navigation" as const } :
+      lastForwardControl === undefined ? { order: [], stop: "reset-unavailable" as const } : await walk("Shift+Tab", lastForwardControl);
     const reached = new Set([...forward.order, ...reverse.order]);
     return KeyboardProbeSchema.parse({ scope: "main-document-tab-order", controlCount: count, forward, reverse,
       unreachedControls: Array.from({ length: count }, (_, id) => id).filter(id => !reached.has(id)) });
