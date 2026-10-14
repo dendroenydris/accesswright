@@ -9,6 +9,8 @@ const head = "a".repeat(40);
 function output(): RepositoryRepairOutput {
   return {
     evidenceDir: "/tmp/evidence",
+    llm: { status: "disabled", reason: "disabled by --no-llm" },
+    sandbox: "docker",
     groups: [{
       id: "fix-1",
       ruleId: "button-name",

@@ -23,6 +23,7 @@ import { createSemanticRepair } from "../llm/semantic-runner.js";
 import { runRepair } from "./repair.js";
 import type { SemanticRepair } from "./repair.js";
 import { isSourcePath } from "../types/schemas.js";
+import type { LlmModelConfig } from "../types/schemas.js";
 
 export interface RepositoryRepairOptions {
   repoPath: string;
@@ -47,11 +48,24 @@ export interface RepositoryRepairOptions {
   provider?: LlmProvider;
   /** Progress callback for every recorded run step. */
   onStep?: RepairSessionOptions["onStep"];
+  /** Explicit model choice; overrides `.accesswright.yml` and automatic detection. */
+  model?: LlmModelConfig;
+  /** Where target code runs. "auto" picks Docker when available, otherwise the host. Default "docker". */
+  sandbox?: SandboxChoice;
+  /** Extra non-secret target variables, merged over `.accesswright.yml` `env`. */
+  env?: Readonly<Record<string, string>>;
 }
+export type SandboxChoice = "auto" | "docker" | "host";
+/** Why model-assisted repair is on or off for a run, for user-facing output. */
+export type LlmSetup =
+  | { status: "enabled"; provider: string; id: string; maxCostUsd: number; source: "option" | "config" | "auto" }
+  | { status: "disabled"; reason: string };
 export interface RepositoryRepairOutput {
   report: RunReport;
   evidenceDir: string;
   groups: PublishInput["groups"];
+  llm: LlmSetup;
+  sandbox: "docker" | "host";
 }
 
 /** Single entrypoint shared by CLI, Action and MCP. Target code runs only in the isolated Docker runner. */
@@ -68,6 +82,7 @@ export async function repairRepository(options: RepositoryRepairOptions): Promis
   try {
     const baseline = await SourceBaseline.fromSnapshot(options.repoPath, session.sourceRoot, options.tempRoot);
     let semanticRepair: SemanticRepair | undefined;
+    let llm: LlmSetup = { status: "disabled", reason: options.noLlm ? "disabled by --no-llm" : config.model === undefined ? "no model configured" : limit <= 0 ? "cost cap is 0" : "no model pricing" };
     let providerCalls = 0;
     const changedPaths = options.changedPaths === undefined ? undefined : z.array(z.string().min(1).refine(isSourcePath)).max(300).refine(paths => new Set(paths).size === paths.length, "Duplicate changed path").parse(options.changedPaths);
     const changedRoutes = changedPaths === undefined ? undefined : new Set(session.affectedRoutes(changedPaths));
@@ -88,6 +103,7 @@ export async function repairRepository(options: RepositoryRepairOptions): Promis
         });
       });
       semanticRepair = createSemanticRepair({ session, client, budget, model, pricing });
+      llm = { status: "enabled", provider: model.provider, id: model.id, maxCostUsd: limit, source: "config" };
     }
     const result = await runRepair(session, { noLlm: options.noLlm === true,
       ...(options.maxTasks === undefined ? {} : { maxTasks: options.maxTasks }),
@@ -118,6 +134,6 @@ export async function repairRepository(options: RepositoryRepairOptions): Promis
       renderEvidenceReport(report, { commits: evidenceCommits }),
       { flag: "wx", mode: 0o600 },
     );
-    return { report, evidenceDir: session.evidenceDir, groups };
+    return { report, evidenceDir: session.evidenceDir, groups, llm, sandbox: "docker" };
   } finally { await session.close(); }
 }

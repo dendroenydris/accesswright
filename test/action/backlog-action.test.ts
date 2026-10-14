@@ -10,6 +10,8 @@ const checks = ["build", "typecheck", "lint", "tests"] as const;
 function repairOutput(groups = true): RepositoryRepairOutput {
   return {
     evidenceDir: "/tmp/accesswright-evidence",
+    llm: { status: "disabled", reason: "disabled by --no-llm" },
+    sandbox: "docker",
     groups: groups
       ? [
           {
