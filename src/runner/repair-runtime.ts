@@ -41,6 +41,15 @@ export interface RepairSessionOptions {
   /** Opt-in local diagnostics for owned fixtures; never enabled by hosted or normal CLI defaults. */
   privateDiagnostics?: boolean;
   retainEvidence?: boolean;
+  /** Called after every recorded run step, for progress display. */
+  onStep?: (step: RunStepEvent) => void;
+}
+
+export interface RunStepEvent {
+  step: string;
+  status: "ok" | "error" | "rejected" | "skipped";
+  durationMs: number;
+  metadata: Record<string, string | number | boolean | null>;
 }
 
 export class UnsupportedRepositoryError extends Error {
@@ -72,9 +81,10 @@ export class RepairSession<TSandbox extends RepairTransport> {
   private readonly volatileText = new Set<string>();
   private readonly privateDiagnostics: boolean;
   private readonly retainEvidence: boolean;
+  private readonly onStep: ((step: RunStepEvent) => void) | undefined;
 
   protected constructor(options: RepairSessionOptions, config: AccesswrightConfig, runRoot: string, journal: PatchJournal, sandbox: TSandbox) {
-    this.repoPath = options.repoPath; this.config = config; this.runRoot = runRoot;
+    this.repoPath = options.repoPath; this.config = config; this.runRoot = runRoot; this.onStep = options.onStep;
     this.sourceRoot = join(runRoot, "source"); this.evidenceDir = join(runRoot, "evidence");
     this.journal = journal; this.sandbox = sandbox;
     this.privateDiagnostics = options.privateDiagnostics === true;
@@ -185,7 +195,9 @@ export class RepairSession<TSandbox extends RepairTransport> {
   }
 
   private async recordStep(step: string, status: "ok" | "error" | "rejected" | "skipped", started: number, metadata: Record<string, string | number | boolean | null> = {}): Promise<void> {
-    await appendRunRecord(join(this.evidenceDir, "run.jsonl"), { timestamp: new Date().toISOString(), step, status, durationMs: Date.now() - started, metadata });
+    const durationMs = Date.now() - started;
+    await appendRunRecord(join(this.evidenceDir, "run.jsonl"), { timestamp: new Date().toISOString(), step, status, durationMs, metadata });
+    this.onStep?.({ step, status, durationMs, metadata });
   }
 
   private async target(input: z.input<typeof TargetCommandSchema>): Promise<unknown> {

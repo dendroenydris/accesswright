@@ -13,6 +13,7 @@ describe("AccesswrightConfigSchema", () => {
       routes: [],
       ignore: { rules: [], paths: [] },
       scan: { mobile: true, darkScheme: false },
+      env: {},
       offline: false,
     });
   });

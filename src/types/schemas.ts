@@ -44,6 +44,10 @@ export const AccesswrightConfigSchema = z
       })
       .strict()
       .default({ mobile: true, darkScheme: false }),
+    /** Non-secret build/runtime variables the target needs (for example NEXT_PUBLIC_* placeholders). */
+    env: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), z.string().max(4096)).default({}),
+    /** Document language (BCP 47) used when the source does not declare one, e.g. "en" or "de-DE". */
+    language: z.string().regex(/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/).optional(),
     maxCostUsd: z.number().nonnegative().optional(),
     model: LlmModelConfigSchema.optional(),
     escalationModel: LlmModelConfigSchema.optional(),

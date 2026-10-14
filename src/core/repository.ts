@@ -4,6 +4,7 @@ import { z } from "zod";
 import { defaults, loadConfig } from "../config.js";
 import { SourceBaseline } from "../sandbox/apply-verified.js";
 import { DockerRepairSession } from "../runner/repair-session.js";
+import type { RepairSessionOptions } from "../runner/repair-session.js";
 import { makeRunReport } from "../reporter/report.js";
 import { summarizeScans } from "../reporter/scan-summary.js";
 import { renderEvidenceReport } from "../reporter/evidence-report.js";
@@ -44,6 +45,8 @@ export interface RepositoryRepairOptions {
   durableBudget?: Pick<DurableProviderOptions, "ledger" | "maxInputTokens" | "expiresAt">;
   /** Explicit injection is labeled fake-provider; normal product code constructs the real transport. */
   provider?: LlmProvider;
+  /** Progress callback for every recorded run step. */
+  onStep?: RepairSessionOptions["onStep"];
 }
 export interface RepositoryRepairOutput {
   report: RunReport;
@@ -60,7 +63,8 @@ export async function repairRepository(options: RepositoryRepairOptions): Promis
   const budget = new BudgetLedger({ maxRunCostUsd: limit, maxTaskTokens: defaults.maxTaskTokens });
   const session = await DockerRepairSession.prepare({ repoPath: options.repoPath, tempRoot: options.tempRoot, runtimeRoot: options.runtimeRoot, config,
     ...(options.privateDiagnostics === undefined ? {} : { privateDiagnostics: options.privateDiagnostics }),
-    ...(options.retainEvidence === undefined ? {} : { retainEvidence: options.retainEvidence }) });
+    ...(options.retainEvidence === undefined ? {} : { retainEvidence: options.retainEvidence }),
+    ...(options.onStep === undefined ? {} : { onStep: options.onStep }) });
   try {
     const baseline = await SourceBaseline.fromSnapshot(options.repoPath, session.sourceRoot, options.tempRoot);
     let semanticRepair: SemanticRepair | undefined;
