@@ -69,7 +69,17 @@ export class DurableSpendLedger {
     } finally { await file.close(); }
   }
 
-  private async mutate<T>(change: (store: Store) => T): Promise<T> {
+  // Concurrent evaluation cells share one instance; queue its writes so they never collide on the file lock.
+  // Writers in other processes still fail closed on the lock.
+  private pending: Promise<unknown> = Promise.resolve();
+
+  private mutate<T>(change: (store: Store) => T): Promise<T> {
+    const run = this.pending.then(() => this.mutateNow(change));
+    this.pending = run.catch(() => undefined);
+    return run;
+  }
+
+  private async mutateNow<T>(change: (store: Store) => T): Promise<T> {
     const lock = `${this.path}.lock`;
     try { await mkdir(lock, { mode: 0o700 }); }
     catch { throw new Error("Budget ledger is locked; retry only after the active writer finishes or reconcile a stale lock"); }

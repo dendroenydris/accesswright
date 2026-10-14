@@ -58,3 +58,11 @@ it("preserves an overshoot as evidence and blocks future calls rather than hidin
   await expect(ledger.reserve("fixture-model", 0.01, "b".repeat(64))).rejects.toThrow(/reconciliation/i);
   expect(await ledger.snapshot()).toMatchObject({ blocked: true, settledUsd: 0.2 });
 });
+
+it("queues concurrent writes on one shared instance instead of failing them on the file lock", async () => {
+  const { ledger } = await fixture();
+  const ids = await Promise.all(["a", "b", "c", "d"].map(letter => ledger.reserve("fixture-model", 0.1, letter.repeat(64))));
+  await Promise.all(ids.map(id => ledger.settle(id, { inputTokens: 1, outputTokens: 1, costUsd: 0.01 })));
+  expect(await ledger.snapshot()).toMatchObject({ blocked: false, reservedUsd: 0 });
+  expect((await ledger.snapshot()).settledUsd).toBeCloseTo(0.04);
+});

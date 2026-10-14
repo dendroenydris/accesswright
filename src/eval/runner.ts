@@ -355,10 +355,11 @@ export async function runEvaluation(options: EvalRunOptions) {
             const before = await readFile(path,"utf8");
             await writeFile(path,applyMutations(before,candidates.filter(item=>item.mutation.file===file).map(item=>item.mutation)),"utf8");
           }
-          for (const system of selection.systems) {
-            if (alreadyStored(repository, system, seed, batch)) continue;
-            const cell = await executeCell(options,runtimeSnapshot.path,emptyCell(options,implementation,repository,system,seed,batch),mutated,candidates);
-            await store(cell);
+          const pendingSystems = selection.systems.filter(system => !alreadyStored(repository, system, seed, batch));
+          for (let index = 0; index < pendingSystems.length; index += defaults.evalConcurrentSystems) {
+            await Promise.all(pendingSystems.slice(index, index + defaults.evalConcurrentSystems).map(async system => {
+              await store(await executeCell(options,runtimeSnapshot.path,emptyCell(options,implementation,repository,system,seed,batch),mutated,candidates));
+            }));
           }
         } finally { await rm(temporary,{recursive:true,force:true}); }
       }

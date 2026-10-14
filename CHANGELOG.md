@@ -73,6 +73,7 @@
 
 ### Changed
 
+- Evaluation runs the systems of one batch concurrently (default 2, `evalConcurrentSystems` in `src/config.ts`), each in its own containers; one shared spend-ledger instance now queues its writes instead of failing them on its own file lock.
 - Integration diagnostics stream owned-fixture stage timestamps immediately, separating worker, independent replay and cleanup time without logging candidate contents.
 - Integration tests stop after the first failure so its error summary is available before the CI job deadline; successful runs still execute the full selected suite.
 - Pinned GitHub checkout/setup-node actions to Node24-based releases and disabled automatic package caching in the privileged product Action.

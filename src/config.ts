@@ -11,6 +11,8 @@ export const defaults = Object.freeze({
   maxRoutes: 50,
   crawlDepth: 2,
   maxTasks: 20,
+  /** Systems of one evaluation batch run concurrently in separate containers; 2 fits an 8 GB Docker VM. */
+  evalConcurrentSystems: 2,
   maxAttempts: 3,
   maxOutputTokens: 4096,
   maxTaskTokens: 64000,
