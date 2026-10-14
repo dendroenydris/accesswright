@@ -43,6 +43,11 @@ export interface RepairSessionOptions {
   retainEvidence?: boolean;
   /** Called after every recorded run step, for progress display. */
   onStep?: (step: RunStepEvent) => void;
+  /**
+   * Baseline measured by another session on the byte-identical source (evaluation systems of one batch). The new session
+   * still installs and runs in its own containers, but skips the baseline checks and scans, which dominate preparation.
+   */
+  baseline?: SharedBaseline;
 }
 
 export interface RunStepEvent {
@@ -50,6 +55,24 @@ export interface RunStepEvent {
   status: "ok" | "error" | "rejected" | "skipped";
   durationMs: number;
   metadata: Record<string, string | number | boolean | null>;
+}
+
+export interface SharedBaseline {
+  sourceDigest: string;
+  routes: string[];
+  baselineChecks: ProductionCheckResult[];
+  productionBaseline: BrowserObservation[];
+  observations: BrowserObservation[];
+  volatileText: string[];
+}
+
+async function snapshotDigest(root: string): Promise<string> {
+  const hash = createHash("sha256");
+  for (const file of await listSnapshotFiles(root)) {
+    const bytes = await readFile(join(root, file));
+    hash.update(file).update("\0").update(String(bytes.length)).update("\0").update(bytes);
+  }
+  return hash.digest("hex");
 }
 
 export class UnsupportedRepositoryError extends Error {
@@ -137,21 +160,28 @@ export class RepairSession<TSandbox extends RepairTransport> {
       session.inspection = TargetInspectionSchema.parse(await session.target({ action: "inspect" }));
       if (session.inspection.privateFilesPresent.length > 0) throw new Error("Private target configuration crossed the snapshot boundary");
       await sandbox.finishInstall();
-      session.baselineChecks = await session.runProductionChecks(checkNames);
-      await writeFile(join(evidenceDir, "baseline-checks.json"), JSON.stringify(session.baselineChecks, null, 2));
-      if (session.baselineChecks.find(check => check.check === "build")?.status !== "passed") {
-        throw new UnsupportedRepositoryError("The unmodified production baseline does not build", evidenceDir);
-      }
-      await session.target({ action: "start", mode: "production" });
       const initial = fileRoutes.find(route => !route.dynamic)?.pattern ?? config.routes[0];
+      const shared = options.baseline;
+      if (shared) {
+        if (shared.sourceDigest !== await snapshotDigest(sourceRoot)) throw new Error("A shared baseline must come from byte-identical source");
+        await writeFile(join(evidenceDir, "baseline-checks.json"), JSON.stringify(shared.baselineChecks, null, 2));
+      } else {
+        session.baselineChecks = await session.runProductionChecks(checkNames);
+        await writeFile(join(evidenceDir, "baseline-checks.json"), JSON.stringify(session.baselineChecks, null, 2));
+        if (session.baselineChecks.find(check => check.check === "build")?.status !== "passed") {
+          throw new UnsupportedRepositoryError("The unmodified production baseline does not build", evidenceDir);
+        }
+        await session.target({ action: "start", mode: "production" });
+        if (!initial) throw new UnsupportedRepositoryError("Dynamic-only applications require an explicit route", evidenceDir);
+        await session.ready(initial);
+        const crawled = initial === "/" ? CrawlOutputSchema.parse(await session.browser({ action: "crawl", baseUrl: sandbox.baseUrl })).paths : config.routes;
+        session.routes = [...new Set([...materializeRoutes(fileRoutes, crawled).map(route => route.urlPath), ...config.routes])].sort().slice(0, defaults.maxRoutes);
+        session.productionBaseline = await session.scan(session.routes, "production-baseline");
+        // A second unpatched scan reveals text that changes on its own (animations); only those nodes skip text equality.
+        session.learnVolatileText(session.productionBaseline, await session.scan(session.routes, "production-baseline-confirm"));
+        await session.target({ action: "stop" });
+      }
       if (!initial) throw new UnsupportedRepositoryError("Dynamic-only applications require an explicit route", evidenceDir);
-      await session.ready(initial);
-      const crawled = initial === "/" ? CrawlOutputSchema.parse(await session.browser({ action: "crawl", baseUrl: sandbox.baseUrl })).paths : config.routes;
-      session.routes = [...new Set([...materializeRoutes(fileRoutes, crawled).map(route => route.urlPath), ...config.routes])].sort().slice(0, defaults.maxRoutes);
-      session.productionBaseline = await session.scan(session.routes, "production-baseline");
-      // A second unpatched scan reveals text that changes on its own (animations); only those nodes skip text equality.
-      session.learnVolatileText(session.productionBaseline, await session.scan(session.routes, "production-baseline-confirm"));
-      await session.target({ action: "stop" });
       const existingConfigs = configNames.filter(path => files.includes(path));
       if (existingConfigs.length > 1) throw new UnsupportedRepositoryError("Multiple Next configuration files are ambiguous", evidenceDir);
       const configName = existingConfigs[0] ?? "next.config.mjs";
@@ -164,6 +194,11 @@ export class RepairSession<TSandbox extends RepairTransport> {
       await sandbox.ownWorkspace([`/workspace/${configName}`]);
       await session.target({ action: "start", mode: "dev" });
       await session.ready(initial);
+      if (shared) {
+        session.adoptBaseline(shared);
+        await session.recordStep("prepare", "ok", installStarted, { routeCount: session.routes.length, sharedBaseline: true });
+        return session;
+      }
       session.observations = await session.scan(session.routes, "dev-baseline");
       // A third unpatched sample catches rotating content that matched by chance in the two production scans.
       session.learnVolatileText(session.productionBaseline, session.observations);
@@ -277,6 +312,25 @@ export class RepairSession<TSandbox extends RepairTransport> {
     const map: Record<string, string[]> = {};
     for (const page of this.observations) for (const file of page.sourceFiles) map[file] = [...new Set([...(map[file] ?? []), page.route])];
     return sourceRoutesForChanges(paths, map, this.routes);
+  }
+
+  /** Call right after preparation, before any patch: the digest binds the baseline to the unpatched source. */
+  async sharedBaseline(): Promise<SharedBaseline> {
+    if (this.journal.fixes.length > 0) throw new Error("A shared baseline must be taken before any patch");
+    return structuredClone({ sourceDigest: await snapshotDigest(this.sourceRoot), routes: this.routes, baselineChecks: this.baselineChecks,
+      productionBaseline: this.productionBaseline, observations: this.baselineObservations, volatileText: [...this.volatileText] });
+  }
+
+  private adoptBaseline(shared: SharedBaseline): void {
+    this.routes = [...shared.routes];
+    this.baselineChecks = structuredClone(shared.baselineChecks);
+    this.productionBaseline = structuredClone(shared.productionBaseline);
+    this.observations = structuredClone(shared.observations);
+    for (const id of shared.volatileText) this.volatileText.add(id);
+    this.markVolatileText([...this.productionBaseline, ...this.observations]);
+    this.baselineObservations = structuredClone(this.observations);
+    // Patched routes are probed for readiness before their first scan, as after any source change.
+    this.sourceChanged = true;
   }
 
   /** Only unpatched baseline scans feed this set, so a candidate patch cannot make its own text changes volatile. */

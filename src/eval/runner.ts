@@ -22,6 +22,7 @@ import type { LlmProvider } from "../llm/types.js";
 import { makeRunReport } from "../reporter/report.js";
 import { summarizeScans } from "../reporter/scan-summary.js";
 import { DockerRepairSession, UnsupportedRepositoryError } from "../runner/repair-session.js";
+import type { SharedBaseline } from "../runner/repair-runtime.js";
 import { listSnapshotFiles } from "../runner/patch-journal.js";
 import { copyTargetSnapshot, resolveSafeSource } from "../sandbox/source-boundary.js";
 import { violationKey } from "../scanner/browser-facts.js";
@@ -152,7 +153,8 @@ export function classifyFinalEvaluationOutcome(
   return { status: "completed", reason: "Final gate rejected this fix set" };
 }
 
-async function executeCell(options: EvalRunOptions, runtimeDistRoot: string, base: EvalCell, repoPath: string, candidates: readonly RenderedCase[]): Promise<EvalCell> {
+async function executeCell(options: EvalRunOptions, runtimeDistRoot: string, base: EvalCell, repoPath: string, candidates: readonly RenderedCase[],
+  share: { baseline?: SharedBaseline; onPrepared?: (baseline: SharedBaseline) => void } = {}): Promise<EvalCell> {
   const started = Date.now();
   const cell = structuredClone(base);
   const policy = systemPolicy(cell.system);
@@ -166,7 +168,9 @@ async function executeCell(options: EvalRunOptions, runtimeDistRoot: string, bas
       cell.reason = "Live comparison requires operator pricing, a run cap, and a durable cumulative allowance; fake-provider injection is separate";
       return cell;
     }
-    session = await DockerRepairSession.prepare({ repoPath, tempRoot: options.tempRoot, runtimeRoot: options.runtimeRoot, runtimeDistRoot, retainEvidence: true, config: { scan: { mobile: true, darkScheme: false } } });
+    session = await DockerRepairSession.prepare({ repoPath, tempRoot: options.tempRoot, runtimeRoot: options.runtimeRoot, runtimeDistRoot, retainEvidence: true, config: { scan: { mobile: true, darkScheme: false } },
+      ...(share.baseline ? { baseline: share.baseline } : {}) });
+    share.onPrepared?.(await session.sharedBaseline());
     cell.evidenceId = basename(session.runRoot);
     const injection = injectedTargets(candidates, session.observations);
     eligible = injection.eligible;
@@ -355,11 +359,21 @@ export async function runEvaluation(options: EvalRunOptions) {
             const before = await readFile(path,"utf8");
             await writeFile(path,applyMutations(before,candidates.filter(item=>item.mutation.file===file).map(item=>item.mutation)),"utf8");
           }
-          const pendingSystems = selection.systems.filter(system => !alreadyStored(repository, system, seed, batch));
-          for (let index = 0; index < pendingSystems.length; index += defaults.evalConcurrentSystems) {
-            await Promise.all(pendingSystems.slice(index, index + defaults.evalConcurrentSystems).map(async system => {
-              await store(await executeCell(options,runtimeSnapshot.path,emptyCell(options,implementation,repository,system,seed,batch),mutated,candidates));
-            }));
+          // The first pending system measures the baseline once; the others start from it in their own containers.
+          const [lead, ...followers] = selection.systems.filter(system => !alreadyStored(repository, system, seed, batch));
+          if (lead) {
+            let release: (baseline: SharedBaseline | undefined) => void = () => undefined;
+            const prepared = new Promise<SharedBaseline | undefined>(resolve => { release = resolve; });
+            const leadRun = executeCell(options,runtimeSnapshot.path,emptyCell(options,implementation,repository,lead,seed,batch),mutated,candidates,{ onPrepared: release })
+              .finally(() => release(undefined)).then(store);
+            const baseline = await prepared;
+            const queue = [...followers];
+            const worker = async () => {
+              for (let system = queue.shift(); system; system = queue.shift()) {
+                await store(await executeCell(options,runtimeSnapshot.path,emptyCell(options,implementation,repository,system,seed,batch),mutated,candidates,baseline ? { baseline } : {}));
+              }
+            };
+            await Promise.all([leadRun, ...Array.from({ length: Math.max(1, defaults.evalConcurrentSystems - 1) }, worker)]);
           }
         } finally { await rm(temporary,{recursive:true,force:true}); }
       }
