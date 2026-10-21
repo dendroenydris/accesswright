@@ -1,4 +1,6 @@
-<h1 align="center">accesswright</h1>
+<h1 align="center">
+  <img src="assets/wordmark.png" alt="accesswright" width="640">
+</h1>
 
 <h4 align="center">Fixes accessibility bugs in React and Next.js source code, and only proposes fixes it has verified in a real browser and a real build.</h4>
 
