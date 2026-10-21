@@ -1,357 +1,174 @@
-# accesswright
+<h1 align="center">accesswright</h1>
 
-Accesswright repairs accessibility problems in React/Next.js source and verifies the resulting application before proposing changes. It is a development-stage TypeScript package with a CLI and a backlog GitHub Action. It is not an overlay, a legal compliance service, or a complete accessibility audit.
+<h4 align="center">Fixes accessibility bugs in React and Next.js source code, and only proposes fixes it has verified in a real browser and a real build.</h4>
 
-## How a repair reaches review
+<p align="center">
+  <a href="#how-it-works">How it works</a> •
+  <a href="#quick-start">Quick start</a> •
+  <a href="#github-action">GitHub Action</a> •
+  <a href="#configuration">Configuration</a> •
+  <a href="#mcp-server">MCP server</a> •
+  <a href="#limits">Limits</a> •
+  <a href="#development">Development</a> •
+  <a href="#license">License</a>
+</p>
+
+Most accessibility tools point at a problem and leave the fix to you. Coding agents will write a fix, but often one that only silences the warning: they delete the element, add `aria-hidden`, or break the build. accesswright edits your source, then runs the app and checks that the fix is real before you ever see it.
+
+A fix is kept only if:
+
+- the original axe finding is gone,
+- no new finding appeared,
+- no content or control was removed or hidden (compared on the accessibility tree), and
+- the production build, typecheck, lint and tests show no new failures.
+
+Anything else is dropped. Nothing gets through on a "best effort" basis.
+
+## How it works
 
 ```text
-Configuration → isolated source snapshot → production baseline
-                                         ↓
-                           instrumented persistent dev server
-                                         ↓
-                           browser/axe/source-location scan
-                                         ↓
-                     deterministic repair or scoped model patch
-                                         ↓
-                        fresh browser scan + content checks
-                                         ↓
-                     per-fix commits in an isolated Git journal
-                                         ↓
-               production build/typecheck/lint/tests/full rescan
-                                         ↓
-                  bisect and discard newly breaking fix groups
-                                         ↓
-                    guarded local write or review pull request
+your repo ─► sandboxed copy ─► baseline scan + production checks
+                                   │
+                                   ▼
+                  codemod, or a scoped model patch
+                                   │
+                                   ▼
+          re-scan in the browser, compare with the baseline
+                                   │
+                                   ▼
+        production build / typecheck / lint / tests, once per PR
+                                   │
+                                   ▼
+            local write, review PR, or PR suggestions
 ```
 
-The verifier checks that targeted findings disappear, no new findings are introduced, protected content and controls remain, and production checks have no new failures. Screenshots are evidence, not an acceptance shortcut. Passing automated checks does not prove semantic correctness, legal conformity, or that all WCAG requirements are covered.
+- **Deterministic first.** Rules with a known fix (missing `lang`, positive `tabindex`, and so on) are fixed by codemods with no model call.
+- **Model fixes are optional.** OpenAI, Anthropic, DeepSeek and OpenAI-compatible providers are supported. Output is schema-validated. Cost and token caps are enforced in code, and the default budget is zero.
+- **Repository code runs in Docker.** Install scripts, dev servers and builds run in a container with a scrubbed environment. Model keys and GitHub tokens never enter it.
+- **Every check is differential.** Failures that already existed before patching do not count against a fix.
 
-A `verified` result means the returned fix groups passed their gates. It can still include `needsHuman` findings, pre-existing failures, or unavailable checks. Read the full report rather than treating the word as an all-clear audit. The Action currently requires all four production check kinds to be available and passing before publication; unsupported projects are reported instead of bypassing checks.
+## Quick start
 
-## Local development and CLI
+You need Node.js 22.12 or newer, Git, and a running Docker engine. The package is not on npm yet, so build it from source:
 
-Prerequisites: a supported Node.js version from `package.json`, npm, Git, and a running Docker engine with the pinned Playwright image available. No model key is needed for deterministic mode. The package is not yet published to npm or the GitHub Marketplace.
-
-```sh
-npm ci --ignore-scripts --no-audit --no-fund
-npm run check
-npm test
+```bash
+git clone https://github.com/dendroenydris/accesswright.git
+cd accesswright
+npm ci --ignore-scripts
 npm run build
-node dist/src/cli.js fix /absolute/path/to/next-project --no-llm --offline
 ```
 
-To install a locally built package, run `npm run build` and `npm pack --ignore-scripts`. Install the resulting tarball in a separate consumer directory:
+Run it on a Next.js project. `--no-llm` uses codemods only and needs no API key:
 
-```sh
-npm install --ignore-scripts /absolute/path/to/accesswright-0.0.0.tgz
-npx accesswright --help
-npx accesswright fix /absolute/path/to/next-project --no-llm --dry-run
+```bash
+node dist/src/cli.js fix /path/to/your-next-app --no-llm --dry-run
 ```
 
-The tarball contains the compiled runtime, type declarations, README, license and changelog. Development checkouts, tests, evaluation fixtures, dashboard sources and internal documents are excluded. The library entry exports `repairRepository` from `accesswright`. Help works without Docker or a model key; repairs require Docker. This installation uses a local tarball and does not publish the package.
+`--dry-run` leaves your source untouched and writes a report. Drop it to apply the verified fixes to your checkout.
 
-The Docker runtime uses one complete dependency tree matching the installed coordinator. Split layouts or dependencies linked outside that tree are rejected; install the tool in a separate npm directory if an existing project's dependency layout conflicts.
+| Option | Meaning |
+|---|---|
+| `--no-llm` | Codemods only, no model calls |
+| `--dry-run` | Report only, do not write the repository |
+| `--offline` | Cut the container's network after dependencies are installed |
+| `--max-tasks <n>` | Maximum number of repair tasks |
+| `--max-cost-usd <n>` | Model spending cap for this run (default 0) |
+| `--input-usd-per-million`, `--output-usd-per-million` | Model prices; required whenever the cap is above zero |
+| `--retain-evidence` | Keep screenshots and page facts in the temp directory |
 
-Add `--dry-run` to leave the original source unchanged. `--retain-evidence` explicitly retains private screenshots and rendered page facts in the temporary run directory. The default retains only structured run metadata. A changed original repository is never overwritten after the verification snapshot has gone stale. A blocked final verification produces a nonzero CLI exit status.
+## GitHub Action
 
-Configuration is optional `.accesswright.yml`:
+The Action has two modes:
+
+- **`backlog`** scans a branch and opens one PR with verified fixes.
+- **`pr`** comments verified suggestions on an open pull request.
 
 ```yaml
-routes: []
+name: Accessibility repair
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  accesswright:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: dendroenydris/accesswright@main
+        with:
+          mode: backlog
+```
+
+Enable *Allow GitHub Actions to create and approve pull requests* in the repository settings. A fix branch that has commits from anyone else is never force-pushed; it is left alone and reported. See [`action.yml`](action.yml) for all inputs.
+
+## Configuration
+
+Put an optional `.accesswright.yml` in the target repository:
+
+```yaml
+routes: ["/", "/about"]   # empty means discover routes
 ignore:
   rules: []
   paths: []
 scan:
   mobile: true
   darkScheme: false
-offline: true
+  ibm: false        # also run IBM Equal Access as a second checker
+  keyboard: false   # record Tab / Shift+Tab focus order
+model:
+  provider: anthropic
+  id: <model id>
 ```
 
-A model configuration additionally specifies `provider`, the exact model `id`, and optional `reasoningEffort`. Keys are read from the coordinator environment. Paid calls require an explicit operator `--max-cost-usd` and both `--input-usd-per-million` and `--output-usd-per-million`; the default allowance is zero. A repository cannot increase that allowance or redirect credentials to a custom endpoint without explicit operator trust. The library also provides a durable cumulative spending ledger for development/evaluation: pre-call reservations survive crashes, and unknown usage is not treated as free.
+API keys are read from the environment of the process running accesswright, never from the repository. A repository config cannot raise the spending cap or point keys at another endpoint unless you pass `--trust-provider-config`.
 
-## Optional second checker
+## MCP server
 
-An optional IBM Equal Access engine supplements axe when `.accesswright.yml` contains `scan: { ibm: true }`. It is off by default. The pinned local `accessibility-checker-engine@4.0.34` runs inside the browser container with no remote rule download. This dependency remains [Apache-2.0 licensed](https://github.com/IBMa/equal-access/blob/main-4.x/LICENSE), separate from Accesswright's MIT code; retain IBM's license and attribution when redistributing engine assets.
+`accesswright-mcp` lets a coding agent use the verifier on your local checkout. It has three tools:
 
-Reviewed image-name, document-title and missing HTML-language failures map to the corresponding axe identities. Other IBM rules retain an `ibm-` prefix and require human review. Cross-checker dedup requires the same mapped rule and actual DOM node; it keeps the larger occurrence count. Potential/manual/recommendation results remain inconclusive. Engine errors, empty execution or unresolved finding identities fail the scan instead of falling back to axe alone. Actual IBM version metadata enters scan reports and Track N exports; none of these checks proves legal conformity. Browser acceptance of this optional path remains pending.
+- `scan` records the baseline.
+- `verify` checks the agent's edits against that baseline and runs the production checks.
+- `close` cleans up the run.
 
-## Optional keyboard observations
+It never writes your checkout, calls a model, or opens PRs.
 
-`scan: { keyboard: true }` records bounded forward Tab and reverse Shift+Tab sequences in a separate disposable browser context for each route and condition. It is off by default. Only DOM-order control indices, stop reasons and unreached-control counts are returned; the probe never presses activation keys or clicks controls. Focus handlers may change application state, so its page is kept separate from the verifier's existing browser facts and screenshots.
-
-Repeated focus, navigation, unmapped or nested contexts, reset failure and step exhaustion remain explicit incomplete observations. A repeated sequence is not a certified keyboard trap, and unreached controls can include intentionally nonsequential widgets. Frames, shadow trees, widget activation, meaningful focus order and screen-reader behavior require manual review. Reports retain aggregate unavailable/repeat/unreached counts; this advisory evidence does not change verifier comparisons or certify keyboard accessibility. Actual enabled-path browser acceptance remains pending.
-
-## Backlog and PR-mode GitHub Action
-
-Backlog publication also requires the target repository's **Allow GitHub Actions to create and approve pull requests** setting and explicit workflow `contents: write` and `pull-requests: write` permissions. A disabled repository setting can return HTTP403 after verified repair commits are created. For GitHub's web-flow commits, recovery requires the expected bot author and a valid signature. Every recovery checks exact verified source and branch ownership before opening a missing PR; human or unattributable changes remain preserved.
-
-`action.yml` is the product Action. It checks out the target branch separately, runs target code in Docker, and publishes only the verifier-selected source groups. Use a reviewed immutable Action commit when adopting it. Give the calling workflow only `contents: write` and `pull-requests: write`; trigger backlog mode by `workflow_dispatch` or a schedule, not a privileged pull-request event. The default is `no-llm: 'true'` and `max-cost-usd: '0'`.
-
-`.github/workflows/backlog-integration.yml` is a manual, deterministic product integration test on an existing owned branch. It does not use a model key. Ordinary CI likewise does not call paid models and includes the actual Chromium harmful/legitimate-change verifier sets. No temporary API-key workflow is part of the product.
-
-PR mode (`mode: pr`) checks out the exact pull-request head and verifies it using the same Docker and final production gates, then posts GitHub suggested changes only on lines already inside the PR diff. Out-of-diff verified changes receive a CLI handoff instead of silently widening the review. Fork PRs are read-only with LLM spending disabled, regardless of caller flags or head-repository metadata. `.github/workflows/pr-mode-integration.yml` is a manual, no-model test workflow requiring an existing PR number and exact head SHA; it is not an automatically privileged PR trigger. Use a reviewed immutable Action revision and review permissions before enabling it in other repositories.
-
-## Local MCP scan / verify
-
-The development-stage MCP stdio server exposes `scan`, `verify`, and `close` for a coding agent working in an existing local Next.js repository. Build the coordinator and configure the agent to launch:
-
-```sh
+```bash
 npm run build
-ACCESSWRIGHT_TMP_ROOT=/tmp/accesswright/integration-20261007 npm run mcp -- --repo /absolute/path/to/next-project
+npm run mcp -- --repo /path/to/your-next-app
 ```
 
-`scan` freezes a sanitized source snapshot and genuine browser/axe and production baselines in isolated Docker containers. The coding agent edits its own checkout; `verify` uses an exact session/task ID to check the source diff against that baseline, run the existing per-patch anti-gaming verifier, and rerun the full production gate. Concurrent changes to the checkout invalidate the result. `close` cleans run-scoped resources. MCP never writes the developer checkout, makes paid provider calls, or publishes PRs. Source and screenshots remain local, with private evidence removed by default. This is not a hosted service or a published npm package.
+## Limits
 
-## Hosted App service core (local verification only)
+accesswright supports Next.js 12 to 16, both the Pages and App routers. Other React setups are reported as unsupported rather than guessed at.
 
-The local Hosted service modules include a signed GitHub webhook receiver with installation and repository allowlists, multi-repository installation deliveries and bounded HTTP transport; a run-token-authenticated model patch endpoint; and an aggregate-results state machine for `POST /runs/{id}/results`, `POST /runs/{id}/finish` and authenticated `GET /runs/{id}/status`. The target runner receives a scoped per-run token, never provider or GitHub credentials. `FirestoreWebhookRunRegistry` deduplicates confirmed enqueues across restarts; uncertain replies remain held for reconciliation.
+Passing its checks does **not** mean a site is accessible or meets WCAG, EN 301 549 or any legal requirement. Reports reference WCAG success criteria and EN 301 549 clauses, but automated checks cannot judge:
 
-`node dist/src/hosted/service-entry.js` composes four operator-configured roles from bounded `ACCESSWRIGHT_HOSTED_CONFIG` JSON. The exported `HostedServiceConfigSchema` is the configuration contract; secrets are separate environment variables. Every role requires an absolute owned `workRoot` for metadata, distinct Firestore collections, and fixed task origins/accounts.
+- whether alt text and labels are meaningful,
+- reading and focus order in context,
+- screen reader behaviour,
+- captions and media alternatives,
+- cognitive load and plain language,
+- anything behind interactions the scanner does not perform.
 
-| Role | HTTP responsibility | Required trusted credentials |
-| --- | --- | --- |
-| `webhook` | Public signed webhook to the private jobs queue | App signing key and webhook secret |
-| `agent` | Private job dispatch, pinned input and bounded patch/candidate API | App signing key and configured model key |
-| `relay` | Private candidate/expiry tasks to the Docker verifier | Google workload identity |
-| `verifier` | Independent Docker replay and durable final result | App signing key and Google workload identity; no model key required |
+Findings that need a person to decide are marked `needsHuman` in the report.
 
-The agent configuration also fixes its private `agentOrigin`, job/container identifiers, a distinct job-task account and dispatch collection. The webhook configuration fixes the same agent origin/account, its jobs queue, allowed installations and webhook collection. App keys use `ACCESSWRIGHT_GITHUB_APP_PRIVATE_KEY`; webhook signatures use `ACCESSWRIGHT_GITHUB_WEBHOOK_SECRET`. Agent model, token/cost ceilings and pricing are operator configuration. Shared monthly allowances must already exist; startup never creates a spending policy.
+## Development
 
-GitHub source access requests only one repository with `contents: read`, validates the App/installation/owner and pins an exact Git commit before worker authorization. Installation jobs use the default branch; PR comments use the base repository's exact `pull/{number}/head` ref, with no merge/default fallback. Comment senders require confirmed repository write access. The original pin is create-only and reused by input preparation and independent replay; checkout release must succeed before a receipt is returned.
-
-`createHostedAgentServer({ agent, store, verifyTrustedResult, receiveCandidate, input })` in `src/hosted/agent-http.ts` combines input, patch, candidate, results, finish and status routes in one private HTTP server. All routes authenticate against the same `HostedPatchAgent` run store. Candidate staging must be private, immutable per run and cleared after verification or expiry. A candidate acknowledgment binds the exact payload digest and only confirms transfer; the separate finish gate still requires independent verification. Without `receiveCandidate`, candidate submission fails closed. Supply durable stores and an independent verifier before listening behind private ingress. Public GitHub webhooks and Cloud Tasks dispatch use their separate receivers; this factory does not launch a worker or configure cloud infrastructure.
-
-Optional `input: { resolveCheckout, evidenceRoot }` enables `POST /runs/{id}/input`. The server consumes a durable one-time claim before reading private source. Its trusted callback receives authenticated run metadata and returns the original pinned checkout/SHA plus a required `release()` callback; the worker cannot select a repository or revision. `createHostedInputBundle` reads raw Git blobs without filters or hooks, reuses the credential exclusions, omits symlinks and bounds paths, file count and bytes. Binary bytes retain their Git blob hashes. The trusted checkout is released before responding; failed reads or responses retain the claim. Authorizations missing the required input-claim field fail validation.
-
-The generic `node /accesswright/dist/src/hosted/worker-download-entry.js` fetches this bundle at runtime into an exclusively created `/input/source`. It requires the same secretless non-root boundary and scoped environment as the preloaded entry, validates every blob before writing, and deletes its owned input before candidate transfer or on failure. Existing input directories are preserved and rejected. Cloud input authorization, pinned checkout provisioning and image deployment still require acceptance.
-
-`Dockerfile.worker` builds that generic image using pinned dependencies with lifecycle scripts disabled. Its build context allowlist includes only the public runtime and build inputs; repository inputs, internal documents, Git metadata and tests are omitted. The final runtime is root-owned and not writable by `pwuser`; `/input`, `/workspace` and the temporary directory are initially empty and owned by that non-root user. Build locally with `docker build -f Dockerfile.worker -t accesswright-worker:local .`. Inject the trusted agent origin/provider classification and scoped run configuration at job launch. Do not supply provider keys, GitHub tokens, service-account keys or private source through build arguments, image layers or worker environment. Deployment must separately restrict the worker's workload identity. `test/e2e/worker-image-download.test.ts` is opt-in and requires `ACCESSWRIGHT_TEST_WORKER_IMAGE` set to an immutable local image ID.
-
-`HostedAgentClient` in `src/hosted/agent-client.ts` sends semantic patch requests using a scoped run token and an operator-selected HTTPS origin (loopback HTTP is allowed for local tests). Cloud Run workers additionally require `ACCESSWRIGHT_WORKER_SERVICE_ACCOUNT_EMAIL` and a fixed-audience metadata ID token in `X-Serverless-Authorization`; application authorization still uses the run token ([Cloud Run service authentication](https://docs.cloud.google.com/run/docs/authenticating/service-to-service)). Grant that worker account only invocation of the private agent, with no storage, metadata-store or secret permissions. The client rejects redirects, oversized or malformed responses, contradictory HTTP/result states, and patches outside the task's deterministic context. An interrupted response is returned with unknown usage and never retried automatically. The patch service accepts bounded PNG bytes and previous verifier feedback, forwards the actual image bytes to the configured provider, and retains neither in its run metadata. A schema-accepted response still needs the worker's existing per-patch and final production verification.
-
-`EphemeralRepairSession` in `src/runner/ephemeral-repair-session.ts` reuses the existing scan, repair and production gates inside a secretless, non-root Linux worker container. It accepts a preloaded sanitized `/input` snapshot or the owned `/input/source` download, and requires a read-only trusted runtime, an allowlisted environment and exclusive workspace ownership. Cloud Run Jobs additionally require a trusted image marker and one initial task; automatic retry attempts are rejected. Offline mode is refused because this driver cannot enforce network isolation. The worker's own browser evidence is untrusted; only independent replay can authorize review.
-
-`runHostedWorker` in `src/hosted/worker.ts` drives deterministic repair first, then bounded remote semantic proposals through `HostedAgentClient`. Every accepted proposal still passes the existing browser and production gates. Known rejected-call usage is retained; an unreconciled response blocks all further model calls. A validated `{ report, patches }` candidate reaches the supplied private `submitCandidate` callback only after the session's workspace and temporary source copies are cleared; it is never printed or published. Preloaded input volumes still belong to their caller, which must remove them when the job ends. Omitting the client selects deterministic mode. The executable `node /accesswright/dist/src/hosted/worker-entry.js` requires the secretless container boundary and image-configured `ACCESSWRIGHT_AGENT_ORIGIN` and `ACCESSWRIGHT_PROVIDER_VERIFICATION`, plus a scoped run ID/token. It submits once through the bounded candidate endpoint; lost acknowledgments require trusted reconciliation. An owned non-root container fixture uses a loopback **fake** model service. This is transport/repair evidence, not a deployed trusted model service.
-
-`createLocalHostedCandidateCoordinator` in `src/hosted/local-candidate-coordinator.ts` supplies `receiveCandidate` and `verifyTrustedResult` callbacks for local execution. It seals service-side usage before staging, bounds private candidates in memory, refuses changed payloads, expires pending source and removes candidates after verification or failure. Checkout/SHA/runtime selection comes from the trusted `resolveCheckout` callback. It retains only digest metadata in its JSONL trace. Pending candidates are lost on restart; cloud use needs durable private staging. Publication is disabled by default.
-
-Candidate submission atomically claims `staging` in the aggregate store before any private write. Finish and other uploads are excluded until staging completes; a failed or uncertain write retains that claim across restarts for trusted reconciliation. A completed or already claimed verification cannot reopen private staging. The dashboard exposes the pending state without source payloads.
-
-The aggregate store fixes the exact candidate digest on first staging. Identical acknowledged transfers return the original confirmation without uploading again, including after source expiry; changed patches with the same report are rejected. Stored metadata lacking the required candidate digest fails validation.
-
-`GcsHostedCandidateStore` in `src/hosted/gcs-candidate-store.ts` provides private, create-only candidate objects with immutable expiry, generation-bound reads and checked deletion. Its bucket gate requires public-access prevention, uniform access control, and disabled soft deletion, versioning and retention/hold policies. A trusted `scheduleExpiry` callback must durably register cleanup before any private upload. Deletion checks both live and soft-deleted revisions; a recoverable object withholds cleanup confirmation. This adapter has fake HTTP tests; cloud wiring and live storage acceptance remain unfinished. Cloud Storage soft deletion otherwise retains deleted objects, so ordinary delete acknowledgment is insufficient ([Cloud Storage deletion contract](https://docs.cloud.google.com/storage/docs/json_api/v1/objects/delete)).
-
-`createHostedCandidateCoordinator` in `src/hosted/candidate-coordinator.ts` joins durable private storage, trusted usage sealing, metadata-only verification scheduling and fresh independent Docker replay. Use its callbacks behind `HostedRunWorkflow`'s durable claims. Checkout selection remains trusted configuration; every replay result waits for confirmed generation-bound source deletion. Failed metadata recording also removes uploaded source. Fake adapter tests cover service restarts and failure paths; actual cloud scheduling and deployment remain unverified. `store.expire(runId, originalExpiresAt)` uses the authenticated scheduled deadline without parsing potentially corrupted source. An absent object requires a prior trusted cleanup receipt; it is not proof that an interrupted upload or recoverable deletion is safe.
-
-`CloudTasksCandidateQueue` in `src/hosted/candidate-task-queue.ts` schedules run/report digests for verification and run/original-deadline metadata for expiry, with fixed private HTTPS targets and OIDC identity. Wire `scheduleVerification: (id, digest) => queue.enqueueVerification(id, digest)` and the storage adapter's `scheduleExpiry: (id, expiry) => queue.enqueueExpiry(id, expiry)`. No patches or credentials enter tasks. Create responses and duplicate tasks require exact full metadata; a deleted name's reservation is rejected instead of being called a scheduled cleanup. The workload identity needs task create/get/full-view permissions ([Cloud Tasks task lookup](https://docs.cloud.google.com/tasks/docs/reference/rest/v2/projects.locations.queues.tasks/get)). Queue checks use fake HTTP only; authenticated handlers, durable cleanup receipts, queue retry policy and live cloud acceptance are still separate requirements.
-
-The durable coordinator requires a `cleanup` store. `FirestoreCandidateCleanupStore` in `src/hosted/candidate-cleanup.ts` persists only the immutable object generation, candidate digest, original expiry and pending/cleared state. Registration precedes deletion, and confirmation follows the storage adapter's physical/recoverability checks. Lost confirmations retain the fixed generation for trusted metadata recovery; they never authorize another model call or replay. `clearHostedCandidate` repeats only that bounded cleanup. Both adapters use fake APIs in tests; live Firestore and bucket behavior still need acceptance. Cleanup metadata alone is not a trusted patch-verification receipt.
-
-`createHostedCandidateTaskServer` in `src/hosted/candidate-task-http.ts` exposes only private `/internal/candidates/verify` and `/internal/candidates/expire` routes. Supply `GoogleCloudTasksOidcVerifier` for the exact queue service account/origin, a trusted workflow, durable run/cleanup stores, private storage and a metadata evidence directory. Authentication precedes bounded metadata parsing; worker tokens are refused. `finishTrustedReport` checks the stored report digest and reuses the existing atomic independent-verification gate, including after worker-token expiry. Interrupted claims are not released. Expiry requires the immutable original deadline and confirmed generation-bound cleanup; an interrupted upload's generation can be recovered without parsing source. Missing objects with no cleanup receipt remain pending. Local HTTP tests use fake cloud APIs and the mocked replay boundary; live ingress, queue retry policy, runtime and deployment acceptance remain unfinished.
-
-Submitting a job's own success report **does not authorize a PR**. The finish gate requires all four real production checks, exact verified fix IDs, reconciled usage, and a separately trusted verifier receipt matching the report digest and a pinned base SHA. Its only automatic successful state is `ready-for-review`; there is no cloud publishing in this local implementation. Run metadata intentionally omits raw source, screenshots and prompt text.
-
-`verifyHostedCandidate` in `src/hosted/trusted-verifier.ts` returns a metadata-only `receipt` and a separate private `artifact` after fresh Docker replay. The artifact contains full source exported from the trusted patch journal and a report rebuilt from actual replay outcomes, production checks, scan summaries and independently reconciled usage. It binds the worker report, candidate and pinned base identities; worker summaries are not forwarded as verification facts. Private snapshots are removed before returning.
-
-Both coordinators optionally accept `onVerifiedCandidate(runId, artifact, artifactDigest)`, also exposed by `createHostedTrustedServices`. The callback runs only after checkout release and candidate deletion are confirmed. Artifacts stay in trusted process memory and never enter HTTP status, durable run metadata or trace payloads. `publishHostedVerifiedCandidate` validates the expected candidate/report/base and complete artifact digest, rebuilds the PR body, and reuses the existing exact-source and human-commit protections. The digest checks integrity; it is not authentication or publishing permission. Supply independently authorized repository metadata and a separate write credential only in this trusted callback; source-only App credentials remain read-only. No executable cloud role enables publication by default.
-
-The finish workflow atomically claims `verifying` in the shared run store. If replay, cleanup, artifact delivery or publication acknowledgment fails, the claim stays pending across restarts; task redelivery cannot blindly replay or write again. Reconciliation must inspect the actual remote branch and PR before any recovery. A metadata receipt alone never authorizes publication.
-
-The service now has separate **Cloud Tasks REST** and **Firestore REST** adapters, both validated with exact-request, duplicate-delivery and optimistic-concurrency tests; Firestore stores only bounded aggregate run metadata, never source or prompts. The webhook can enqueue an OIDC-authenticated task through the Cloud Tasks adapter, and a second service instance can recover a submitted run through Firestore and complete the trusted-receipt check. Production infrastructure credentials are injected by trusted workload identity, not read from an untrusted repository. No GCP API requests or billable resources were created in these tests.
-
-`HostedPatchAgent` requires an explicit `runStore`: `FirestoreHostedAgentRunStore` for durable authorization, or `InMemoryHostedAgentRunStore` for local tests. Registration and inspection are asynchronous. The durable store retains token hashes and bounded metadata; it never retains raw tokens, source or prompts. Atomic request claims prevent two service replicas from spending the same run allowance concurrently. Restarts preserve request counts, settled input/output tokens, unknown usage and the originally authorized model, cost and per-task token ceilings. Task allowances use hashed rule/source identities, so changing a worker-supplied task ID does not reset usage. Conservative prompt/image bounds are checked before a call; actual token overshoots reject the patch and retain known spending. Configure the task cap with `maxTaskTokens`, whose default lives in `src/config.ts`. Interrupted in-flight requests stay blocked pending trusted reconciliation.
-
-The trusted service must classify its configured provider with `providerVerification: "provider-api"` or `"fake-provider"`; this classification is bound to the run authorization. Before issuing a verification receipt, call `await agent.sealForVerification(runId)` and pass its service-recorded usage to `verifyHostedCandidate` as `reconciled`. Sealing blocks further provider calls across service replicas and restarts, refuses an in-flight request, and preserves unknown usage. A run with no settled provider calls is labeled `not-run`. Do not substitute usage supplied by the worker. Earlier stored authorizations lacking the required counters and seal fail validation; they are not treated as zero-cost runs.
-
-`FirestoreSpendLedger` supplies shared cumulative allowances to the existing budget provider and Hosted agent. A trusted operator initializes each fixed `budgetId` once; service replicas reopen the same records. With `installationBudgetId`, each call atomically reserves against both the global and installation caps and creates one metadata claim. Settlement updates all three records together. Lost responses retain either reservations or accounted usage; overspending blocks further calls. Aggregate documents stay bounded as settled claims accumulate. Local fake-service tests cover concurrency, restarts, interrupted settlement, unknown usage and historical bounds; live Firestore access remains untested.
-
-`HostedPatchAgent` requires `ledgerForRun` instead of one fixed ledger. Configure `ledgerForRun: run => openMonthlyHostedSpend(metadataOptions, run.installationId)` for the shared monthly policy. The resolver uses the authenticated installation and the current UTC month, opening operator-initialized `global-YYYY-MM` and `installation-ID-YYYY-MM` records. Missing policy denies the call; it never creates a fresh allowance. Outstanding claims keep their original scopes when the month changes. Policy provisioning and actual cloud-service configuration still require operator setup.
-
-A local dispatcher now joins the Cloud Tasks HTTP request to a **create-only Firestore dispatch claim**, run-token registration and a fixed Cloud Run Jobs REST invocation. Its complete local roundtrip tests cover concurrent duplicate dispatch, restart idempotence, unknown-cloud-response reconciliation, scoped token transfer and fixed cloud project/job identity. A failed or uncertain launch consumes the durable claim and is not blindly retried. No real Cloud Run Job was launched, no remote GCP call was made and no paid resource was created.
-
-The verifier role requires a dedicated native Linux host and local rootful Docker. `deploy/prepare-verifier-network.sh` prepares ordered IPv4/IPv6 forwarding rules on an idle dedicated host: metadata DNS remains usable, while other container access to Google metadata addresses is denied ([Google metadata endpoints](https://docs.cloud.google.com/compute/docs/metadata/overview)). It preserves existing rules and refuses a conflicting guard. Verifier startup and each source preparation independently recheck the local daemon and firewall with read-only commands; missing rules or unavailable restricted `sudo` access withhold verification. Firewall preparation is an operator deployment operation, not performed by the service. Kernel enforcement still requires actual host acceptance.
-
-In the agent role, `finish` polls the separately scheduled verifier without consuming its claim. The relay client requires both the exact HTTP result and matching durable terminal metadata; a successful HTTP response alone cannot authorize review. Job-task creation also checks exact full metadata after a 409, rather than treating a reserved deleted name as a live task.
-
-**Not deployment-ready:** role composition and HTTP tests use fake cloud APIs and fixture-signed Google tokens. Actual Google token/ingress/IAM behavior, private GitHub App source access, storage deletion policy, host firewall enforcement, spending-policy provisioning, cloud dashboard IAM, actual Hosted GitHub publication, release workflow, deployed alerts and the planned operations period remain incomplete. Production use requires a controlled operator deployment and explicit authorization; the local code is not a completed Hosted App.
-
-## Hosted infrastructure preparation
-
-[`deploy/terraform`](deploy/terraform/README.md) describes the existing GCP service, secretless worker, queue, private storage and workload-account shape. It includes pinned tooling and mock-provider plan tests; it does not deploy services, enable billing/APIs, write secret values or provision the native Docker verifier host. Real project inputs, a reviewed plan and separate deployment authorization are still required. No cloud plan or apply has been performed.
-
-## Private operator dashboard (local, read-only)
-
-The `app/` Next.js App Router application now renders Firestore aggregate run metadata, with a paginated run table, individual run details, statuses, checks and reconciled spending. It refuses to display unknown document fields, raw source, prompts, reports, screenshots and secrets. The Firestore client uses a fixed Google HTTPS endpoint and Cloud Run's workload-identity metadata token; no service-account key is bundled. The local HTTP auth gate fails closed without an operator username and a sufficiently long password. **This additional Basic gate is not a substitute for Google Cloud IAM/IAP and private ingress.** Production deployment and authentication have not been authorized or verified.
-
-For a normal local dependency installation: `npm ci --prefix app --ignore-scripts`, `npm run check --prefix app`, `npm run build --prefix app`, then `npm run test:smoke --prefix app`. Supply `ACCESSWRIGHT_DASHBOARD_USERNAME`, `ACCESSWRIGHT_DASHBOARD_PASSWORD`, `ACCESSWRIGHT_GCP_PROJECT_ID` and `ACCESSWRIGHT_FIRESTORE_RUN_COLLECTION` via trusted server configuration for an actual instance. The smoke script starts only a localhost server with fixture credentials and verifies an unauthenticated 401, authenticated HTML, and failure-closed operation without a cloud backend. Firestore adapter tests mock Google APIs; no real cloud read has been performed. In the T7-mounted Mac test environment, `node_modules` and `.next` are symlinks to T7; the local build additionally uses `NODE_PATH` pointing at the mounted dashboard dependency directory.
-
-## Operational alert preview (offline)
-
-An operator can check a trusted metadata snapshot locally without cloud access or sending notifications:
-
-```sh
-npm run build
-npm run operations:check -- --snapshot /absolute/path/snapshot.json --policy /absolute/path/policy.json
+```bash
+npm ci --ignore-scripts
+npm run check              # typecheck + lint
+npm test                   # unit tests, fake model provider, no network
+npm run test:integration   # end-to-end tests in Docker
 ```
 
-The policy requires `failureRate` (0–1), `dailyCostUsd`, `p95DurationMs` and `minimumCompletedJobs`. Thresholds are operator decisions; none are supplied automatically. An alert breaches only when its measured value is greater than the threshold. Exit codes: 0 for all checks within policy, 1 for a breach or insufficient evidence, 2 for invalid inputs. Input files must be bounded regular files with absolute paths; symlinks are refused. Only aggregate counts, values, policy and alert states go to stdout.
+- `src/` is the core library plus three entry points: `cli.ts`, `action/` and `mcp/`.
+- `src/hosted/` and `app/` hold the hosted GitHub App and dashboard.
+- `eval/` holds the frozen benchmark protocols.
 
-Snapshot format:
+Changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
-`observedAt` may be later than the selected UTC day so a closed day can be checked after midnight. Completed jobs and recorded calls must still belong to `day`; running or unknown jobs must have started before that day's closing midnight. Delayed reading does not make partial or unknown evidence complete.
+## License
 
-```json
-{
-  "schemaVersion": 1,
-  "day": "2026-10-12",
-  "observedAt": "2026-10-12T12:00:00.000Z",
-  "complete": { "jobs": false, "calls": false },
-  "jobs": [
-    { "runId": "run-1", "status": "unknown", "startedAt": "2026-10-12T10:00:00.000Z", "finishedAt": null }
-  ],
-  "calls": [
-    { "id": "call-1", "recordedAt": "2026-10-12T10:01:00.000Z", "state": "unknown", "costUsd": null }
-  ]
-}
-```
-
-Jobs must come from independently confirmed terminal execution results, not a launch-operation acknowledgment, worker success flag or verification receipt. Job statuses are `succeeded`, `failed`, `running` or `unknown`; only terminal jobs have `finishedAt`. Completed jobs belong to the UTC day of completion, including jobs that started earlier. Failure rate and nearest-rank p95 use completed jobs only; running and unknown counts remain visible. Partial job coverage, unknown outcomes or too few completed jobs withhold a healthy result.
-
-Provider calls use unique ledger reservation IDs, `recordedAt` for the trusted usage observation, `state` (`settled`, `pending`, `unknown`) and `costUsd` (settled usage only; otherwise null). Costs belong to that observation's UTC day. Historical upper bounds and reservations are not billed or settled spend and must not be copied into `costUsd`. Unknown or partial usage withholds a healthy cost result; a known sum already above policy still alerts. This is token-price accounting, not a provider invoice. Duplicate identities and out-of-window records fail validation. `complete` is an operator assertion about the supplied window, not authenticated evidence; input validation grants no publication or spending authority. Do not set it to true for a paginated partial export or missing startup/terminal records.
-
-Private source, prompts, raw reports, credentials and arbitrary fields are rejected. Live collection from cloud execution/ledger records, Cloud Monitoring delivery and operating-period acceptance remain unverified. This preview changes neither the spending guard nor a run's verifier decision.
-
-## Single-run execution observation (operator only)
-
-`npm run operations:execution -- --run-id <32-character hexadecimal ID>` reads an existing dispatch claim from Firestore, then reads its Cloud Run operation and a fresh actual Execution. It uses the existing agent-role `ACCESSWRIGHT_HOSTED_CONFIG` and attached Google workload identity; it does not require App or model keys. The operator identity needs read access to the configured dispatch collection and Cloud Run resources, including `run.executions.get` ([Execution lookup](https://docs.cloud.google.com/run/docs/reference/rest/v2/projects.locations.jobs.executions/get)). Run only in a trusted Google environment prepared for these reads; this command does not provision access or deploy a service.
-
-Only the configured project, region, job, container and exact run/repository/installation/PR markers are accepted. A terminal observation requires a consistent completion condition, task counts and timestamps. Missing or uncertain evidence stays `unknown`; a launch acknowledgment is never a completed job. Stdout contains run/operation/execution identities, status and observation/start/completion timestamps, without source, repository names, environment values or cloud diagnostics. Local run traces record the read outcome. Exit 0 means a confirmed terminal observation (including failure), 1 means running or unknown, and 2 means invalid or unconfirmed access. The command makes only cloud GET requests, never restarts a job, writes claims, sends model requests or grants publication authority.
-
-This is one-run observation, not a complete daily export or settled-usage collector. Fake API tests cover its read contract; actual cloud identity/IAM and operating-period acceptance remain unverified. Do not infer complete alert coverage from one result.
-
-## Single-reservation usage observation (operator only)
-
-`npm run operations:usage -- --reservation-id <UUID> --installation-id <positive ID> --month <original YYYY-MM>` uses the same agent-role operator configuration and Google workload identity to read the original global/installation policies and one reservation. Supply its original scopes explicitly, including across month rollover; missing policies or a different scope fail without creating an allowance. No App/model keys are required and every cloud request is GET. It records a local metadata-only read trace.
-
-Stdout contains only `id`, `state`, `recordedAt` and `costUsd`. Only a settled record exports its actual accounted cost; pending and unknown records export null. `recordedAt` comes from Firestore's output-only document `updateTime`, not the reservation's client creation time ([Document version](https://docs.cloud.google.com/firestore/docs/reference/rest/v1/projects.databases.documents)). The service refuses to change a settled reservation, so its final version identifies the settlement. Invalid or impossible timestamps fail without substitution. Exit 0 means observed settled usage, 1 means pending/unknown and 2 means invalid or unconfirmed access. Reservation amounts, historical bounds, aggregate commitments, model IDs and prompt hashes are not exported. This is token-price accounting, not an invoice or a complete daily export; live IAM and full-window coverage remain unverified.
-
-## Closed-day metadata collection (operator only)
-
-`npm run operations:collect -- --day <YYYY-MM-DD>` uses the existing agent-role operator configuration and attached Google workload identity. It requires a closed UTC day and makes only GET requests. Both metadata collections use one fixed Firestore read time across all pages; reservation values and server versions are retained from that snapshot without latest-state rereads. Every retained launch is checked against a fresh actual Execution using the existing fixed job and run markers. Local traces contain read outcomes, not source or credentials.
-
-Stdout is `{ "snapshot": ..., "coverage": ... }`. Save the `snapshot` member as input to `operations:check`; the separate coverage object explains unresolved executions, excluded dates, carryover reservations, missing selected-month policy, historical unknown usage and accounting mismatches. Costs cover all reservations in the configured spending collection, across their original global/installation months. Selected-day settled amounts are counted once by server settlement time; cumulative policy counters and amounts must reconcile against all retained reservations. An old unresolved reservation still withholds healthy cost coverage even when its version falls outside the selected day. Missing rows or policies never provision fresh allowances, and known costs remain available for breach checks.
-
-The collector also lists retained resources of the fixed Cloud Run Job, including unexpired deleted executions, using `run.executions.list` ([list contract](https://docs.cloud.google.com/run/docs/reference/rest/v2/projects.locations.jobs.executions/list)). Bounded pages request only resource identities and lifecycle timestamps. `coverage.executionInventory` reports its observation time and listed count, selected-window `unmatchedExecutionIds`, and confirmed executions absent from the directory in `missingExecutionIds`. Missing starts remain possible window members; directory entries never become terminal job results. A denied, malformed, duplicated, oversized or incomplete listing leaves all directory fields null while retaining independently confirmed jobs and costs. The Firestore snapshot and this later directory observation are separate views.
-
-Retained claims and resource pagination cannot prove that every historical execution was retained or that the selected window has no omissions. The collector therefore leaves `complete.jobs=false` until an independent retention/window boundary is available; unresolved jobs with no confirmed start are counted in coverage without inventing timestamps. `complete.calls` describes the reconciled configured ledger, not provider invoices or calls made outside that ledger. Exit 1 returns collected metadata with incomplete coverage; exit 2 means invalid configuration or unconfirmed collection. Fake API tests validate this contract; actual cloud IAM, retention, scheduled collection and alert delivery remain unverified. No model calls, cloud writes, job retries or publication occur.
-
-## Security and privacy
-
-Run steps always write validated `run.jsonl` metadata. Set `OTEL_EXPORTER_OTLP_ENDPOINT` (a base HTTP/HTTPS address) or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` (the exact trace URL) in the trusted coordinator to additionally export each step through OTLP HTTP. Standard OTLP header and timeout environment variables are supported. Exported spans contain step status/duration, model identity, token/cost counts and a validated prompt hash; arbitrary page metadata, source paths, prompts and images are excluded. Collector failures add a local `trace-export` error without replacing verifier decisions. No collector connection is made without an endpoint. Export is opt-in; review the collector's access and retention policy before configuring it.
-
-Target source executes only in an isolated application container. The trusted browser is a separate container; the application cannot write browser evidence or access the Docker socket. The model and GitHub credentials remain in the coordinator. Source snapshots exclude Git metadata, environment files, package-manager credentials, private-key files, dependency directories, and symbolic links. Model patches cannot edit manifests, lockfiles, build configuration, or workflows.
-
-The persistent runner reuses the existing trusted runtime and dependencies through read-only host mounts on every platform, including macOS. It does not automatically copy that dependency tree into Docker storage after a mount failure. The library's copy mode requires an explicit caller choice and creates a temporary Docker volume; it is not the CLI default. The target application's writable workspace remains isolated inside its own container. All Docker control operations have bounded timeouts, and cleanup targets only resources owned by that run.
-
-Model-assisted mode sends bounded source excerpts, deterministic call-site context, and cropped images to the explicitly configured provider. `--no-llm` sends none of this to a model. Raw SDK request bodies and credentials are not logged. Retained screenshots and raw page observations can still contain sensitive source content: enable retention only deliberately and do not publish them automatically.
-
-## Reproducible evaluation
-
-`eval/protocol-20261012.json` freezes the public Next.js corpus (55 repositories: 46 test, 9 dev; Next.js 12-16 by lockfile-resolved version), exact SHAs, dev/test split, operators, seeds, systems, the 80-case test target, and `gpt-6-luna` high-reasoning configuration. It extends `eval/protocol-20261007.json` (20 repositories, unchanged and still valid for its own results) with repositories drawn alphabetically from the archived candidate pool `eval/candidate-pool-20261012.json` (every examined candidate and its rejection reason is in `eval/candidate-checks-20261012.json`) and with the A11YRepair repositories that pass the same filters (`eval/a11yrepair-sources-20261012.json`). Results under different protocol digests are not pooled. A zero-cost smoke run is:
-
-```sh
-npm run build
-npm run eval -- --protocol eval/protocol-20261012.json --output /absolute/path/to/results --split dev --systems deterministic --max-cases 2 --tmp-root /tmp/accesswright/integration-20261007 --cache-root /tmp/accesswright/integration-20261007/eval-source-cache
-```
-To continue an interrupted run, repeat its *identical* command with `--resume` and the same output folder. Completed cells and the original rendered reference are reused only after checking protocol/model/implementation identities and regenerating every reference mutation from the exact pinned source AST. The original multi-route browser baseline is not repeated for an unchanged reference, but each **new candidate** still undergoes real Docker build, browser checks, per-patch verification and the full final production gate. This avoids duplicate paid calls without counting unverified mutations. A changed protocol, model, selected corpus, system, seed, batch bound or compiled implementation fails closed; completed reports cannot be resumed. A previously stored `blocked` cell is retained as failed evidence and is not silently converted into a success: rerun genuinely changed infrastructure in a separate output and report it separately, without pooling unlike implementations.
-
-Evaluation outputs carry both the frozen protocol digest and a digest of an immutable compiled-runtime snapshot stored in the selected output directory. Trusted dependencies are still reused read-only, not duplicated into Docker; changes to that snapshot during a run fail closed without pooling implementations. Live `B1,A1,A` cells additionally require a dated explicit authorization metadata file, current authenticated model availability, pricing, a per-run cap, and a durable cumulative spending ledger. Fake-provider cells are labeled separately and are never pooled with live measurements.
-
-A frozen development deterministic smoke on 2026-10-07 selected four public repositories and produced five eligible seeded cases across three verified-compatible repositories: three semantically correct fixes, two unresolved cases, zero changed clean controls out of 368 observed, and USD 0 model spend. One fourth repository was unsupported because the unmodified production build failed. This `max-cases=2` smoke is **not** the 300-case Track S test result and is not a live B1/A1/A comparison.
-
-## Experimental evaluation systems (fake provider only)
-
-The eval library accepts `B2`, `A-retrieval` and `A-tool-loop` only with explicit fake-provider injection and a separate frozen protocol listing them. The existing frozen public protocols are unchanged, and the eval CLI refuses these variants before authenticating a provider. They do not enable paid experiments.
-
-`B2` is a restricted general source-agent prototype given axe findings and an allowlisted source-file inventory, without deterministic fixers or enriched context. It can read bounded source and propose up to three patches; it has no shell or command execution. `A-tool-loop` retains deterministic-first repair and adds an optional context tool. Both stop after six structured model actions, enforce the existing token/cost caps before every call and after settlement, and send every proposal through the same per-patch and final production gates. Tool traces contain action/status/timing metadata, not source contents. This prototype is not acceptance of a full headless coding-agent benchmark.
-
-`A-retrieval` substitutes lexical retrieval of at most two documents from the existing reviewed guidance table for static rule lookup; the actual table has a corpus digest. It is not an external WCAG index or learned fix memory. Paired reports compare each variant with A only on matching completed case/seed opportunities; blocked and unsupported observations remain unmeasured. Fake-provider tests establish harness behavior, not repair effectiveness or an ablation win. Real experiments and broader retrieval still require separate acceptance.
-
-## Agentic auditing experiment (fake provider only)
-
-`runAgentAuditExperiment(input, options)` in `dist/src/eval/agentic-audit.js` supplies a case-scoped audit harness with an injected fake provider, shared `BudgetLedger`, explicit prices, absolute JSONL trace path, frozen rubric text and a read-only evidence callback. The strict input binds protocol/implementation/rubric digests, model metadata, observation time and distinct preselected expert-case IDs with WCAG criteria, nullable expert labels and axe labels. The actual rubric text must match its digest; supplied labels and other digests still require independent provenance review.
-
-The model may read bounded transient page facts/images once per case and report a boolean finding after observing them. It receives neither expert nor axe labels, and cannot edit source, invoke shell commands, navigate or activate controls. Known usage is retained; unknown usage blocks subsequent calls, and uncertain trace writes stop without retry. Returned results and step traces contain metadata, not raw page facts or screenshots. The caller must provide trustworthy evidence and clear its own private inputs.
-
-Precision/recall and confusion counts compare agent and axe on the same expert-labeled cases with measured agent outcomes. Missing expert labels, unavailable evidence, caps and unknown attempts remain unmeasured; a zero metric denominator yields null. This restricted, fake-only experiment is not a whole-page auditor, calibrated judge, replication of published auditing results or a verifier/publication gate. Real expert cases and live model/browser acceptance remain unverified.
-
-## Natural violations: Track N tooling (offline)
-
-`naturalScanMetadata(scope, observations)` in `dist/src/eval/natural-cases.js` projects existing unpatched baseline browser observations into metadata in memory. It hashes repository-local routes, selectors and source locations; HTML, page text, accessibility trees, source paths and screenshots are discarded. The caller must establish the pinned baseline and remove private observations after use. This helper does not launch a browser or authenticate that a scan came from that revision.
-
-```sh
-npm run build
-npm run track-n:collect -- --scan /absolute/path/natural-scan-metadata.json
-```
-
-The strict input has `schemaVersion: 1`, SHA256 `protocolDigest`, `repositoryDigest` and `implementationDigest`, a 40-character `baseSha`, ISO UTC `observedAt`, `checkerVersion`, optional `ibmCheckerVersion`, and `pages`. Each page contains SHA256 `routeDigest`, `condition` (`desktop-light`, `mobile-light` or `desktop-dark`), `incompleteCount` and `violations`. Each violation contains `ruleId`, nullable axe `impact`, SHA256 `targetDigest` and nullable `sourceDigest`. Use the in-memory helper to produce this input; the CLI rejects raw browser dumps and private fields. Inputs must be bounded regular files at absolute paths; symlinks are refused. Exit 2 means invalid input.
-
-Stdout contains the natural cases, reviewed technical rule references, inconclusive counts and an editable JSON `labelingSheet`. Duplicate route/condition scans are rejected; repeated instances at the same location get distinct occurrence IDs. Cases observed under different scan conditions remain separate observations, not independent repair trials. Digests bind metadata and identify cases; they neither anonymize predictable values against guessing nor authenticate evidence.
-
-All review cells start as null. In a private workspace, bind each reviewed accepted patch to its full patch digest and verifier evidence, record a hashed rater identity and UTC review time, then complete the written semantic/content/keyboard checklist and screen-reader spot checks. Keep additional rows if one case receives separate accepted patches, and avoid counting one multi-case patch more than once toward the planned 50-patch, single-rater audit. This tool performs no human review, repair, model call, scoring or publication, and does not modify frozen Track S fixtures or evaluation cells. Real Track N collection and the manual audit remain unverified.
-
-## Judge calibration (offline)
-
-Compare supplied human and judge labels before using a judge in reported semantic metrics:
-
-```sh
-npm run build
-npm run judge:calibrate -- --labels /absolute/path/paired-labels.json
-```
-
-The strict JSON input has `schemaVersion: 1`, SHA256 `protocolDigest`, `implementationDigest` and `rubricDigest`, `repairModel` and `judgeModel` (only `provider`, `id` and optional `reasoningEffort`), an ISO UTC `labeledAt`, and `pairs`. Each pair contains only SHA256 `caseId` and `fixDigest`, plus boolean `humanCorrect` and `judgeCorrect`. Bind each fix digest to the exact case, base and complete candidate; use one frozen rubric for all pairs. Human labels require review of accuracy, page relevance, concision, hallucinations and whether an image is decorative. Source, prompts, screenshots, endpoint URLs and credentials are excluded from this file.
-
-The output includes a confusion matrix with humans as rows and the judge as columns, observed/chance agreement and [Cohen's kappa](https://garfield.library.upenn.edu/classics1986/A1986AXF2600001.pdf). The planned statistical gate requires at least 100 distinct labeled fixes and kappa ≥ 0.6. Empty or one-category agreement has undefined kappa and cannot pass. Duplicate fix digests fail; repeated cases are counted separately from distinct fixes. A same-model judge is explicitly marked as a limitation.
-
-Exit 0 means the supplied labels meet the statistical gate, 1 means they do not, and 2 means invalid input. The label-set digest binds the metadata and labels; it does not authenticate human review, provider execution, blinding or representative sampling. This offline calculation makes no model calls, does not modify evaluation cells or verifier decisions, and does not itself authorize calibrated-judge metrics. Real human labels and independent provenance review remain required.
-
-## Deutscher technischer Prüfbericht (lokal)
-
-A German-language evidence template is available for an existing **aggregate** run report. It is not a WCAG / EN 301 549 / EAA legal conformity certification. A reviewed list of accepted fix commits is required; missing or contradictory evidence fails closed. The command never contacts a cloud service and refuses to overwrite existing output:
-
-```sh
-npm run build
-npm run evidence:de -- --report /absolute/path/report.json --commits /absolute/path/accepted-commits.json --out /absolute/path/evidence-de.md
-```
-
-The commits file contains an array of objects with only `id` and the 40-character `commit` SHA. The output contains counts, route/condition coverage, unavailable checks, technical references, limitations and mandatory manual-review topics, not raw source code, screenshots or prompts.
-
-## Verification evidence and limits
-
-Development checks on 2026-10-07 include more than 360 passing deterministic/unit tests, an owned Next.js 16 App Router fixture, Next.js 15.5.27 TSX and 16.3.8 JSX Pages Router fixtures with dynamic routes (on 2026-10-12 extended to Next.js 12.3.7, 13.5.11 and 14.2.35 Pages Router and 13.5.11 and 14.2.35 App Router fixtures, all mapped and repaired through webpack source mapping) and a controlled HTTP data service, and a Tailwind 4.3.3 runtime-palette fixture. Actual Chromium/axe/ARIA scans cover desktop/mobile conditions. Production checks discard both compiler-breaking patches and patches whose target disappears only in development but returns in production. A compiled CLI rerun makes no duplicate change. A fixed browser soundness set rejected all 8 harmful modifications and accepted all 4 legitimate changes. These are controlled integration cases, not a broad public-repository success rate.
-
-One live semantic development case using OpenAI `gpt-6-luna`, reasoning effort `high`, passed actual Next.js production and browser verification twice on 2026-10-07. Its unnamed button retained its identity and received the frozen ground-truth accessible name `Save changes`. The latest request used 485 input and 722 output tokens, with conservative token-price accounting of USD 0.000729025. The earlier request used 485 input and 800 output tokens (USD 0.000793375 on the same conservative basis). These are two executions of one controlled case, not two independent benchmark cases, provider invoices, or benchmark-wide cost-per-fix estimates.
-
-Run reports include the actual axe-core version, observed route/condition coverage, inconclusive findings, source-mapping counts, and reviewed technical WCAG/EN 301 549 cross-references. The EN mapping is explicitly pinned to V3.2.1 (2021-03); criteria without a reviewed clause, including WCAG 2.2 additions, are marked unmapped rather than assigned an invented reference.
-
-A real owned-repository PR roundtrip created two deterministic fix-group commits, repeated the full run without adding commits or opening another PR, and preserved a separately added simulated reviewer commit. A transient mismatch between GitHub PR and branch metadata failed closed before a later consistent read confirmed preservation.
-
-The full public-repository Track S benchmark and public B1/A1/A comparison, independent semantic audit, hosted App/dashboard, deployed operations period, MCP integration, and release acceptance remain unfinished. Do not infer the planned benchmark size, a production SLA, or universal framework compatibility from the controlled fixtures.
-
-Known coverage limits include authenticated pages, projects requiring secrets to build, package-manager and configuration variants not yet exercised, unmapped third-party render paths, dynamic color expressions, complex backgrounds, and manual-only accessibility requirements. Shared design-token changes are proposed for review rather than applied automatically.
-
-## Test commands
-
-```sh
-npm run check
-npm test
-npm run test:integration
-```
-
-Docker integration tests build real applications and need Docker/network access for package installation. Live model tests are separately opt-in and require a dated explicit model/pricing authorization and a durable spending ledger; ordinary tests never enable them.
-
-## Kurzbeschreibung
-
-Accesswright prüft Quellcode-Korrekturen für React-/Next.js-Anwendungen in isolierten Containern mit Browser-, Accessibility- und Produktionsprüfungen. Automatisierte Prüfungen ersetzen weder eine vollständige Barrierefreiheitsprüfung noch eine rechtliche Konformitätsbewertung. Das Projekt befindet sich in der Entwicklung.
-
-MIT licensed. See `LICENSE`.
+MIT. The optional IBM Equal Access engine is Apache-2.0; keep its license and attribution when you redistribute it.
